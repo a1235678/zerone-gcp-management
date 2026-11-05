@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { TODAY, addDays, createWorkOrder, getCustomers, getPlans } from '@data/api';
+import { TODAY, TRANSFER_TOKEN_VALID_DAYS as TOKEN_VALID_DAYS, addDays, checkTransferToken, createWorkOrder, getCustomers, getPlans } from '@data/api';
 import { workOrderTypeLabel } from '@data/labels';
 import type { CustomerListItem, SubscriptionListItem, WorkOrderListItem, WorkOrderPayload, WorkOrderType } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
@@ -7,9 +7,6 @@ import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
-
-/** 轉移碼有效天數（依 Google Cloud Channel 文件，待 Ray 確認） */
-const TOKEN_VALID_DAYS = 14;
 
 /**
  * 開立執行單。依類型顯示不同欄位：
@@ -76,14 +73,9 @@ export function WorkOrderModal({
       else if (n === subscription?.seats) e.toSeats = '與目前席次相同';
     }
     if (type === 'cancel' && !memo.trim()) e.memo = '請填寫取消原因';
-    if (type === 'transfer') {
-      if (!token.trim()) e.token = '請輸入客戶提供的轉移碼';
-      if (!tokenExpiresAt) e.tokenExpiresAt = '請輸入轉移碼到期日';
-      else if (tokenExpiresAt < TODAY) e.tokenExpiresAt = '轉移碼已過期，請客戶重新產生';
-      else if (tokenExpiresAt > maxTokenDate) e.tokenExpiresAt = `轉移碼最長 ${TOKEN_VALID_DAYS} 天有效，到期日不會晚於 ${maxTokenDate}`;
-    }
+    if (type === 'transfer') Object.assign(e, checkTransferToken(token, tokenExpiresAt));
     return e;
-  }, [type, customerId, plan, seats, toSeats, memo, token, tokenExpiresAt, subscription?.seats, maxTokenDate]);
+  }, [type, customerId, plan, seats, toSeats, memo, token, tokenExpiresAt, subscription?.seats]);
 
   const show = (k: string) => (tried ? errors[k] : undefined);
 

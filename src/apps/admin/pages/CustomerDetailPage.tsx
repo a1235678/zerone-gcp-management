@@ -153,7 +153,7 @@ export function CustomerDetailPage() {
               ) : (
                 <div className="card__body">
                   <p className="muted">
-                    這個客戶沒有轉移紀錄。只做「轉入」：客戶從其他經銷商轉到我們底下時，在這裡開立轉移執行單。
+                    這個客戶沒有轉移紀錄。新客戶從其他經銷商轉入時，請用客戶管理的「轉入客戶」；已在系統裡的客戶（或前一次轉移失敗要重開）才從這裡開立。
                   </p>
                 </div>
               )}

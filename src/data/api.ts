@@ -242,6 +242,37 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
   return delay(withDealer(customer));
 }
 
+/** 轉移碼有效天數（依 Google Cloud Channel 文件，待 Ray 確認） */
+export const TRANSFER_TOKEN_VALID_DAYS = 14;
+
+/** 檢查轉移碼欄位，回傳各欄位的錯誤訊息 */
+export function checkTransferToken(token: string, expiresAt: string): { token?: string; tokenExpiresAt?: string } {
+  const e: { token?: string; tokenExpiresAt?: string } = {};
+  const max = addDays(TODAY, TRANSFER_TOKEN_VALID_DAYS);
+  if (!token.trim()) e.token = '請輸入客戶提供的轉移碼';
+  if (!expiresAt) e.tokenExpiresAt = '請輸入轉移碼到期日';
+  else if (expiresAt < TODAY) e.tokenExpiresAt = '轉移碼已過期，請客戶重新產生';
+  else if (expiresAt > max) e.tokenExpiresAt = `轉移碼最長 ${TRANSFER_TOKEN_VALID_DAYS} 天有效，到期日不會晚於 ${max}`;
+  return e;
+}
+
+/** 轉入客戶：從其他經銷商轉進來的新客戶，同時建立客戶主檔與轉移執行單 */
+export async function createTransferInCustomer(
+  input: NewCustomerInput & { transferToken: string; tokenExpiresAt: string; memo: string; submit: boolean },
+): Promise<{ customer: CustomerListItem; workOrder: WorkOrderListItem }> {
+  const tokenErrors = checkTransferToken(input.transferToken, input.tokenExpiresAt);
+  const firstError = tokenErrors.token ?? tokenErrors.tokenExpiresAt;
+  if (firstError) return fail(firstError);
+  const customer = await createCustomer({ ...input, note: input.note || '由其他經銷商轉入' });
+  const workOrder = await createWorkOrder({
+    type: 'transfer',
+    customerId: customer.id,
+    payload: { transferToken: input.transferToken.trim(), tokenExpiresAt: input.tokenExpiresAt, memo: input.memo.trim() || undefined },
+    submit: input.submit,
+  });
+  return { customer, workOrder };
+}
+
 /** 模擬向 Google 檢查網域驗證：第一次查會是「尚未驗證」，第二次起通過 */
 const verifyAttempts: Record<string, number> = {};
 export function recheckDomainVerification(customerId: string): Promise<CustomerListItem> {

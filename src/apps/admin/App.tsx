@@ -27,7 +27,8 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/customers/new" element={<NewCustomerPage />} />
+            <Route path="/customers/new" element={<NewCustomerPage key="new" />} />
+            <Route path="/customers/transfer-in" element={<NewCustomerPage key="transfer" mode="transfer" />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/dealers" element={<DealersPage />} />
             <Route path="/work-orders" element={<WorkOrdersPage />} />

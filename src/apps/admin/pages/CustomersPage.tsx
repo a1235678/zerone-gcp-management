@@ -95,6 +95,9 @@ export function CustomersPage() {
         actions={
           <>
             <PendingTag id={1} hint="客戶由誰建立" />
+            <Link to="/customers/transfer-in" className="btn">
+              轉入客戶
+            </Link>
             <Link to="/customers/new" className="btn btn--primary">
               <Icon name="plus" size={16} />
               新增客戶
