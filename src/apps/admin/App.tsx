@@ -2,13 +2,19 @@ import { HashRouter, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
 import { adminNav } from './nav';
-import { CustomersPage } from './pages/CustomersPage';
+import { AuditLogsPage } from './pages/AuditLogsPage';
+import { BrandsPage, ProductsPage } from './pages/CatalogPages';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
+import { CustomersPage } from './pages/CustomersPage';
 import { DealersPage } from './pages/DealersPage';
 import { GcpUsagePage } from './pages/GcpUsagePage';
 import { GwsSubscriptionsPage } from './pages/GwsSubscriptionsPage';
+import { HomePage } from './pages/HomePage';
 import { NewCustomerPage } from './pages/NewCustomerPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+import { RolesPage } from './pages/RolesPage';
+import { SchedulesPage } from './pages/SchedulesPage';
+import { UsersPage } from './pages/UsersPage';
 import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
 import { WorkOrdersPage } from './pages/WorkOrdersPage';
 
@@ -19,21 +25,21 @@ export function App() {
       <ToastProvider>
         <AppShell siteName="零壹 SaaS 平台" siteSubtitle="管理端" nav={adminNav} user={{ name: '林怡君', role: '後台管理員' }}>
           <Routes>
-            <Route path="/" element={<PlaceholderPage title="首頁" />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<NewCustomerPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/dealers" element={<DealersPage />} />
             <Route path="/work-orders" element={<WorkOrdersPage />} />
             <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />
+            <Route path="/brands" element={<BrandsPage />} />
+            <Route path="/catalog" element={<ProductsPage />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
             <Route path="/products/gcp" element={<GcpUsagePage />} />
-            <Route path="/brands" element={<PlaceholderPage title="品牌管理" />} />
-            <Route path="/catalog" element={<PlaceholderPage title="產品管理" />} />
-            <Route path="/schedules/gws" element={<PlaceholderPage title="GWS 排程中心" />} />
-            <Route path="/system/users" element={<PlaceholderPage title="使用者" />} />
-            <Route path="/system/roles" element={<PlaceholderPage title="角色管理" />} />
-            <Route path="/system/logs" element={<PlaceholderPage title="系統日誌" />} />
+            <Route path="/schedules/gws" element={<SchedulesPage />} />
+            <Route path="/system/users" element={<UsersPage />} />
+            <Route path="/system/roles" element={<RolesPage />} />
+            <Route path="/system/logs" element={<AuditLogsPage />} />
             <Route path="*" element={<PlaceholderPage title="找不到頁面" />} />
           </Routes>
         </AppShell>

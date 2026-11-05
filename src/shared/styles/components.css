@@ -427,7 +427,15 @@
   margin-left: auto;
 }
 @media (max-width: 640px) {
-  .filter-bar__item,
+  .filter-bar {
+    gap: var(--space-3) var(--space-2);
+    padding: var(--space-3) var(--space-4);
+  }
+  /* 下拉選單兩欄並排，搜尋與日期區間佔整行 */
+  .filter-bar__item {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
   .filter-bar__item--grow {
     flex: 1 1 100%;
   }
@@ -1315,4 +1323,103 @@
 }
 .row-actions .btn--sm {
   padding: 0 var(--space-2);
+}
+fieldset.field {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+fieldset.field legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+.filter-bar__item--range {
+  flex: 0 1 320px;
+  min-width: 260px;
+}
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+.date-range .input {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .filter-bar__item--range {
+    flex: 1 1 100%;
+  }
+}
+.perm-table {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.perm-row:last-child {
+  border-bottom: none;
+}
+.perm-row__name {
+  font-weight: var(--weight-medium);
+}
+.card-note {
+  padding: var(--space-3) var(--space-5) 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.mini-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+.mini-counts__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+.mini-counts__item:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+.rank-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: rank;
+}
+.rank-list li {
+  counter-increment: rank;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.rank-list li::before {
+  content: counter(rank);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--gray-100);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+}
+.rank-list li .tnum {
+  margin-left: auto;
 }

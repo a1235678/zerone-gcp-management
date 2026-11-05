@@ -70,3 +70,27 @@ export function SelectField({
     </label>
   );
 }
+
+/** 日期區間（起、迄兩個日期欄位） */
+export function DateRangeField({
+  label,
+  from,
+  to,
+  onChange,
+}: {
+  label: string;
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+}) {
+  return (
+    <fieldset className="field filter-bar__item filter-bar__item--range">
+      <legend className="field__label">{label}</legend>
+      <div className="date-range">
+        <input className="input" type="date" aria-label={`${label}（起）`} value={from} max={to || undefined} onChange={(e) => onChange(e.target.value, to)} />
+        <span aria-hidden="true">至</span>
+        <input className="input" type="date" aria-label={`${label}（迄）`} value={to} min={from || undefined} onChange={(e) => onChange(from, e.target.value)} />
+      </div>
+    </fieldset>
+  );
+}
