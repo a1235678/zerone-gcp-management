@@ -1253,3 +1253,51 @@
 .form-card {
   max-width: 960px;
 }
+
+/* 狀態快速篩選列 */
+.status-strip {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.status-strip__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.status-strip__item:hover {
+  border-color: var(--gray-300);
+}
+.status-strip__item.is-active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-focus);
+}
+.status-strip__count {
+  font-weight: var(--weight-semibold);
+}
+
+/* Prototype 模擬區：虛線框，明確告訴使用者這不是正式功能 */
+.simulate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--gray-400);
+  border-radius: var(--radius-md);
+  background: var(--gray-25);
+}
+.simulate__text {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+}

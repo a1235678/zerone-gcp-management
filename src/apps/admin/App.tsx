@@ -6,6 +6,8 @@ import { CustomersPage } from './pages/CustomersPage';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { NewCustomerPage } from './pages/NewCustomerPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
+import { WorkOrdersPage } from './pages/WorkOrdersPage';
 
 // 用 HashRouter：部署成靜態網站（GitHub Pages 等）時，直接開任何網址都不會 404
 export function App() {
@@ -19,7 +21,8 @@ export function App() {
             <Route path="/customers/new" element={<NewCustomerPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/dealers" element={<PlaceholderPage title="經銷商管理" />} />
-            <Route path="/work-orders" element={<PlaceholderPage title="執行單" />} />
+            <Route path="/work-orders" element={<WorkOrdersPage />} />
+            <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />
             <Route path="/products/gws" element={<PlaceholderPage title="GWS 訂閱管理" />} />
             <Route path="/products/gcp" element={<PlaceholderPage title="GCP 流量與用量" />} />
             <Route path="/brands" element={<PlaceholderPage title="品牌管理" />} />
