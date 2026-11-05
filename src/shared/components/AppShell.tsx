@@ -37,7 +37,10 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
-  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    setOpen(false);
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   const current = findCurrent(nav, location.pathname);
 

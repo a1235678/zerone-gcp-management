@@ -9,13 +9,12 @@ import { Icon } from '@shared/components/Icon';
 import { PageHeader } from '@shared/components/PageHeader';
 import { Pagination, paginate } from '@shared/components/Pagination';
 import { PendingTag } from '@shared/components/PendingTag';
-import { StatusTag } from '@shared/components/StatusTag';
+import { CustomerStatusTag } from "../tags";
 import { formatDate } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 
 const PAGE_SIZE = 12;
 
-const statusLabel: Record<CustomerStatus, string> = { active: '啟用', disabled: '停用' };
 
 const columns: Column<CustomerListItem>[] = [
   {
@@ -46,7 +45,7 @@ const columns: Column<CustomerListItem>[] = [
   {
     key: 'status',
     header: '客戶狀態',
-    render: (c) => <StatusTag tone={c.status === 'active' ? 'success' : 'neutral'}>{statusLabel[c.status]}</StatusTag>,
+    render: (c) => <CustomerStatusTag value={c.status} />,
   },
 ];
 

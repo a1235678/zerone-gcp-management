@@ -3,6 +3,8 @@ import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
 import { adminNav } from './nav';
 import { CustomersPage } from './pages/CustomersPage';
+import { CustomerDetailPage } from './pages/CustomerDetailPage';
+import { NewCustomerPage } from './pages/NewCustomerPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 
 // 用 HashRouter：部署成靜態網站（GitHub Pages 等）時，直接開任何網址都不會 404
@@ -14,8 +16,8 @@ export function App() {
           <Routes>
             <Route path="/" element={<PlaceholderPage title="首頁" />} />
             <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/customers/new" element={<PlaceholderPage title="新增客戶" />} />
-            <Route path="/customers/:id" element={<PlaceholderPage title="客戶詳情" />} />
+            <Route path="/customers/new" element={<NewCustomerPage />} />
+            <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/dealers" element={<PlaceholderPage title="經銷商管理" />} />
             <Route path="/work-orders" element={<PlaceholderPage title="執行單" />} />
             <Route path="/products/gws" element={<PlaceholderPage title="GWS 訂閱管理" />} />

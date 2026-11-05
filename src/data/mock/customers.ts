@@ -24,10 +24,11 @@ export const customers: Customer[] = [
   c('C0020', '光點影像製作', '90010020', 'lightspot-studio.example', 'D002', '蘇郁庭', '02-2517-1020', '黃柏翰', '2025-08-25'),
   c('C0021', '安居物業管理', '90010021', 'anju-property.example', 'D000', '葉宗翰', '02-2914-1021', '林怡君', '2025-09-12'),
   c('C0022', '匯通貿易', '90010022', 'huitong-trading.example', 'D003', '呂思妤', '07-3300-1022', '黃柏翰', '2025-10-30'),
-  c('C0023', '白鷺鷥文創', '90010023', 'egret-creative.example', 'D002', '江承翰', '06-2200-1023', '黃柏翰', '2026-01-14'),
+  c('C0023', '白鷺鷥文創', '90010023', 'egret-creative.example', 'D002', '江承翰', '06-2200-1023', '黃柏翰', '2026-10-28', 'active', '由其他經銷商轉入（WO-1103-002）'),
   c('C0024', '晴川電子', '90010024', 'qingchuan-elec.example', 'D001', '何佳蓉', '03-5770-1024', '林怡君', '2026-03-02'),
   c('C0025', '一葉茶堂', '90010025', 'oneleaf-tea.example', 'D000', '林冠宇', '049-2900-1025', '林怡君', '2026-06-19'),
-  c('C0026', '新創合作社', '90010026', 'coop-lab.example', 'D003', '施怡安', '02-2706-1026', '黃柏翰', '2026-09-08'),
+  c('C0026', '新創合作社', '90010026', 'coop-lab.example', 'D003', '施怡安', '02-2706-1026', '黃柏翰', '2026-09-08', 'active', '新客戶，首張訂閱執行單處理中', 'pending'),
+  c('C0027', '曉風出版社', '90010027', 'xiaofeng-press.example', 'D003', '馮靜宜', '02-2368-1027', '黃柏翰', '2026-10-19', 'active', '轉入失敗，等客戶重新產生轉移碼'),
 ];
 
 function c(
@@ -42,6 +43,7 @@ function c(
   createdAt: string,
   status: Customer['status'] = 'active',
   note = '',
+  domainVerification: Customer['domainVerification'] = 'verified',
 ): Customer {
   return {
     id,
@@ -56,5 +58,6 @@ function c(
     createdAt,
     note,
     status,
+    domainVerification,
   };
 }
