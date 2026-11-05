@@ -4,6 +4,9 @@ import { ToastProvider } from '@shared/components/Toast';
 import { adminNav } from './nav';
 import { CustomersPage } from './pages/CustomersPage';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
+import { DealersPage } from './pages/DealersPage';
+import { GcpUsagePage } from './pages/GcpUsagePage';
+import { GwsSubscriptionsPage } from './pages/GwsSubscriptionsPage';
 import { NewCustomerPage } from './pages/NewCustomerPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
@@ -20,11 +23,11 @@ export function App() {
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<NewCustomerPage />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
-            <Route path="/dealers" element={<PlaceholderPage title="經銷商管理" />} />
+            <Route path="/dealers" element={<DealersPage />} />
             <Route path="/work-orders" element={<WorkOrdersPage />} />
             <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />
-            <Route path="/products/gws" element={<PlaceholderPage title="GWS 訂閱管理" />} />
-            <Route path="/products/gcp" element={<PlaceholderPage title="GCP 流量與用量" />} />
+            <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
+            <Route path="/products/gcp" element={<GcpUsagePage />} />
             <Route path="/brands" element={<PlaceholderPage title="品牌管理" />} />
             <Route path="/catalog" element={<PlaceholderPage title="產品管理" />} />
             <Route path="/schedules/gws" element={<PlaceholderPage title="GWS 排程中心" />} />

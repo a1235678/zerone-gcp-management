@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * 單一數列的折線面積圖（SVG，不依賴圖表套件）。
@@ -21,7 +21,15 @@ export function LineChart({
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const W = 720;
+  // 依容器實際寬度繪製，文字大小不會跟著縮放
+  const [W, setW] = useState(720);
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setW(Math.max(280, Math.round(entry.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const H = height;
   const pad = { top: 16, right: 16, bottom: 28, left: 56 };
   const innerW = W - pad.left - pad.right;
@@ -33,7 +41,7 @@ export function LineChart({
 
   const line = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join(' ');
   const area = `${line} L${x(data.length - 1).toFixed(1)},${pad.top + innerH} L${x(0).toFixed(1)},${pad.top + innerH} Z`;
-  const labelEvery = Math.ceil(data.length / 6);
+  const labelEvery = Math.ceil(data.length / Math.max(3, Math.floor(innerW / 90)));
   const last = data.length - 1;
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -60,7 +68,7 @@ export function LineChart({
           </g>
         ))}
         {data.map((d, i) =>
-          i % labelEvery === 0 || i === last ? (
+          (i % labelEvery === 0 && last - i >= labelEvery / 2) || i === last ? (
             <text key={d.label} x={x(i)} y={H - 8} className="chart__axis" textAnchor={i === 0 ? 'start' : i === last ? 'end' : 'middle'}>
               {formatLabel(d.label)}
             </text>
