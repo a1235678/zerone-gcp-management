@@ -9,6 +9,8 @@ export const adminNav: NavGroup[] = [
       { to: '/customers', label: '客戶管理', icon: 'customers' },
       { to: '/dealers', label: '經銷商管理', icon: 'dealers' },
       { to: '/work-orders', label: '執行單', icon: 'workOrders' },
+      { to: '/brands', label: '品牌管理', icon: 'brand' },
+      { to: '/catalog', label: '產品管理', icon: 'product' },
     ],
   },
   {
@@ -16,8 +18,6 @@ export const adminNav: NavGroup[] = [
     items: [
       { to: '/products/gws', label: 'GWS', icon: 'workspace' },
       { to: '/products/gcp', label: 'GCP', icon: 'cloud' },
-      { to: '/products/brands', label: '品牌管理', icon: 'brand' },
-      { to: '/products/catalog', label: '產品管理', icon: 'product' },
     ],
   },
   { label: '排程', items: [{ to: '/schedules/gws', label: 'GWS 排程中心', icon: 'schedule' }] },

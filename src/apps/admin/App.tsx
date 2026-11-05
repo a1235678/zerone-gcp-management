@@ -20,8 +20,8 @@ export function App() {
             <Route path="/work-orders" element={<PlaceholderPage title="執行單" />} />
             <Route path="/products/gws" element={<PlaceholderPage title="GWS 訂閱管理" />} />
             <Route path="/products/gcp" element={<PlaceholderPage title="GCP 流量與用量" />} />
-            <Route path="/products/brands" element={<PlaceholderPage title="品牌管理" />} />
-            <Route path="/products/catalog" element={<PlaceholderPage title="產品管理" />} />
+            <Route path="/brands" element={<PlaceholderPage title="品牌管理" />} />
+            <Route path="/catalog" element={<PlaceholderPage title="產品管理" />} />
             <Route path="/schedules/gws" element={<PlaceholderPage title="GWS 排程中心" />} />
             <Route path="/system/users" element={<PlaceholderPage title="使用者" />} />
             <Route path="/system/roles" element={<PlaceholderPage title="角色管理" />} />
