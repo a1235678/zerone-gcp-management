@@ -1423,3 +1423,215 @@ fieldset.field legend {
 .rank-list li .tnum {
   margin-left: auto;
 }
+.segmented--wrap {
+  flex-wrap: wrap;
+}
+
+/* 執行單處理步驟 */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.steps__item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+.steps__item:last-child {
+  border-bottom: none;
+}
+.steps__no {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gray-300);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+.steps__item.is-done .steps__no { background: var(--success-fg); border-color: var(--success-fg); color: #fff; }
+.steps__item.is-todo .steps__no,
+.steps__item.is-inProgress .steps__no { border-color: var(--color-accent); color: var(--color-accent-text); }
+.steps__item.is-failed .steps__no { border-color: var(--danger-fg); color: var(--danger-fg); }
+.steps__item.is-blocked { color: var(--color-text-tertiary); }
+.steps__body {
+  flex: 1;
+  min-width: 0;
+}
+.steps__op {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+.form-field > .segmented {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+/* ═════════ 使用者選單 ═════════ */
+.user-menu {
+  position: relative;
+}
+button.topbar__user {
+  border: none;
+  background: none;
+  padding: 4px 6px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+}
+button.topbar__user:hover {
+  background: var(--color-surface-hover);
+}
+.topbar__user-meta {
+  display: flex;
+  flex-direction: column;
+}
+.topbar__user-caret {
+  color: var(--color-text-tertiary);
+}
+.user-menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 240px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: var(--z-overlay);
+}
+.user-menu__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+.user-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--space-4);
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.user-menu__item:hover {
+  background: var(--color-surface-hover);
+}
+
+/* ═════════ 登入頁 ═════════ */
+.auth {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-10) var(--space-4);
+}
+.auth__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.auth__card {
+  width: 100%;
+  max-width: 400px;
+  padding: var(--space-8);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.auth__title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-1);
+}
+.auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+.auth__form .btn {
+  width: 100%;
+  height: 40px;
+}
+.auth__row {
+  display: flex;
+  justify-content: flex-end;
+  font-size: var(--text-sm);
+}
+.auth__test {
+  width: 100%;
+  max-width: 400px;
+  border: 1px dashed var(--gray-400);
+  border-radius: var(--radius-lg);
+  background: var(--gray-25);
+}
+.auth__test-head {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px dashed var(--gray-300);
+  font-size: var(--text-sm);
+}
+.auth__test-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1) 0;
+}
+.auth__test-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.auth__test-list button:hover {
+  background: var(--color-surface-hover);
+}
+.auth__foot {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+@media (max-width: 480px) {
+  .auth__card {
+    padding: var(--space-6) var(--space-5);
+  }
+}
+@media (max-width: 640px) {
+  .topbar__user-meta,
+  .topbar__user-caret {
+    display: none;
+  }
+}
+.plain-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}

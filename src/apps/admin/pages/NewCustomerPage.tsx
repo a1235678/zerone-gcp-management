@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { checkDomain, createCustomer, getDealers } from '@data/api';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  TODAY,
+  TRANSFER_TOKEN_VALID_DAYS,
+  addDays,
+  checkDomain,
+  checkTransferToken,
+  createCustomer,
+  createTransferInCustomer,
+  getDealers,
+  getWorkOrder,
+  linkCustomerToWorkOrder,
+} from '@data/api';
 import type { DomainCheck } from '@data/types';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
@@ -8,6 +19,7 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { usePermission } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -22,19 +34,52 @@ const empty = {
   note: '',
   adminName: '',
   adminEmail: '',
+  transferToken: '',
+  tokenExpiresAt: '',
+  transferMemo: '',
 };
+type Key = keyof typeof empty;
 
-export function NewCustomerPage() {
+/**
+ * 新增客戶，或「轉入客戶」：從其他經銷商轉進來的客戶。
+ * 轉入時同一張表單多了轉移碼欄位，送出後建立客戶主檔並直接送出 Google 轉移。
+ * 網址帶 ?fromWo=單號 時，從執行單帶入新客戶資料，建立後接回執行單。
+ */
+export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
+  const isTransfer = mode === 'transfer';
+  const { can } = usePermission();
   const navigate = useNavigate();
   const toast = useToast();
   const dealers = useAsync(getDealers);
+  const [params] = useSearchParams();
+  const fromWo = isTransfer ? null : params.get('fromWo');
+  const wo = useAsync(() => (fromWo ? getWorkOrder(fromWo) : Promise.resolve(undefined)), [fromWo]);
   const [form, setForm] = useState(empty);
+  const [prefilled, setPrefilled] = useState(false);
+
+  // 從執行單帶入新客戶資料
+  useEffect(() => {
+    const n = wo.data?.newCustomer;
+    if (!n || prefilled) return;
+    setForm((f) => ({
+      ...f,
+      name: n.name,
+      taxId: n.taxId,
+      primaryDomain: n.primaryDomain,
+      dealerId: wo.data!.dealerId,
+      contactName: n.contactName,
+      contactEmail: n.contactEmail,
+      contactPhone: n.contactPhone,
+      note: n.note,
+    }));
+    setPrefilled(true);
+  }, [wo.data, prefilled]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [sameAsContact, setSameAsContact] = useState(true);
   const [domain, setDomain] = useState<{ checking: boolean; result?: DomainCheck }>({ checking: false });
   const [saving, setSaving] = useState(false);
 
-  const set = (key: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+  const set = (key: Key) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
   const touch = (key: string) => () => setTouched((t) => ({ ...t, [key]: true }));
 
@@ -51,7 +96,7 @@ export function NewCustomerPage() {
 
   const admin = sameAsContact ? { adminName: form.contactName, adminEmail: form.contactEmail } : { adminName: form.adminName, adminEmail: form.adminEmail };
 
-  const errors: Partial<Record<keyof typeof empty, string>> = {};
+  const errors: Partial<Record<Key, string>> = {};
   if (!form.name.trim()) errors.name = '請輸入客戶名稱';
   if (!/^\d{8}$/.test(form.taxId)) errors.taxId = '統一編號為 8 位數字';
   if (!form.dealerId) errors.dealerId = '請選擇經銷商';
@@ -59,20 +104,37 @@ export function NewCustomerPage() {
   if (!EMAIL.test(form.contactEmail)) errors.contactEmail = 'Email 格式不正確';
   if (!admin.adminName.trim()) errors.adminName = '請輸入姓名';
   if (!EMAIL.test(admin.adminEmail)) errors.adminEmail = 'Email 格式不正確';
+  if (isTransfer) {
+    const t = checkTransferToken(form.transferToken, form.tokenExpiresAt);
+    if (t.token) errors.transferToken = t.token;
+    if (t.tokenExpiresAt) errors.tokenExpiresAt = t.tokenExpiresAt;
+  }
   const domainOk = !domain.checking && domain.result?.ok === true;
   const canSubmit = domainOk && Object.keys(errors).length === 0 && !saving;
 
-  const err = (key: keyof typeof empty) => (touched[key] ? errors[key] : undefined);
+  const err = (key: Key) => (touched[key] ? errors[key] : undefined);
+  const errState = (key: Key) => (err(key) ? ('error' as const) : undefined);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = async () => {
     setTouched(Object.fromEntries(Object.keys(empty).map((k) => [k, true])));
     if (!canSubmit) return;
     setSaving(true);
     try {
-      const c = await createCustomer({ ...form, ...admin });
-      toast(`已建立客戶「${c.name}」，並寄出組織管理員邀請`);
-      navigate(`/customers/${c.id}`);
+      if (isTransfer) {
+        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, memo: form.transferMemo });
+        toast(`已建立「${customer.name}」並送出 Google 轉移（${operation.id}）`);
+        navigate(`/customers/${customer.id}`);
+      } else {
+        const c = await createCustomer({ ...form, ...admin });
+        if (fromWo) {
+          await linkCustomerToWorkOrder(fromWo, c.id);
+          toast(`已建立客戶「${c.name}」，回到執行單 ${fromWo} 繼續處理`);
+          navigate(`/work-orders/${fromWo}`);
+        } else {
+          toast(`已建立客戶「${c.name}」，並寄出組織管理員邀請`);
+          navigate(`/customers/${c.id}`);
+        }
+      }
     } catch (error) {
       toast((error as Error).message, 'danger');
       setSaving(false);
@@ -97,15 +159,17 @@ export function NewCustomerPage() {
     return {
       state: 'error' as const,
       message: (
-        <>
-          <Icon name="alert" size={14} />
-          {r.message}
-          {r.existingCustomer && (
-            <Link to={`/customers/${r.existingCustomer}`} target="_blank">
-              查看該客戶
-            </Link>
-          )}
-        </>
+        <span>
+          <Icon name="alert" size={14} /> {r.message}。
+          {r.existingCustomer &&
+            (isTransfer ? (
+              <>
+                客戶已在系統裡，請到<Link to={`/customers/${r.existingCustomer}`}>該客戶詳情</Link>開立客戶轉移。
+              </>
+            ) : (
+              <Link to={`/customers/${r.existingCustomer}`}>查看該客戶</Link>
+            ))}
+        </span>
       ),
     };
   })();
@@ -115,21 +179,63 @@ export function NewCustomerPage() {
     Object.keys(errors).length > 0 && `${Object.keys(errors).length} 個必填欄位`,
   ].filter(Boolean);
 
+  if (!(can('customers', 'write') && (!isTransfer || can('subscriptions', 'write'))))
+    return (
+      <Callout tone="warning" title="你的角色沒有權限">
+        你的角色不能建立客戶。如果需要，請聯絡系統管理員調整角色權限。
+      </Callout>
+    );
+
   return (
     <>
       <Link to="/customers" className="back-link">
         <Icon name="chevronLeft" size={14} />
         客戶管理
       </Link>
-      <PageHeader title="新增客戶" titleAddon={<PendingTag id={1} hint="客戶由誰建立" />} description="建立客戶主檔，同時建立該客戶的第一個「組織管理員」帳號。" />
+      <PageHeader
+        title={isTransfer ? '轉入客戶' : '新增客戶'}
+        titleAddon={
+          <>
+            <PendingTag id={1} hint="客戶由誰建立" />
+            {isTransfer && <PendingTag id={4} hint="是否使用 Cloud Channel API" />}
+          </>
+        }
+        description={
+          isTransfer
+            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，並直接送出 Google 轉移。'
+            : '建立客戶主檔，同時建立該客戶的第一個「組織管理員」帳號。'
+        }
+      />
 
-      <form className="card form-card" onSubmit={submit} noValidate>
+      {fromWo && (
+        <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
+          <Callout tone="info" title={`依執行單 ${fromWo} 建立客戶`}>
+            客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。
+          </Callout>
+        </div>
+      )}
+      <form
+        className="card form-card"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        noValidate
+      >
         <div className="card__body">
+          {isTransfer && (
+            <div style={{ marginBottom: 'var(--space-6)' }}>
+              <Callout tone="info" title="開始前請客戶先取得轉移碼">
+                客戶的 Google 管理員產生轉移碼時，需要我方的經銷商識別碼。轉移碼 {TRANSFER_TOKEN_VALID_DAYS} 天內有效。如果客戶已經在系統裡，請改到該客戶詳情開立客戶轉移。
+              </Callout>
+            </div>
+          )}
+
           <FormSection title="客戶資料">
-            <FormField label="客戶名稱" required message={err('name')} state={err('name') ? 'error' : undefined}>
+            <FormField label="客戶名稱" required message={err('name')} state={errState('name')}>
               {(p) => <input {...p} className="input" value={form.name} onChange={set('name')} onBlur={touch('name')} />}
             </FormField>
-            <FormField label="統一編號" required message={err('taxId')} state={err('taxId') ? 'error' : undefined}>
+            <FormField label="統一編號" required message={err('taxId')} state={errState('taxId')}>
               {(p) => (
                 <input {...p} className="input mono" inputMode="numeric" maxLength={8} value={form.taxId} onChange={set('taxId')} onBlur={touch('taxId')} />
               )}
@@ -155,7 +261,7 @@ export function NewCustomerPage() {
                 />
               )}
             </FormField>
-            <FormField label="經銷商" required message={err('dealerId')} state={err('dealerId') ? 'error' : undefined}>
+            <FormField label={isTransfer ? '轉入後的經銷商' : '經銷商'} required message={err('dealerId')} state={errState('dealerId')}>
               {(p) => (
                 <select {...p} className="select" value={form.dealerId} onChange={set('dealerId')} onBlur={touch('dealerId')}>
                   <option value="">請選擇</option>
@@ -170,13 +276,11 @@ export function NewCustomerPage() {
               )}
             </FormField>
             <div />
-            <FormField label="聯絡人" required message={err('contactName')} state={err('contactName') ? 'error' : undefined}>
+            <FormField label="聯絡人" required message={err('contactName')} state={errState('contactName')}>
               {(p) => <input {...p} className="input" value={form.contactName} onChange={set('contactName')} onBlur={touch('contactName')} />}
             </FormField>
-            <FormField label="聯絡人 Email" required message={err('contactEmail')} state={err('contactEmail') ? 'error' : undefined}>
-              {(p) => (
-                <input {...p} className="input" type="email" value={form.contactEmail} onChange={set('contactEmail')} onBlur={touch('contactEmail')} />
-              )}
+            <FormField label="聯絡人 Email" required message={err('contactEmail')} state={errState('contactEmail')}>
+              {(p) => <input {...p} className="input" type="email" value={form.contactEmail} onChange={set('contactEmail')} onBlur={touch('contactEmail')} />}
             </FormField>
             <FormField label="電話">{(p) => <input {...p} className="input" type="tel" value={form.contactPhone} onChange={set('contactPhone')} />}</FormField>
             <FormField label="備註" className="is-full">
@@ -184,24 +288,51 @@ export function NewCustomerPage() {
             </FormField>
           </FormSection>
 
+          {isTransfer && (
+            <FormSection title="轉移資訊" description="建立客戶後會直接送出 Google，畫面會顯示處理結果。">
+              <FormField label="轉移碼" required message={err('transferToken')} state={errState('transferToken')}>
+                {(p) => (
+                  <input
+                    {...p}
+                    className="input mono"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    value={form.transferToken}
+                    onChange={set('transferToken')}
+                    onBlur={touch('transferToken')}
+                  />
+                )}
+              </FormField>
+              <FormField label="轉移碼到期日" required message={err('tokenExpiresAt')} state={errState('tokenExpiresAt')}>
+                {(p) => (
+                  <input
+                    {...p}
+                    className="input"
+                    type="date"
+                    min={TODAY}
+                    max={addDays(TODAY, TRANSFER_TOKEN_VALID_DAYS)}
+                    value={form.tokenExpiresAt}
+                    onChange={set('tokenExpiresAt')}
+                    onBlur={touch('tokenExpiresAt')}
+                  />
+                )}
+              </FormField>
+              <FormField label="轉移備註" className="is-full">
+                {(p) => <textarea {...p} className="textarea" value={form.transferMemo} onChange={set('transferMemo')} />}
+              </FormField>
+              <Callout tone="neutral">客戶的訂閱會全部轉入，不能只轉一部分。原訂閱會取消並在我方底下重建，承諾期方案的承諾期會重新計算。</Callout>
+            </FormSection>
+          )}
+
           <FormSection title="第一個組織管理員帳號" description="零壹只建立這一個帳號；其他帳號與角色由客戶自己建立，零壹也可以在「使用者」頁代為新增。">
             <label className="inline is-full">
               <input type="checkbox" checked={sameAsContact} onChange={(e) => setSameAsContact(e.target.checked)} />
               與聯絡人相同
             </label>
-            <FormField label="姓名" required message={err('adminName')} state={err('adminName') ? 'error' : undefined}>
-              {(p) => (
-                <input
-                  {...p}
-                  className="input"
-                  value={admin.adminName}
-                  readOnly={sameAsContact}
-                  onChange={set('adminName')}
-                  onBlur={touch('adminName')}
-                />
-              )}
+            <FormField label="姓名" required message={err('adminName')} state={errState('adminName')}>
+              {(p) => <input {...p} className="input" value={admin.adminName} readOnly={sameAsContact} onChange={set('adminName')} onBlur={touch('adminName')} />}
             </FormField>
-            <FormField label="Email（登入帳號）" required message={err('adminEmail')} state={err('adminEmail') ? 'error' : undefined}>
+            <FormField label="Email（登入帳號）" required message={err('adminEmail')} state={errState('adminEmail')}>
               {(p) => (
                 <input
                   {...p}
@@ -223,7 +354,7 @@ export function NewCustomerPage() {
             取消
           </Link>
           <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
-            {saving ? '建立中…' : '建立客戶'}
+            {saving ? '處理中…' : isTransfer ? '建立客戶並送出 Google 轉移' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
           </button>
         </div>
       </form>

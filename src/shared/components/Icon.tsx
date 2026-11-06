@@ -25,6 +25,9 @@ const paths = {
   info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v5M12 8h.01',
   download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14',
   reset: 'M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4',
+  chevronDown: 'M6 9.5l6 6 6-6',
+  logout: 'M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10',
+  lock: 'M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1M8 11V8a4 4 0 1 1 8 0v3',
 } as const;
 
 export type IconName = keyof typeof paths;

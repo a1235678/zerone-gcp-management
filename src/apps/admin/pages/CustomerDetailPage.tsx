@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getAuditLogs, getCustomer, getWorkOrders, recheckDomainVerification, setCustomerStatus } from '@data/api';
-import { workOrderStatusLabel } from '@data/labels';
+import { getAuditLogs, getCustomer, getOperations, recheckDomainVerification, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { EmptyState } from '@shared/components/DataTable';
@@ -14,17 +13,21 @@ import { useToast } from '@shared/components/Toast';
 import { formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { AuditLogTable } from '../components/AuditLogTable';
-import { WorkOrderModal } from '../components/WorkOrderModal';
-import { CustomerStatusTag, DomainVerificationTag, WorkOrderStatusTag } from '../tags';
+import { OperationModal } from '../components/OperationModal';
+import { OperationPanel } from '../components/OperationPanel';
+import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 export function CustomerDetailPage() {
+  const { can } = usePermission();
   const { id = '' } = useParams();
   const toast = useToast();
   const [version, setVersion] = useState(0);
   const reload = () => setVersion((v) => v + 1);
 
   const customer = useAsync(() => getCustomer(id), [id, version]);
-  const transfers = useAsync(() => getWorkOrders({ customerId: id, type: 'transfer' }), [id, version]);
+  const transfers = useAsync(() => getOperations({ customerId: id, type: 'transfer' }), [id, version]);
+  const [panelId, setPanelId] = useState<string | null>(null);
   const logs = useAsync(() => getAuditLogs({ customerId: id }), [id, version]);
 
   const [transferOpen, setTransferOpen] = useState(false);
@@ -43,7 +46,7 @@ export function CustomerDetailPage() {
       </Card>
     );
 
-  const openTransfer = transfers.data?.find((w) => ['draft', 'pending', 'submitted'].includes(w.status));
+  const openTransfer = transfers.data?.find((o) => o.status === 'submitted' || o.status === 'manual');
 
   const recheck = async () => {
     setChecking(true);
@@ -79,12 +82,16 @@ export function CustomerDetailPage() {
         }
         actions={
           <>
-            <button className={`btn ${c.status === 'active' ? 'btn--danger' : ''}`} onClick={() => setStatusOpen(true)}>
-              {c.status === 'active' ? '停用客戶' : '啟用客戶'}
-            </button>
-            <button className="btn btn--primary" onClick={() => setTransferOpen(true)} disabled={Boolean(openTransfer)} title={openTransfer ? `已有處理中的轉移執行單 ${openTransfer.id}` : undefined}>
-              開立客戶轉移
-            </button>
+            {can('customers', 'write') && (
+              <button className={`btn ${c.status === 'active' ? 'btn--danger' : ''}`} onClick={() => setStatusOpen(true)}>
+                {c.status === 'active' ? '停用客戶' : '啟用客戶'}
+              </button>
+            )}
+            {can('subscriptions', 'write') && (
+              <button className="btn btn--primary" onClick={() => setTransferOpen(true)} disabled={Boolean(openTransfer)} title={openTransfer ? `已有處理中的轉移 ${openTransfer.id}` : undefined}>
+                客戶轉移
+              </button>
+            )}
           </>
         }
       />
@@ -121,7 +128,7 @@ export function CustomerDetailPage() {
                 ) : (
                   <>
                     <p className="muted">建立客戶後才檢查。請客戶在 DNS 加上 Google 提供的 TXT 驗證記錄，再按「重新檢查」。</p>
-                    <div>
+                    <div hidden={!can('customers', 'write')}>
                       <button className="btn btn--sm" onClick={recheck} disabled={checking}>
                         <Icon name="reset" size={14} />
                         {checking ? '檢查中…' : '重新檢查'}
@@ -135,32 +142,38 @@ export function CustomerDetailPage() {
             <Card title={<span className="inline">客戶轉移 <PendingTag id={4} /></span>} bodyless>
               {transfers.data && transfers.data.length > 0 ? (
                 <ul className="list-plain">
-                  {transfers.data.map((w) => (
-                    <li key={w.id}>
+                  {transfers.data.map((o) => (
+                    <li key={o.id}>
                       <div style={{ minWidth: 0 }}>
-                        <Link to={`/work-orders/${w.id}`} className="mono">
-                          {w.id}
-                        </Link>
+                        <button type="button" className="link-button mono" onClick={() => setPanelId(o.id)}>
+                          {o.id}
+                        </button>
                         <div className="table__secondary">
-                          {formatDateTime(w.createdAt)} · 轉移碼 <span className="mono">{w.payload.transferToken}</span>
+                          {formatDateTime(o.createdAt)} · 轉移碼 <span className="mono">{o.payload.transferToken}</span>
+                          {o.workOrderId && (
+                            <>
+                              {' '}
+                              · 執行單 <Link to={`/work-orders/${o.workOrderId}`}>{o.workOrderId}</Link>
+                            </>
+                          )}
                         </div>
-                        {w.status === 'failed' && <div className="text-danger" style={{ fontSize: 'var(--text-sm)' }}>Google 回應：{w.failureReason}</div>}
+                        {o.status === 'failed' && <div className="text-danger" style={{ fontSize: 'var(--text-sm)' }}>Google 回應：{o.failureReason}</div>}
                       </div>
-                      <WorkOrderStatusTag value={w.status} />
+                      <OperationStatusTag value={o.status} />
                     </li>
                   ))}
                 </ul>
               ) : (
                 <div className="card__body">
                   <p className="muted">
-                    這個客戶沒有轉移紀錄。只做「轉入」：客戶從其他經銷商轉到我們底下時，在這裡開立轉移執行單。
+                    這個客戶沒有轉移紀錄。新客戶從其他經銷商轉入時，請用客戶管理的「轉入客戶」；已在系統裡的客戶才從這裡送出轉移。
                   </p>
                 </div>
               )}
               {openTransfer && (
                 <div className="card__body" style={{ borderTop: '1px solid var(--color-border)' }}>
                   <Callout tone="neutral">
-                    已有處理中的轉移執行單 {openTransfer.id}（{workOrderStatusLabel[openTransfer.status]}），處理完才能再開立。
+                    已有處理中的轉移 {openTransfer.id}，處理完才能再送出。
                   </Callout>
                 </div>
               )}
@@ -173,16 +186,18 @@ export function CustomerDetailPage() {
         </Card>
       </div>
 
-      <WorkOrderModal
+      <OperationModal
         open={transferOpen}
         type="transfer"
-        customer={c}
+        target={{ customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain }}
         onClose={() => setTransferOpen(false)}
-        onCreated={() => {
+        onSubmitted={(op) => {
           setTransferOpen(false);
           reload();
+          setPanelId(op.id);
         }}
       />
+      <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={reload} />
 
       <Modal
         open={statusOpen}

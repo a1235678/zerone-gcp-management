@@ -1,4 +1,5 @@
 import type { NavGroup } from '@shared/components/AppShell';
+import type { ResourceKey } from '@data/types';
 
 // 管理端選單：首頁、管理、產品、排程、系統（docs/handoff.md「管理端選單與頁面」）
 export const adminNav: NavGroup[] = [
@@ -30,3 +31,25 @@ export const adminNav: NavGroup[] = [
     ],
   },
 ];
+
+/** 每一頁需要的權限資源（至少「唯讀」才看得到）。首頁所有人都看得到。 */
+export const pageResource: Record<string, ResourceKey> = {
+  '/customers': 'customers',
+  '/dealers': 'dealers',
+  '/work-orders': 'workOrders',
+  '/brands': 'catalog',
+  '/catalog': 'catalog',
+  '/products/gws': 'subscriptions',
+  '/products/gcp': 'gcpUsage',
+  '/schedules/gws': 'schedules',
+  '/system/users': 'accounts',
+  '/system/roles': 'roles',
+  '/system/logs': 'auditLogs',
+};
+
+/** 依權限過濾選單，整組都看不到的群組一起拿掉 */
+export function visibleNav(can: (r: ResourceKey) => boolean): NavGroup[] {
+  return adminNav
+    .map((g) => ({ ...g, items: g.items.filter((i) => !pageResource[i.to] || can(pageResource[i.to])) }))
+    .filter((g) => g.items.length > 0);
+}

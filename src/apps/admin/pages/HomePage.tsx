@@ -8,14 +8,18 @@ import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
 import { formatDate, formatDateTime, formatNumber, formatPct, formatUsd } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
+import { usePermission } from '../auth';
 import { SubscriptionStatusTag, WorkOrderStatusTag } from '../tags';
 
 export function HomePage() {
+  const { can } = usePermission();
   const dash = useAsync(getDashboard);
   const d = dash.data;
   if (!d) return <p className="muted">載入中…</p>;
 
-  const open = d.orderCounts.draft + d.orderCounts.pending + d.orderCounts.submitted;
+  const reviewing = d.orderCounts.salesReview + d.orderCounts.techReview;
+  const toProcess = d.orderCounts.approved + d.orderCounts.processing;
+  const gwsFailed = d.operationIssues.filter((o) => o.status === 'failed').length;
   const gcpChange = Math.round(((d.gcp.totalCostCents - d.gcp.prevTotalCostCents) / d.gcp.prevTotalCostCents) * 1000) / 10;
 
   return (
@@ -37,21 +41,23 @@ export function HomePage() {
           sub={<Link to="/products/gws?status=expiring">查看即將到期</Link>}
         />
         <Stat
-          label="處理中的執行單"
-          value={open}
-          unit="張"
-          tone={d.orderCounts.failed ? 'danger' : undefined}
+          label="執行單"
+          value={toProcess}
+          unit="張待後勤處理"
           sub={
-            d.orderCounts.failed ? (
-              <Link to="/work-orders?status=failed" className="text-danger">
-                另有失敗 {d.orderCounts.failed} 張待重送
-              </Link>
-            ) : (
-              '沒有失敗的執行單'
-            )
+            <Link to="/work-orders">
+              另有 {reviewing} 張簽核中、{d.orderCounts.returned} 張退回
+            </Link>
           }
         />
-        <Stat label="GCP 近 30 天費用" value={formatUsd(d.gcp.totalCostCents, 0)} unit="USD" sub={<>較前期 {formatPct(gcpChange)}</>} />
+        <Stat
+          label="Google 處理中"
+          value={d.operationIssues.length}
+          unit="筆"
+          tone={gwsFailed ? 'danger' : undefined}
+          sub={gwsFailed ? <span className="text-danger">其中失敗 {gwsFailed} 筆，請到 GWS 訂閱或客戶詳情處理</span> : '沒有失敗的操作'}
+        />
+        {can('gcpUsage') && <Stat label="GCP 近 30 天費用" value={formatUsd(d.gcp.totalCostCents, 0)} unit="USD" sub={<>較前期 {formatPct(gcpChange)}</>} />}
       </StatGrid>
 
       <div className="stack">
@@ -102,7 +108,7 @@ export function HomePage() {
             }
           >
             <div className="mini-counts" aria-label="執行單狀態統計">
-              {(['draft', 'pending', 'submitted', 'failed', 'completed'] as const).map((s) => (
+              {(['salesReview', 'techReview', 'approved', 'processing', 'returned'] as const).map((s) => (
                 <Link key={s} to={`/work-orders?status=${s}`} className="mini-counts__item">
                   <WorkOrderStatusTag value={s} />
                   <span className="tnum">{d.orderCounts[s]}</span>
@@ -131,6 +137,7 @@ export function HomePage() {
           </Card>
         </div>
 
+        {can('gcpUsage') && (
         <Card
           title="GCP 用量摘要"
           actions={
@@ -166,6 +173,7 @@ export function HomePage() {
             </div>
           </div>
         </Card>
+        )}
       </div>
     </>
   );

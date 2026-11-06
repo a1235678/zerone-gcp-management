@@ -13,6 +13,7 @@ import { StatusTag } from '@shared/components/StatusTag';
 import { Tabs } from '@shared/components/Tabs';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { useAuth, usePermission } from '../auth';
 
 const levels: PermissionLevel[] = ['none', 'read', 'write'];
 const rank: Record<PermissionLevel, number> = { none: 0, read: 1, write: 2 };
@@ -35,6 +36,7 @@ const ResourceHeader = ({ r }: { r: ResourceKey }) =>
 type Draft = Omit<Role, 'id'> & { id?: string };
 
 export function RolesPage() {
+  const { can } = usePermission();
   const toast = useToast();
   const [orgType, setOrgType] = useState<OrgType | ''>('');
   const [version, setVersion] = useState(0);
@@ -76,13 +78,14 @@ export function RolesPage() {
     <>
       <PageHeader
         title="角色管理"
-        titleAddon={<PendingTag hint="預設內部角色清單待確認" />}
         description="每個資源設定「禁止、唯讀、可編輯」三種等級。經銷商與客戶的組織管理員可以自建角色；任何帳號都不能授予比自己更大的權限。"
         actions={
-          <button className="btn btn--primary" onClick={startNew}>
-            <Icon name="plus" size={16} />
-            新增角色
-          </button>
+          can('roles', 'write') ? (
+            <button className="btn btn--primary" onClick={startNew}>
+              <Icon name="plus" size={16} />
+              新增角色
+            </button>
+          ) : undefined
         }
       />
       <Card bodyless>
@@ -98,7 +101,7 @@ export function RolesPage() {
           ]}
         />
         <div className="result-meta">
-          <span>點選角色可以修改權限</span>
+          <span>{can('roles', 'write') ? '點選角色可以修改權限' : '點選角色可以查看權限'}</span>
         </div>
         <DataTable
           caption="角色與權限對照"
@@ -127,11 +130,13 @@ export function RolesPage() {
 
 function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => void; onSaved: (name: string, isNew: boolean) => void }) {
   const toast = useToast();
+  const { session } = useAuth();
   const mine = useAsync(getMyPermissions);
   const orgs = useAsync(getOrganizations);
   const [role, setRole] = useState<Draft>(draft);
   const [tried, setTried] = useState(false);
   const isNew = !draft.id;
+  const readOnly = !usePermission().can('roles', 'write');
 
   const setLevel = (r: ResourceKey, level: PermissionLevel) => setRole((x) => ({ ...x, permissions: { ...x.permissions, [r]: level } }));
   const nameError = tried && !role.name.trim() ? '請輸入角色名稱' : undefined;
@@ -153,18 +158,21 @@ function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => 
       open
       onClose={onClose}
       width={640}
-      title={isNew ? '新增角色' : `編輯角色：${draft.name}`}
+      title={isNew ? '新增角色' : readOnly ? `查看角色：${draft.name}` : `編輯角色：${draft.name}`}
       footer={
         <>
           <button className="btn" onClick={onClose}>
             取消
           </button>
-          <button className="btn btn--primary" onClick={save}>
-            儲存
-          </button>
+          {!readOnly && (
+            <button className="btn btn--primary" onClick={save}>
+              儲存
+            </button>
+          )}
         </>
       }
     >
+      <fieldset className="plain-fieldset" disabled={readOnly}>
       <FormField label="角色名稱" required message={nameError} state={nameError ? 'error' : undefined}>
         {(p) => <input {...p} className="input" value={role.name} onChange={(e) => setRole({ ...role, name: e.target.value })} />}
       </FormField>
@@ -238,9 +246,10 @@ function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => 
           })}
         </div>
         <p className="muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-          超過你自己權限的選項會停用。你目前是「後台管理員」，所有資源都是可編輯，所以這裡沒有停用的選項。
+          超過你自己權限的選項會停用（你目前的角色是「{session?.role}」）。
         </p>
       </div>
+      </fieldset>
     </Modal>
   );
 }

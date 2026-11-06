@@ -16,3 +16,14 @@ export function PlaceholderPage({ title }: { title: string }) {
     </>
   );
 }
+
+export function NoPermissionPage() {
+  return (
+    <Card>
+      <EmptyState title="你的角色沒有這一頁的權限" description="如果需要使用，請聯絡系統管理員調整角色權限。" />
+      <p style={{ textAlign: 'center' }}>
+        <Link to="/">回首頁</Link>
+      </p>
+    </Card>
+  );
+}

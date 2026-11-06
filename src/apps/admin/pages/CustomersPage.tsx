@@ -12,6 +12,7 @@ import { PendingTag } from '@shared/components/PendingTag';
 import { CustomerStatusTag } from "../tags";
 import { formatDate } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
+import { usePermission } from '../auth';
 
 const PAGE_SIZE = 12;
 
@@ -50,6 +51,7 @@ const columns: Column<CustomerListItem>[] = [
 ];
 
 export function CustomersPage() {
+  const { can } = usePermission();
   const navigate = useNavigate();
   // 篩選條件放在網址上，從客戶詳情返回時會保留
   const [params, setParams] = useSearchParams();
@@ -95,10 +97,17 @@ export function CustomersPage() {
         actions={
           <>
             <PendingTag id={1} hint="客戶由誰建立" />
-            <Link to="/customers/new" className="btn btn--primary">
-              <Icon name="plus" size={16} />
-              新增客戶
-            </Link>
+            {can('customers', 'write') && can('subscriptions', 'write') && (
+              <Link to="/customers/transfer-in" className="btn">
+                轉入客戶
+              </Link>
+            )}
+            {can('customers', 'write') && (
+              <Link to="/customers/new" className="btn btn--primary">
+                <Icon name="plus" size={16} />
+                新增客戶
+              </Link>
+            )}
           </>
         }
       />

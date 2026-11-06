@@ -83,21 +83,29 @@ export interface SubscriptionListItem extends Subscription {
   primaryDomain: string;
   dealerId: string;
   dealerName: string;
-  /** 這筆訂閱目前有沒有尚未結束的執行單 */
-  openWorkOrderId?: string;
+  /** 這筆訂閱目前有沒有送出中（或待處理）的 Google 操作 */
+  openOperationId?: string;
+  openOperationStatus?: OperationStatus;
 }
 export interface SubscriptionQuery {
   product?: ProductCode;
+  customerId?: string;
   keyword?: string;
   dealerId?: string;
   status?: SubscriptionStatus | '';
   plan?: string;
 }
 
-// ── 執行單 ─────────────────────────────
-export type WorkOrderType = 'new' | 'renewal' | 'seats' | 'transfer' | 'cancel';
-export type WorkOrderStatus = 'draft' | 'pending' | 'submitted' | 'completed' | 'failed';
-export interface WorkOrderPayload {
+// ── GWS 操作（後勤直接送 Google 的變更） ─────
+export type OperationType = 'new' | 'renewal' | 'seats' | 'transfer' | 'cancel';
+/**
+ * submitted：已送出 Google，等待回應
+ * completed：完成
+ * failed：Google 回應失敗，可以重試或改為手動
+ * manual：改為在 Google 手動處理，等下次同步確認
+ */
+export type OperationStatus = 'submitted' | 'completed' | 'failed' | 'manual';
+export interface OperationPayload {
   plan?: string;
   seats?: number;
   fromSeats?: number;
@@ -107,32 +115,97 @@ export interface WorkOrderPayload {
   tokenExpiresAt?: string;
   memo?: string;
 }
-export interface WorkOrderEvent {
+export interface HistoryEvent<S extends string> {
   at: string;
   by: string;
   action: string;
-  status: WorkOrderStatus;
+  status: S;
   note?: string;
+}
+export interface GwsOperation {
+  id: string;
+  type: OperationType;
+  customerId: string;
+  subscriptionId?: string;
+  /** 由執行單發起時記錄來源 */
+  workOrderId?: string;
+  payload: OperationPayload;
+  status: OperationStatus;
+  failureReason?: string;
+  manualNote?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  history: HistoryEvent<OperationStatus>[];
+}
+export interface OperationListItem extends GwsOperation {
+  customerName: string;
+  primaryDomain: string;
+  dealerName: string;
+  summary: string;
+}
+export interface NewOperationInput {
+  type: OperationType;
+  customerId: string;
+  subscriptionId?: string;
+  workOrderId?: string;
+  payload: OperationPayload;
+}
+export type OperationAction = 'simulateSuccess' | 'simulateFailure' | 'retry' | 'markManual' | 'simulateSync';
+
+// ── 執行單（業務的需求單，簽核後由後勤處理） ─────
+export type WorkOrderType = OperationType;
+/** 草稿 → 業務審核中 → 技術審核中 → 待處理 → 處理中 → 完成；任一關卡可退回 */
+export type WorkOrderStatus = 'draft' | 'salesReview' | 'techReview' | 'approved' | 'processing' | 'completed' | 'returned';
+export interface NewCustomerDraft {
+  name: string;
+  taxId: string;
+  primaryDomain: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  note: string;
+}
+export interface WorkOrderPayload {
+  plan?: string;
+  seats?: number;
+  toSeats?: number;
+  renewMonths?: number;
+  memo?: string;
 }
 export interface WorkOrder {
   id: string;
   type: WorkOrderType;
-  customerId: string;
+  /** 現有客戶：customerId；新客戶：newCustomer，建立客戶後會補上 customerId */
+  customerMode: 'existing' | 'new';
+  customerId?: string;
+  newCustomer?: NewCustomerDraft;
   dealerId: string;
   subscriptionId?: string;
   payload: WorkOrderPayload;
   status: WorkOrderStatus;
+  returnReason?: string;
+  /** 處理步驟中的 Google 操作 */
+  operationId?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  failureReason?: string;
-  history: WorkOrderEvent[];
+  history: HistoryEvent<WorkOrderStatus>[];
+}
+export type WorkOrderStepState = 'todo' | 'done' | 'inProgress' | 'failed' | 'manual' | 'blocked';
+export interface WorkOrderStep {
+  key: 'createCustomer' | 'google';
+  label: string;
+  state: WorkOrderStepState;
+  detail?: string;
 }
 export interface WorkOrderListItem extends WorkOrder {
   customerName: string;
   primaryDomain: string;
   dealerName: string;
   summary: string;
+  steps: WorkOrderStep[];
+  operation?: OperationListItem;
 }
 export interface WorkOrderQuery {
   keyword?: string;
@@ -141,15 +214,16 @@ export interface WorkOrderQuery {
   dealerId?: string;
   customerId?: string;
 }
-export interface NewWorkOrderInput {
+export interface WorkOrderInput {
   type: WorkOrderType;
-  customerId: string;
+  customerMode: 'existing' | 'new';
+  customerId?: string;
+  newCustomer?: NewCustomerDraft;
+  dealerId?: string;
   subscriptionId?: string;
   payload: WorkOrderPayload;
-  /** true：直接送出確認（待確認）；false：存成草稿 */
-  submit: boolean;
 }
-export type WorkOrderAction = 'requestConfirm' | 'confirmAndSend' | 'backToDraft' | 'simulateSuccess' | 'simulateFailure' | 'resend' | 'discard';
+export type WorkOrderAction = 'submit' | 'approve' | 'return' | 'discard';
 
 // ── GCP 用量 ───────────────────────────
 export interface GcpUsageRow {
@@ -239,7 +313,18 @@ export interface NewUserInput {
 }
 
 export type PermissionLevel = 'none' | 'read' | 'write';
-export type ResourceKey = 'customers' | 'subscriptions' | 'workOrders' | 'gcpUsage' | 'accounts' | 'roles' | 'auditLogs' | 'billing';
+export type ResourceKey =
+  | 'customers'
+  | 'dealers'
+  | 'workOrders'
+  | 'catalog'
+  | 'subscriptions'
+  | 'gcpUsage'
+  | 'schedules'
+  | 'accounts'
+  | 'roles'
+  | 'auditLogs'
+  | 'billing';
 export interface Role {
   id: string;
   name: string;
@@ -256,7 +341,7 @@ export interface RoleListItem extends Role {
 }
 
 // ── 操作紀錄 ───────────────────────────
-export type LogCategory = 'customer' | 'workOrder' | 'permission' | 'login' | 'sync';
+export type LogCategory = 'customer' | 'workOrder' | 'gws' | 'permission' | 'login' | 'sync';
 export type LogResult = 'success' | 'failure' | 'warning';
 export interface AuditLog {
   id: string;

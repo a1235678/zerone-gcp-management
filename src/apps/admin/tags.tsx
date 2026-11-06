@@ -4,6 +4,7 @@ import {
   dealerStatusLabel,
   domainVerificationLabel,
   logResultLabel,
+  operationStatusLabel,
   scheduleStatusLabel,
   subscriptionStatusLabel,
   userStatusLabel,
@@ -14,6 +15,7 @@ import type {
   DealerStatus,
   DomainVerification,
   LogResult,
+  OperationStatus,
   ScheduleStatus,
   SubscriptionStatus,
   UserStatus,
@@ -32,11 +34,14 @@ export const DomainVerificationTag = tag<DomainVerification>(domainVerificationL
 export const SubscriptionStatusTag = tag<SubscriptionStatus>(subscriptionStatusLabel, { active: 'success', expiring: 'warning', cancelled: 'neutral' });
 export const WorkOrderStatusTag = tag<WorkOrderStatus>(workOrderStatusLabel, {
   draft: 'neutral',
-  pending: 'warning',
-  submitted: 'info',
+  salesReview: 'warning',
+  techReview: 'warning',
+  approved: 'info',
+  processing: 'info',
   completed: 'success',
-  failed: 'danger',
+  returned: 'danger',
 });
+export const OperationStatusTag = tag<OperationStatus>(operationStatusLabel, { submitted: 'info', completed: 'success', failed: 'danger', manual: 'warning' });
 export const ScheduleStatusTag = tag<ScheduleStatus>(scheduleStatusLabel, { waiting: 'neutral', running: 'info', done: 'success', failed: 'danger', cancelled: 'neutral' });
 export const UserStatusTag = tag<UserStatus>(userStatusLabel, { active: 'success', disabled: 'neutral', invited: 'info' });
 export const LogResultTag = tag<LogResult>(logResultLabel, { success: 'success', failure: 'danger', warning: 'warning' });

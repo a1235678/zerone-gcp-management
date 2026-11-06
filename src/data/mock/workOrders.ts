@@ -1,70 +1,156 @@
-import type { WorkOrder, WorkOrderEvent, WorkOrderPayload, WorkOrderStatus, WorkOrderType } from '../types';
+import type { HistoryEvent, NewCustomerDraft, WorkOrder, WorkOrderPayload, WorkOrderStatus, WorkOrderType } from '../types';
 
-const SALES = '黃柏翰';
-const OPS = '張家銘';
+// 執行單：業務接到客戶需求後開立，業務主管、技術主管依序簽核，再由後勤處理。
+export const SALES_MANAGER = '蔡明峰';
+export const TECH_MANAGER = '鄭志豪';
+const OPS = '何佩真';
 
-// 依狀態產生合理的歷程
-function history(status: WorkOrderStatus, createdAt: string, by: string, steps: string[], failure?: string): WorkOrderEvent[] {
-  const [t1, t2, t3, t4] = steps;
-  const ev: WorkOrderEvent[] = [{ at: createdAt, by, action: '建立草稿', status: 'draft' }];
-  if (status === 'draft') return ev;
-  ev.push({ at: t1, by, action: '送出確認', status: 'pending' });
-  if (status === 'pending') return ev;
-  ev.push({ at: t2, by: OPS, action: '確認並送出 Google', status: 'submitted' });
-  if (status === 'submitted') return ev;
-  if (status === 'completed') {
-    ev.push({ at: t3, by: '系統', action: 'Google 回應完成', status: 'completed' });
-    return ev;
+type Step = [at: string, status: WorkOrderStatus];
+
+/** 依時間點產生標準歷程：草稿 → 送出簽核 → 業務主管核准 → 技術主管核准 → 開始處理 → 完成 */
+function history(by: string, createdAt: string, steps: Step[], returnNote?: string): HistoryEvent<WorkOrderStatus>[] {
+  const ev: HistoryEvent<WorkOrderStatus>[] = [{ at: createdAt, by, action: '建立草稿', status: 'draft' }];
+  for (const [at, status] of steps) {
+    const map: Record<WorkOrderStatus, { by: string; action: string }> = {
+      draft: { by, action: '建立草稿' },
+      salesReview: { by, action: '送出簽核' },
+      techReview: { by: SALES_MANAGER, action: '業務主管核准' },
+      approved: { by: TECH_MANAGER, action: '技術主管核准' },
+      processing: { by: OPS, action: '開始處理' },
+      completed: { by: '系統', action: '所有步驟完成' },
+      returned: { by: SALES_MANAGER, action: '業務主管退回' },
+    };
+    ev.push({ at, status, ...map[status], note: status === 'returned' ? returnNote : undefined });
   }
-  ev.push({ at: t3, by: '系統', action: 'Google 回應失敗', status: 'failed', note: failure });
-  void t4;
   return ev;
 }
 
 function wo(
   id: string,
   type: WorkOrderType,
-  customerId: string,
+  customer: { customerId?: string; newCustomer?: NewCustomerDraft },
   dealerId: string,
   subscriptionId: string | undefined,
   payload: WorkOrderPayload,
-  status: WorkOrderStatus,
+  createdBy: string,
   createdAt: string,
-  steps: string[],
-  createdBy = SALES,
-  failureReason?: string,
+  steps: Step[],
+  extra: { operationId?: string; returnReason?: string } = {},
 ): WorkOrder {
-  const h = history(status, createdAt, createdBy, steps, failureReason);
+  const h = history(createdBy, createdAt, steps, extra.returnReason);
   return {
     id,
     type,
-    customerId,
+    customerMode: customer.newCustomer ? 'new' : 'existing',
+    customerId: customer.customerId,
+    newCustomer: customer.newCustomer,
     dealerId,
     subscriptionId,
     payload,
-    status,
+    status: h[h.length - 1].status,
+    returnReason: extra.returnReason,
+    operationId: extra.operationId,
     createdBy,
     createdAt,
     updatedAt: h[h.length - 1].at,
-    failureReason,
     history: h,
   };
 }
 
+const newClinic: NewCustomerDraft = {
+  name: '青松診所',
+  taxId: '90010031',
+  primaryDomain: 'qingsong-clinic.example',
+  contactName: '駱婉君',
+  contactEmail: 'admin@qingsong-clinic.example',
+  contactPhone: '02-2758-1031',
+  note: '診所新開幕，需在 11 月中前開通',
+};
+
 export const workOrders: WorkOrder[] = [
-  wo('WO-1105-003', 'seats', 'C0012', 'D000', 'S013', { fromSeats: 6, toSeats: 8 }, 'submitted', '2026-11-05 09:58', ['2026-11-05 10:02', '2026-11-05 10:15']),
-  wo('WO-1105-002', 'renewal', 'C0019', 'D001', 'S020', { renewMonths: 12 }, 'pending', '2026-11-05 09:40', ['2026-11-05 09:44']),
-  wo('WO-1105-001', 'seats', 'C0016', 'D002', 'S017', { fromSeats: 64, toSeats: 70, memo: '新進人員 6 名' }, 'draft', '2026-11-05 09:12', []),
-  wo('WO-1104-002', 'renewal', 'C0002', 'D001', 'S002', { renewMonths: 12 }, 'submitted', '2026-11-04 11:05', ['2026-11-04 11:20', '2026-11-04 14:02']),
-  wo('WO-1104-001', 'new', 'C0026', 'D003', undefined, { plan: 'Business Standard', seats: 12 }, 'pending', '2026-11-04 16:20', ['2026-11-04 16:31']),
-  wo('WO-1104-003', 'seats', 'C0008', 'D003', 'S009', { fromSeats: 70, toSeats: 75 }, 'completed', '2026-11-04 10:15', ['2026-11-04 10:18', '2026-11-04 10:40', '2026-11-04 10:41']),
-  wo('WO-1103-001', 'seats', 'C0006', 'D002', 'S007', { fromSeats: 130, toSeats: 120 }, 'failed', '2026-11-03 15:30', ['2026-11-03 15:35', '2026-11-03 16:00', '2026-11-03 16:01'], SALES, '席次不可低於目前已指派的授權數（124）'),
-  wo('WO-1103-002', 'transfer', 'C0023', 'D002', undefined, { transferToken: 'K7Q2-9XMB-4TRW', tokenExpiresAt: '2026-11-12' }, 'completed', '2026-11-03 09:20', ['2026-11-03 09:25', '2026-11-03 10:05', '2026-11-03 10:30']),
-  wo('WO-1102-001', 'renewal', 'C0005', 'D003', 'S006', { renewMonths: 12 }, 'draft', '2026-11-02 17:45', []),
-  wo('WO-1030-001', 'cancel', 'C0015', 'D004', 'S016', { memo: '經銷商暫停合作' }, 'completed', '2026-10-30 10:00', ['2026-10-30 10:05', '2026-10-30 10:30', '2026-10-30 10:31']),
-  wo('WO-1028-001', 'seats', 'C0011', 'D002', 'S012', { fromSeats: 200, toSeats: 210 }, 'completed', '2026-10-28 14:10', ['2026-10-28 14:12', '2026-10-28 14:40', '2026-10-28 14:41']),
-  wo('WO-1022-001', 'seats', 'C0024', 'D001', 'S025', { fromSeats: 140, toSeats: 150 }, 'completed', '2026-10-22 11:00', ['2026-10-22 11:05', '2026-10-22 11:30', '2026-10-22 11:31']),
-  wo('WO-1020-001', 'transfer', 'C0027', 'D003', undefined, { transferToken: 'P3LM-7QZD-81CA', tokenExpiresAt: '2026-10-18' }, 'failed', '2026-10-20 13:30', ['2026-10-20 13:40', '2026-10-20 14:00', '2026-10-20 14:01'], SALES, '轉移碼已過期，請客戶重新產生'),
-  wo('WO-1015-001', 'renewal', 'C0010', 'D004', 'S011', { renewMonths: 12 }, 'failed', '2026-10-15 10:20', ['2026-10-15 10:22', '2026-10-15 11:00', '2026-10-15 11:05'], SALES, '逾時沒有回應，請重送'),
-  wo('WO-1002-001', 'cancel', 'C0009', 'D001', 'S010', { memo: '客戶停止合作' }, 'completed', '2026-10-02 09:30', ['2026-10-02 09:32', '2026-10-02 10:00', '2026-10-02 10:01']),
+  wo('WO-1105-002', 'renewal', { customerId: 'C0019' }, 'D001', 'S020', { renewMonths: 12 }, '李冠霖', '2026-11-05 09:40', [['2026-11-05 09:44', 'salesReview']]),
+  wo('WO-1105-001', 'seats', { customerId: 'C0016' }, 'D002', 'S017', { toSeats: 70, memo: '新進人員 6 名' }, '黃柏翰', '2026-11-05 09:12', []),
+  wo('WO-1104-001', 'new', { newCustomer: newClinic }, 'D000', undefined, { plan: 'Business Starter', seats: 10 }, '黃柏翰', '2026-11-04 15:10', [
+    ['2026-11-04 15:12', 'salesReview'],
+    ['2026-11-04 16:30', 'techReview'],
+    ['2026-11-05 09:05', 'approved'],
+  ]),
+  wo('WO-1104-002', 'seats', { customerId: 'C0012' }, 'D000', 'S013', { toSeats: 8 }, '黃柏翰', '2026-11-04 09:58', [
+    ['2026-11-04 10:02', 'salesReview'],
+    ['2026-11-04 14:20', 'techReview'],
+    ['2026-11-05 09:00', 'approved'],
+    ['2026-11-05 10:15', 'processing'],
+  ], { operationId: 'OP-1105-001' }),
+  wo('WO-1103-003', 'new', { customerId: 'C0026' }, 'D003', undefined, { plan: 'Business Standard', seats: 12 }, '李冠霖', '2026-11-03 16:20', [
+    ['2026-11-03 16:31', 'salesReview'],
+    ['2026-11-04 11:00', 'techReview'],
+  ]),
+  wo('WO-1102-001', 'renewal', { customerId: 'C0005' }, 'D003', 'S006', { renewMonths: 12 }, '李冠霖', '2026-11-02 17:45', [
+    ['2026-11-02 17:50', 'salesReview'],
+    ['2026-11-03 10:20', 'returned'],
+  ], { returnReason: '請先和客戶確認是否改為 24 個月' }),
+  wo('WO-1027-001', 'seats', { customerId: 'C0011' }, 'D002', 'S012', { toSeats: 210 }, '黃柏翰', '2026-10-27 14:10', [
+    ['2026-10-27 14:12', 'salesReview'],
+    ['2026-10-27 17:00', 'techReview'],
+    ['2026-10-28 10:00', 'approved'],
+    ['2026-10-28 14:40', 'processing'],
+    ['2026-10-28 14:41', 'completed'],
+  ], { operationId: 'OP-1028-001' }),
+  wo(
+    'WO-1027-002',
+    'transfer',
+    {
+      customerId: 'C0023',
+      newCustomer: {
+        name: '白鷺鷥文創',
+        taxId: '90010023',
+        primaryDomain: 'egret-creative.example',
+        contactName: '江承翰',
+        contactEmail: 'admin@egret-creative.example',
+        contactPhone: '06-2200-1023',
+        note: '',
+      },
+    },
+    'D002',
+    undefined,
+    { memo: '客戶從其他經銷商轉入' },
+    '黃柏翰',
+    '2026-10-27 09:20',
+    [
+      ['2026-10-27 09:25', 'salesReview'],
+      ['2026-10-27 15:00', 'techReview'],
+      ['2026-10-28 09:00', 'approved'],
+      ['2026-10-28 09:15', 'processing'],
+      ['2026-11-03 10:30', 'completed'],
+    ],
+    { operationId: 'OP-1103-002' },
+  ),
+  wo(
+    'WO-1017-001',
+    'transfer',
+    {
+      customerId: 'C0027',
+      newCustomer: {
+        name: '曉風出版社',
+        taxId: '90010027',
+        primaryDomain: 'xiaofeng-press.example',
+        contactName: '馮靜宜',
+        contactEmail: 'admin@xiaofeng-press.example',
+        contactPhone: '02-2368-1027',
+        note: '',
+      },
+    },
+    'D003',
+    undefined,
+    { memo: '客戶從其他經銷商轉入' },
+    '黃柏翰',
+    '2026-10-17 13:30',
+    [
+      ['2026-10-17 13:40', 'salesReview'],
+      ['2026-10-17 17:00', 'techReview'],
+      ['2026-10-19 09:00', 'approved'],
+      ['2026-10-19 15:02', 'processing'],
+    ],
+    { operationId: 'OP-1020-001' },
+  ),
 ];
