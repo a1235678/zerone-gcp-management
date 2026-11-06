@@ -52,8 +52,8 @@ function Protected() {
   if (!session) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   return (
     <AppShell
-      siteName="零壹 SaaS 平台"
-      siteSubtitle="管理端"
+      siteName="零壹雲管家"
+      siteSubtitle="Zerone Cloud · 管理端"
       nav={adminNav}
       user={{ name: session.name, role: session.role, email: session.email }}
       onLogout={async () => {

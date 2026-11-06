@@ -14,8 +14,8 @@ function AuthLayout({ children, aside }: { children: React.ReactNode; aside?: Re
       <div className="auth__brand">
         <span className="sidebar__logo">01</span>
         <div>
-          <div className="sidebar__title">零壹 SaaS 平台</div>
-          <div className="sidebar__subtitle">管理端</div>
+          <div className="sidebar__title">零壹雲管家</div>
+          <div className="sidebar__subtitle">Zerone Cloud · 管理端</div>
         </div>
       </div>
       <div className="auth__card">{children}</div>

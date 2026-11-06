@@ -1,4 +1,4 @@
-# 零壹 SaaS 平台 Prototype
+# 零壹雲管家（Zerone Cloud）Prototype
 
 管理端 Prototype，全部使用假資料，不連任何後端或 Google API。需求來源見 [docs/handoff.md](docs/handoff.md)。
 
