@@ -1034,7 +1034,8 @@ export function saveRole(role: Omit<Role, 'id'> & { id?: string }): Promise<Role
     log('permission', name, '修改角色權限');
     return delay(existing);
   }
-  const created: Role = { ...role, name, id: `R${String(db.roles.length + 1).padStart(2, '0')}` };
+  const nextNo = db.roles.reduce((m, r) => Math.max(m, Number(r.id.slice(1))), 0) + 1;
+  const created: Role = { ...role, name, id: `R${String(nextNo).padStart(2, '0')}` };
   db.roles.push(created);
   log('permission', name, '新增角色');
   return delay(created);

@@ -78,7 +78,6 @@ export function RolesPage() {
     <>
       <PageHeader
         title="角色管理"
-        titleAddon={<PendingTag hint="預設內部角色清單待確認" />}
         description="每個資源設定「禁止、唯讀、可編輯」三種等級。經銷商與客戶的組織管理員可以自建角色；任何帳號都不能授予比自己更大的權限。"
         actions={
           can('roles', 'write') ? (

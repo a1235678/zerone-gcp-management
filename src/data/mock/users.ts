@@ -5,14 +5,13 @@ import { customers } from './customers';
 const internal: User[] = [
   u('U001', '林怡君', 'yijun.lin@zerone.example', 'internal', 'ZERONE', 'R01', 'active', false, '2026-11-05 08:52', '2024-01-02'),
   u('U002', '黃柏翰', 'pohan.huang@zerone.example', 'internal', 'ZERONE', 'R03', 'active', false, '2026-11-05 09:05', '2024-01-02'),
-  u('U003', '陳思穎', 'szuying.chen@zerone.example', 'internal', 'ZERONE', 'R02', 'active', false, '2026-11-04 17:40', '2024-02-01'),
   u('U004', '張家銘', 'chiaming.chang@zerone.example', 'internal', 'ZERONE', 'R05', 'active', false, '2026-11-05 09:30', '2024-03-11'),
   u('U005', '王雅琪', 'yachi.wang@zerone.example', 'internal', 'ZERONE', 'R04', 'active', false, '2026-11-03 14:12', '2024-06-17'),
-  u('U006', '李冠霖', 'kuanlin.li@zerone.example', 'internal', 'ZERONE', 'R06', 'active', false, '2026-11-02 10:08', '2025-01-06'),
+  u('U006', '李冠霖', 'kuanlin.li@zerone.example', 'internal', 'ZERONE', 'R03', 'active', false, '2026-11-02 10:08', '2025-01-06'),
   u('U008', '蔡明峰', 'mingfeng.tsai@zerone.example', 'internal', 'ZERONE', 'R12', 'active', false, '2026-11-05 08:40', '2024-01-15'),
   u('U009', '鄭志豪', 'chihhao.cheng@zerone.example', 'internal', 'ZERONE', 'R13', 'active', false, '2026-11-05 08:58', '2024-01-15'),
   u('U010', '何佩真', 'peichen.ho@zerone.example', 'internal', 'ZERONE', 'R14', 'active', false, '2026-11-05 09:10', '2024-04-08'),
-  u('U007', '吳承澤', 'chengtse.wu@zerone.example', 'internal', 'ZERONE', 'R07', 'disabled', false, '2026-08-29 18:20', '2025-04-01'),
+  u('U007', '吳承澤', 'chengtse.wu@zerone.example', 'internal', 'ZERONE', 'R03', 'disabled', false, '2026-08-29 18:20', '2025-04-01'),
 ];
 
 const dealerUsers: User[] = [
