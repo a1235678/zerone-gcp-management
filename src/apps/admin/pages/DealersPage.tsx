@@ -14,10 +14,12 @@ import { useToast } from '@shared/components/Toast';
 import { formatDate, formatNumber } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { DealerStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function DealersPage() {
+  const { can } = usePermission();
   const navigate = useNavigate();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
@@ -96,10 +98,12 @@ export function DealersPage() {
         title="經銷商管理"
         description="「直銷（零壹）」也列為一個經銷商。總席次為名下客戶 GWS 訂閱（不含已取消）的席次加總。"
         actions={
-          <button className="btn btn--primary" onClick={() => setOpen(true)}>
-            <Icon name="plus" size={16} />
-            新增經銷商
-          </button>
+          can('dealers', 'write') ? (
+            <button className="btn btn--primary" onClick={() => setOpen(true)}>
+              <Icon name="plus" size={16} />
+              新增經銷商
+            </button>
+          ) : undefined
         }
       />
       <Card bodyless>

@@ -9,6 +9,7 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { usePermission } from '../auth';
 
 const emptyCustomer: NewCustomerDraft = { name: '', taxId: '', primaryDomain: '', contactName: '', contactEmail: '', contactPhone: '', note: '' };
 const types: WorkOrderType[] = ['new', 'renewal', 'seats', 'cancel', 'transfer'];
@@ -16,6 +17,7 @@ const needsSubscription = (t: WorkOrderType) => t === 'renewal' || t === 'seats'
 
 /** 業務開立或修改執行單（草稿、已退回才能修改） */
 export function WorkOrderFormPage() {
+  const { can } = usePermission();
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -78,6 +80,13 @@ export function WorkOrderFormPage() {
     return (
       <Callout tone="warning">
         只有草稿或已退回的執行單可以修改。<Link to={`/work-orders/${id}`}>回到執行單</Link>
+      </Callout>
+    );
+
+  if (!(can('workOrders', 'write')))
+    return (
+      <Callout tone="warning" title="你的角色沒有權限">
+        你的角色不能開立或修改執行單。如果需要，請聯絡系統管理員調整角色權限。
       </Callout>
     );
 

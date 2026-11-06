@@ -19,6 +19,7 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { usePermission } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -46,6 +47,7 @@ type Key = keyof typeof empty;
  */
 export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
   const isTransfer = mode === 'transfer';
+  const { can } = usePermission();
   const navigate = useNavigate();
   const toast = useToast();
   const dealers = useAsync(getDealers);
@@ -176,6 +178,13 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     !domainOk && '有效的主網域',
     Object.keys(errors).length > 0 && `${Object.keys(errors).length} 個必填欄位`,
   ].filter(Boolean);
+
+  if (!(can('customers', 'write') && (!isTransfer || can('subscriptions', 'write'))))
+    return (
+      <Callout tone="warning" title="你的角色沒有權限">
+        你的角色不能建立客戶。如果需要，請聯絡系統管理員調整角色權限。
+      </Callout>
+    );
 
   return (
     <>

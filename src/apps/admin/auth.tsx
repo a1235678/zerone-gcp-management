@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { getSession, login as apiLogin, logout as apiLogout, type Session } from '@data/api';
+import { APPROVER_ROLE, getSession, login as apiLogin, logout as apiLogout, type Session } from '@data/api';
+import type { ResourceKey, WorkOrderStatus } from '@data/types';
 
 interface Auth {
   session: Session | undefined;
@@ -28,3 +29,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+
+/**
+ * 目前登入者的權限。每次呼叫都讀最新的角色設定，所以在「角色管理」改了權限會馬上生效。
+ * 這只是畫面上的顯示；正式版的權限檢查一定要在後端再做一次。
+ */
+export function usePermission() {
+  useAuth();
+  const can = (resource: ResourceKey, level: 'read' | 'write' = 'read') => {
+    const p = getSession()?.permissions[resource] ?? 'none';
+    return level === 'read' ? p !== 'none' : p === 'write';
+  };
+  const canApprove = (status: WorkOrderStatus) => {
+    const r = APPROVER_ROLE[status];
+    return Boolean(r && getSession()?.roleId === r.roleId);
+  };
+  return { can, canApprove };
+}

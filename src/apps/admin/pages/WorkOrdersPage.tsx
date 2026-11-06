@@ -12,6 +12,7 @@ import { PendingTag } from '@shared/components/PendingTag';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { WorkOrderStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 const PAGE_SIZE = 15;
 
@@ -49,6 +50,7 @@ const columns: Column<WorkOrderListItem>[] = [
 const statusOrder: WorkOrderStatus[] = ['draft', 'returned', 'salesReview', 'techReview', 'approved', 'processing', 'completed'];
 
 export function WorkOrdersPage() {
+  const { can } = usePermission();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const keyword = params.get('q') ?? '';
@@ -81,10 +83,12 @@ export function WorkOrdersPage() {
         titleAddon={<PendingTag id={6} hint="是否列入第一階段上線" />}
         description="業務接到客戶需求後開立，依序由業務主管、技術主管簽核，核准後由後勤處理。後勤也可以不經執行單，直接在「產品 › GWS」操作訂閱。"
         actions={
-          <Link to="/work-orders/new" className="btn btn--primary">
-            <Icon name="plus" size={16} />
-            開立執行單
-          </Link>
+          can('workOrders', 'write') ? (
+            <Link to="/work-orders/new" className="btn btn--primary">
+              <Icon name="plus" size={16} />
+              開立執行單
+            </Link>
+          ) : undefined
         }
       />
 

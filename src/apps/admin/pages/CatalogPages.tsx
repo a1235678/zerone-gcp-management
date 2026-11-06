@@ -12,12 +12,14 @@ import { StatusTag } from '@shared/components/StatusTag';
 import { useToast } from '@shared/components/Toast';
 import { formatDate } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
+import { usePermission } from '../auth';
 
 // 品牌管理、產品管理：先做空殼（清單加新增），欄位待確認
 
 const statusTag = (s: 'active' | 'draft') => <StatusTag tone={s === 'active' ? 'success' : 'neutral'}>{s === 'active' ? '上架' : '草稿'}</StatusTag>;
 
 export function BrandsPage() {
+  const { can } = usePermission();
   const toast = useToast();
   const [version, setVersion] = useState(0);
   const [open, setOpen] = useState(false);
@@ -54,10 +56,12 @@ export function BrandsPage() {
         titleAddon={<PendingTag hint="欄位與內容之後再補" />}
         description="目前整合 Google，之後會支援其他品牌。"
         actions={
-          <button className="btn btn--primary" onClick={() => setOpen(true)}>
-            <Icon name="plus" size={16} />
-            新增品牌
-          </button>
+          can('catalog', 'write') ? (
+            <button className="btn btn--primary" onClick={() => setOpen(true)}>
+              <Icon name="plus" size={16} />
+              新增品牌
+            </button>
+          ) : undefined
         }
       />
       <Card bodyless>
@@ -91,6 +95,7 @@ export function BrandsPage() {
 }
 
 export function ProductsPage() {
+  const { can } = usePermission();
   const toast = useToast();
   const [version, setVersion] = useState(0);
   const [open, setOpen] = useState(false);
@@ -135,10 +140,12 @@ export function ProductsPage() {
         titleAddon={<PendingTag hint="欄位與內容之後再補" />}
         description="目前整合 Google Workspace 與 Google Cloud。"
         actions={
-          <button className="btn btn--primary" onClick={() => setOpen(true)}>
-            <Icon name="plus" size={16} />
-            新增產品
-          </button>
+          can('catalog', 'write') ? (
+            <button className="btn btn--primary" onClick={() => setOpen(true)}>
+              <Icon name="plus" size={16} />
+              新增產品
+            </button>
+          ) : undefined
         }
       />
       <Card bodyless>

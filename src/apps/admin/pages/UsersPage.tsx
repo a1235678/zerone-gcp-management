@@ -15,7 +15,7 @@ import { Tabs } from '@shared/components/Tabs';
 import { useToast } from '@shared/components/Toast';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
-import { useAuth } from '../auth';
+import { useAuth, usePermission } from '../auth';
 import { UserStatusTag } from '../tags';
 
 const PAGE_SIZE = 15;
@@ -24,6 +24,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type Confirm = { user: UserListItem; kind: 'disable' | 'enable' | 'reset' };
 
 export function UsersPage() {
+  const { can } = usePermission();
   const toast = useToast();
   const { session } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -110,7 +111,7 @@ export function UsersPage() {
       key: 'ops',
       header: <span className="visually-hidden">操作</span>,
       render: (u) => (
-        <div className="row-actions">
+        <div className="row-actions" hidden={!can('accounts', 'write')}>
           {u.status !== 'invited' && (
             <button className="btn btn--sm" onClick={() => setConfirm({ user: u, kind: 'reset' })}>
               重設密碼
@@ -136,10 +137,12 @@ export function UsersPage() {
         title="使用者"
         description="管理內部、經銷商、客戶的所有帳號。零壹建立經銷商或客戶時會一併建立第一個組織管理員；其他帳號通常由對方自行建立，零壹也可以代為新增、停用或重設密碼。"
         actions={
-          <button className="btn btn--primary" onClick={() => setNewOpen(true)}>
-            <Icon name="plus" size={16} />
-            新增使用者
-          </button>
+          can('accounts', 'write') ? (
+            <button className="btn btn--primary" onClick={() => setNewOpen(true)}>
+              <Icon name="plus" size={16} />
+              新增使用者
+            </button>
+          ) : undefined
         }
       />
       <Card bodyless>

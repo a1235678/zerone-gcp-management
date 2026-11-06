@@ -313,7 +313,18 @@ export interface NewUserInput {
 }
 
 export type PermissionLevel = 'none' | 'read' | 'write';
-export type ResourceKey = 'customers' | 'subscriptions' | 'workOrders' | 'gcpUsage' | 'accounts' | 'roles' | 'auditLogs' | 'billing';
+export type ResourceKey =
+  | 'customers'
+  | 'dealers'
+  | 'workOrders'
+  | 'catalog'
+  | 'subscriptions'
+  | 'gcpUsage'
+  | 'schedules'
+  | 'accounts'
+  | 'roles'
+  | 'auditLogs'
+  | 'billing';
 export interface Role {
   id: string;
   name: string;

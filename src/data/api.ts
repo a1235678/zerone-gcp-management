@@ -819,6 +819,12 @@ export function saveWorkOrder(input: WorkOrderInput, submit: boolean, id?: strin
   return delay(workOrderListItem(wo));
 }
 
+/** 簽核角色：只有這兩個角色能核准或退回對應的關卡（後台管理員也不能代為核准） */
+export const APPROVER_ROLE: Partial<Record<WorkOrder['status'], { roleId: string; roleName: string }>> = {
+  salesReview: { roleId: 'R12', roleName: '業務主管' },
+  techReview: { roleId: 'R13', roleName: '技術主管' },
+};
+
 /** 簽核流程：送出簽核、核准（業務主管 → 技術主管）、退回、刪除草稿 */
 export function actOnWorkOrder(id: string, action: WorkOrderAction, note?: string): Promise<WorkOrderListItem | null> {
   const wo = db.workOrders.find((w) => w.id === id);
@@ -837,12 +843,14 @@ export function actOnWorkOrder(id: string, action: WorkOrderAction, note?: strin
       push('salesReview', '送出簽核');
       break;
     case 'approve':
+      if (APPROVER_ROLE[wo.status] && APPROVER_ROLE[wo.status]!.roleId !== currentUser.roleId) return fail(`只有${APPROVER_ROLE[wo.status]!.roleName}可以核准這一關`);
       if (wo.status === 'salesReview') push('techReview', '業務主管核准', note?.trim() || undefined);
       else if (wo.status === 'techReview') push('approved', '技術主管核准', note?.trim() || undefined);
       else return fail('狀態已變更，請重新整理');
       break;
     case 'return': {
       if (wo.status !== 'salesReview' && wo.status !== 'techReview') return fail('狀態已變更，請重新整理');
+      if (APPROVER_ROLE[wo.status]!.roleId !== currentUser.roleId) return fail(`只有${APPROVER_ROLE[wo.status]!.roleName}可以退回這一關`);
       if (!note?.trim()) return fail('請填寫退回原因');
       const who = wo.status === 'salesReview' ? '業務主管' : '技術主管';
       wo.returnReason = note.trim();

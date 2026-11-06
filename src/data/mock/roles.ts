@@ -11,9 +11,24 @@ const P = (
   roles: PermissionLevel,
   auditLogs: PermissionLevel,
   billing: PermissionLevel,
-): Record<ResourceKey, PermissionLevel> => ({ customers, subscriptions, workOrders, gcpUsage, accounts, roles, auditLogs, billing });
+): Omit<Record<ResourceKey, PermissionLevel>, 'dealers' | 'catalog' | 'schedules'> => ({ customers, subscriptions, workOrders, gcpUsage, accounts, roles, auditLogs, billing });
 
-export const roles: Role[] = [
+// 經銷商、品牌與產品、排程（後來加的三個資源）：[經銷商, 品牌與產品, 排程]
+type Extra = [dealers: PermissionLevel, catalog: PermissionLevel, schedules: PermissionLevel];
+const extra: Record<string, Extra> = {
+  R01: ['write', 'write', 'write'], // 後台管理員
+  R02: ['read', 'read', 'read'], // 財務
+  R03: ['read', 'read', 'none'], // 銷售
+  R04: ['read', 'write', 'write'], // 工作人員－產品管理
+  R05: ['read', 'read', 'write'], // 工作人員－技術
+  R06: ['read', 'read', 'none'], // 工作人員－業務
+  R07: ['read', 'read', 'none'], // 工作人員－業務 PickUp
+  R12: ['write', 'read', 'read'], // 業務主管
+  R13: ['read', 'read', 'write'], // 技術主管
+  R14: ['read', 'read', 'write'], // 後勤
+};
+
+const base: (Omit<Role, 'permissions'> & { permissions: ReturnType<typeof P> })[] = [
   { id: 'R01', name: '後台管理員', orgType: 'internal', orgId: null, isPreset: true, description: '零壹內部最高權限，可管理所有資料與帳號', permissions: P('write', 'write', 'write', 'write', 'write', 'write', 'write', 'write') },
   { id: 'R02', name: '財務', orgType: 'internal', orgId: null, isPreset: true, description: '查看訂閱與用量，處理帳單', permissions: P('read', 'read', 'read', 'read', 'none', 'none', 'read', 'write') },
   { id: 'R03', name: '銷售', orgType: 'internal', orgId: null, isPreset: true, description: '維護客戶資料、開立執行單', permissions: P('write', 'read', 'write', 'read', 'none', 'none', 'none', 'read') },
@@ -29,3 +44,9 @@ export const roles: Role[] = [
   { id: 'R10', name: '帳務專員', orgType: 'dealer', orgId: 'D001', isPreset: false, description: '北辰資訊自建：只看訂閱與帳單', permissions: P('read', 'read', 'none', 'read', 'none', 'none', 'none', 'read') },
   { id: 'R11', name: 'IT 管理員', orgType: 'customer', orgId: 'C0002', isPreset: false, description: '禾豐食品自建：查看訂閱與執行單', permissions: P('read', 'read', 'read', 'none', 'read', 'none', 'none', 'none') },
 ];
+
+// 經銷商與客戶的角色：這三個資源只存在管理端，一律禁止
+export const roles: Role[] = base.map((r) => {
+  const [dealers, catalog, schedules] = extra[r.id] ?? ['none', 'none', 'none'];
+  return { ...r, permissions: { ...r.permissions, dealers, catalog, schedules } };
+});

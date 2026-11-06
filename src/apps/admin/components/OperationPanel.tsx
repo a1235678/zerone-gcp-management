@@ -10,6 +10,7 @@ import { useToast } from '@shared/components/Toast';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 const doneToast: Record<OperationAction, string> = {
   simulateSuccess: 'Google 回應完成，訂閱資料已更新',
@@ -26,6 +27,8 @@ const doneToast: Record<OperationAction, string> = {
  * - 手動處理：等下次同步確認（Prototype 用按鈕模擬）
  */
 export function OperationBody({ op, onChanged }: { op: OperationListItem; onChanged: () => void }) {
+  const { can } = usePermission();
+  const canOperate = can('subscriptions', 'write');
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<null | 'fail' | 'manual'>(null);
@@ -69,7 +72,7 @@ export function OperationBody({ op, onChanged }: { op: OperationListItem; onChan
         </Callout>
       )}
 
-      {op.status === 'submitted' && (
+      {op.status === 'submitted' && canOperate && (
         <div className="simulate" style={{ marginTop: 0 }}>
           <div className="simulate__text">
             <strong>等待 Google 回應。</strong>
@@ -85,7 +88,7 @@ export function OperationBody({ op, onChanged }: { op: OperationListItem; onChan
           </div>
         </div>
       )}
-      {op.status === 'manual' && (
+      {op.status === 'manual' && canOperate && (
         <div className="simulate" style={{ marginTop: 0 }}>
           <div className="simulate__text">
             <strong>等待同步確認。</strong>
@@ -96,7 +99,7 @@ export function OperationBody({ op, onChanged }: { op: OperationListItem; onChan
           </button>
         </div>
       )}
-      {op.status === 'failed' && !mode && (
+      {op.status === 'failed' && !mode && canOperate && (
         <div className="inline">
           <button className="btn btn--primary btn--sm" disabled={busy} onClick={() => run('retry')}>
             <Icon name="reset" size={14} />

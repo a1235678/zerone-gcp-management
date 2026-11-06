@@ -19,6 +19,7 @@ import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
 import { OperationBody } from '../components/OperationPanel';
 import { WorkOrderStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 const stepTag: Record<WorkOrderStep['state'], { tone: 'success' | 'info' | 'danger' | 'warning' | 'neutral'; text: string }> = {
   done: { tone: 'success', text: '完成' },
@@ -30,6 +31,7 @@ const stepTag: Record<WorkOrderStep['state'], { tone: 'success' | 'info' | 'dang
 };
 
 export function WorkOrderDetailPage() {
+  const { can, canApprove } = usePermission();
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -142,7 +144,7 @@ export function WorkOrderDetailPage() {
         description={`${workOrderTypeLabel[w.type]} · ${w.customerName} · ${w.summary}`}
         actions={
           <>
-            {(w.status === 'draft' || w.status === 'returned') && (
+            {(w.status === 'draft' || w.status === 'returned') && can('workOrders', 'write') && (
               <>
                 <button className="btn btn--danger" disabled={busy} onClick={() => setDialog('discard')}>
                   刪除
@@ -155,7 +157,7 @@ export function WorkOrderDetailPage() {
                 </button>
               </>
             )}
-            {reviewer && (
+            {reviewer && canApprove(w.status) && (
               <>
                 <button className="btn btn--danger" disabled={busy} onClick={() => setDialog('return')}>
                   退回
@@ -188,7 +190,7 @@ export function WorkOrderDetailPage() {
           )}
           {reviewer && (
             <p className="muted" style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-sm)' }}>
-              等待{reviewer}審核。Prototype 以目前登入身分代為核准或退回。
+              等待{reviewer}審核。{canApprove(w.status) ? '你是' + reviewer + '，可以核准或退回。' : '只有' + reviewer + '能核准或退回。'}
               <PendingTag hint="實際簽核人選待定" />
             </p>
           )}
@@ -206,21 +208,23 @@ export function WorkOrderDetailPage() {
                       <StatusTag tone={stepTag[s.state].tone}>{stepTag[s.state].text}</StatusTag>
                     </div>
                     {s.detail && <div className="table__secondary mono">{s.detail}</div>}
-                    {s.key === 'createCustomer' && s.state === 'todo' && (
+                    {s.key === 'createCustomer' && s.state === 'todo' && !can('customers', 'write') && <div className="table__secondary">由後勤處理（需要「客戶」可編輯權限）</div>}
+                    {s.key === 'createCustomer' && s.state === 'todo' && can('customers', 'write') && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
                         <Link className="btn btn--primary btn--sm" to={`/customers/new?fromWo=${w.id}`}>
                           建立客戶（帶入執行單資料）
                         </Link>
                       </div>
                     )}
-                    {s.key === 'google' && s.state === 'failed' && (
+                    {s.key === 'google' && s.state === 'failed' && can('subscriptions', 'write') && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
                         <button className="btn btn--sm" disabled={!target} onClick={() => setOpOpen(true)}>
                           重新填寫並送出{w.type === 'transfer' ? '（換新的轉移碼）' : ''}
                         </button>
                       </div>
                     )}
-                    {s.key === 'google' && s.state === 'todo' && (
+                    {s.key === 'google' && s.state === 'todo' && !can('subscriptions', 'write') && <div className="table__secondary">由後勤處理（需要「訂閱」可編輯權限）</div>}
+                    {s.key === 'google' && s.state === 'todo' && can('subscriptions', 'write') && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
                         <button className="btn btn--primary btn--sm" disabled={!target} onClick={() => setOpOpen(true)}>
                           {workOrderTypeLabel[w.type]}（帶入執行單資料）

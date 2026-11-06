@@ -16,8 +16,10 @@ import { AuditLogTable } from '../components/AuditLogTable';
 import { OperationModal } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
 import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 export function CustomerDetailPage() {
+  const { can } = usePermission();
   const { id = '' } = useParams();
   const toast = useToast();
   const [version, setVersion] = useState(0);
@@ -80,12 +82,16 @@ export function CustomerDetailPage() {
         }
         actions={
           <>
-            <button className={`btn ${c.status === 'active' ? 'btn--danger' : ''}`} onClick={() => setStatusOpen(true)}>
-              {c.status === 'active' ? '停用客戶' : '啟用客戶'}
-            </button>
-            <button className="btn btn--primary" onClick={() => setTransferOpen(true)} disabled={Boolean(openTransfer)} title={openTransfer ? `已有處理中的轉移 ${openTransfer.id}` : undefined}>
-              客戶轉移
-            </button>
+            {can('customers', 'write') && (
+              <button className={`btn ${c.status === 'active' ? 'btn--danger' : ''}`} onClick={() => setStatusOpen(true)}>
+                {c.status === 'active' ? '停用客戶' : '啟用客戶'}
+              </button>
+            )}
+            {can('subscriptions', 'write') && (
+              <button className="btn btn--primary" onClick={() => setTransferOpen(true)} disabled={Boolean(openTransfer)} title={openTransfer ? `已有處理中的轉移 ${openTransfer.id}` : undefined}>
+                客戶轉移
+              </button>
+            )}
           </>
         }
       />
@@ -122,7 +128,7 @@ export function CustomerDetailPage() {
                 ) : (
                   <>
                     <p className="muted">建立客戶後才檢查。請客戶在 DNS 加上 Google 提供的 TXT 驗證記錄，再按「重新檢查」。</p>
-                    <div>
+                    <div hidden={!can('customers', 'write')}>
                       <button className="btn btn--sm" onClick={recheck} disabled={checking}>
                         <Icon name="reset" size={14} />
                         {checking ? '檢查中…' : '重新檢查'}

@@ -1,8 +1,10 @@
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import type { ResourceKey } from '@data/types';
 import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
-import { AuthProvider, useAuth } from './auth';
-import { adminNav } from './nav';
+import { AuthProvider, useAuth, usePermission } from './auth';
+import { pageResource, visibleNav } from './nav';
+import { NoPermissionPage } from './pages/PlaceholderPage';
 import { ForgotPasswordPage, LoginPage } from './pages/LoginPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { BrandsPage, ProductsPage } from './pages/CatalogPages';
@@ -47,6 +49,7 @@ function LoginRoute() {
 /** 沒登入時導到登入頁，登入後回到原本要開的頁面 */
 function Protected() {
   const { session, logout } = useAuth();
+  const { can } = usePermission();
   const location = useLocation();
   const navigate = useNavigate();
   if (!session) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
@@ -54,14 +57,15 @@ function Protected() {
     <AppShell
       siteName="零壹雲管家"
       siteSubtitle="Zerone Cloud · 管理端"
-      nav={adminNav}
+      nav={visibleNav(can)}
       user={{ name: session.name, role: session.role, email: session.email }}
       onLogout={async () => {
         await logout();
         navigate('/login', { replace: true });
       }}
     >
-      <Routes>
+      {pageAllowed(location.pathname, can) ? (
+        <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<NewCustomerPage key="new" />} />
@@ -81,7 +85,16 @@ function Protected() {
             <Route path="/system/roles" element={<RolesPage />} />
             <Route path="/system/logs" element={<AuditLogsPage />} />
             <Route path="*" element={<PlaceholderPage title="找不到頁面" />} />
-      </Routes>
+        </Routes>
+      ) : (
+        <NoPermissionPage />
+      )}
     </AppShell>
   );
+}
+
+/** 依網址前綴找出這一頁需要的資源 */
+function pageAllowed(pathname: string, can: (r: ResourceKey) => boolean) {
+  const key = Object.keys(pageResource).find((p) => pathname === p || pathname.startsWith(p + '/'));
+  return !key || can(pageResource[key]);
 }

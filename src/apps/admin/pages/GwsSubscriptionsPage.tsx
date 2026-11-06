@@ -19,10 +19,13 @@ import { FormField } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { OperationStatusTag } from '../tags';
 import { SubscriptionStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 const PAGE_SIZE = 15;
 
 export function GwsSubscriptionsPage() {
+  const { can } = usePermission();
+  const canOperate = can('subscriptions', 'write');
   const [params, setParams] = useSearchParams();
   const keyword = params.get('q') ?? '';
   const dealerId = params.get('dealer') ?? '';
@@ -116,15 +119,19 @@ export function GwsSubscriptionsPage() {
                 上次失敗
               </button>
             )}
-            <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}>
-              續約
-            </button>
-            <button className="btn btn--sm" onClick={() => setAction({ type: 'seats', target: toTarget(s) })}>
-              調整席次
-            </button>
-            <button className="btn btn--sm btn--danger" onClick={() => setAction({ type: 'cancel', target: toTarget(s) })}>
-              取消訂閱
-            </button>
+            {canOperate && (
+              <>
+                <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}>
+                  續約
+                </button>
+                <button className="btn btn--sm" onClick={() => setAction({ type: 'seats', target: toTarget(s) })}>
+                  調整席次
+                </button>
+                <button className="btn btn--sm btn--danger" onClick={() => setAction({ type: 'cancel', target: toTarget(s) })}>
+                  取消訂閱
+                </button>
+              </>
+            )}
           </div>
         ),
     },
@@ -135,15 +142,17 @@ export function GwsSubscriptionsPage() {
       <PageHeader
         title="GWS 訂閱"
         actions={
-          <button className="btn btn--primary" onClick={() => setPickOpen(true)}>
-            <Icon name="plus" size={16} />
-            新增訂閱
-          </button>
+          canOperate ? (
+            <button className="btn btn--primary" onClick={() => setPickOpen(true)}>
+              <Icon name="plus" size={16} />
+              新增訂閱
+            </button>
+          ) : undefined
         }
         titleAddon={<PendingTag id={5} hint="PM 想看哪些 GWS 資訊" />}
         description={
           <span className="inline">
-            以訂閱為單位，資料由 Google 同步回來。後勤可以直接在這裡續約、調整席次、取消訂閱，按下去就會送出 Google。
+            以訂閱為單位，資料由 Google 同步回來。{canOperate ? '可以直接在這裡續約、調整席次、取消訂閱，按下去就會送出 Google。' : '你的角色只能查看；需要變更請開立執行單。'}
             <PendingTag id={3} hint="能否抓到已購買方案" />
           </span>
         }

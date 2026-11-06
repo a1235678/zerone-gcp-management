@@ -8,9 +8,11 @@ import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
 import { formatDate, formatDateTime, formatNumber, formatPct, formatUsd } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
+import { usePermission } from '../auth';
 import { SubscriptionStatusTag, WorkOrderStatusTag } from '../tags';
 
 export function HomePage() {
+  const { can } = usePermission();
   const dash = useAsync(getDashboard);
   const d = dash.data;
   if (!d) return <p className="muted">載入中…</p>;
@@ -55,7 +57,7 @@ export function HomePage() {
           tone={gwsFailed ? 'danger' : undefined}
           sub={gwsFailed ? <span className="text-danger">其中失敗 {gwsFailed} 筆，請到 GWS 訂閱或客戶詳情處理</span> : '沒有失敗的操作'}
         />
-        <Stat label="GCP 近 30 天費用" value={formatUsd(d.gcp.totalCostCents, 0)} unit="USD" sub={<>較前期 {formatPct(gcpChange)}</>} />
+        {can('gcpUsage') && <Stat label="GCP 近 30 天費用" value={formatUsd(d.gcp.totalCostCents, 0)} unit="USD" sub={<>較前期 {formatPct(gcpChange)}</>} />}
       </StatGrid>
 
       <div className="stack">
@@ -135,6 +137,7 @@ export function HomePage() {
           </Card>
         </div>
 
+        {can('gcpUsage') && (
         <Card
           title="GCP 用量摘要"
           actions={
@@ -170,6 +173,7 @@ export function HomePage() {
             </div>
           </div>
         </Card>
+        )}
       </div>
     </>
   );

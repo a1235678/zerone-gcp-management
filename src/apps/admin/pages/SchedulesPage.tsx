@@ -15,10 +15,12 @@ import { downloadCsv } from '@shared/csv';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { ScheduleStatusTag } from '../tags';
+import { usePermission } from '../auth';
 
 const options = <K extends string>(labels: Record<K, string>) => Object.entries(labels).map(([value, label]) => ({ value, label: label as string }));
 
 export function SchedulesPage() {
+  const { can } = usePermission();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const kind = (params.get('kind') ?? '') as ScheduleKind | '';
@@ -86,7 +88,7 @@ export function SchedulesPage() {
       key: 'ops',
       header: <span className="visually-hidden">操作</span>,
       render: (s) =>
-        s.status === 'waiting' ? (
+        s.status === 'waiting' && can('schedules', 'write') ? (
           <button className="btn btn--sm" onClick={() => setCancelling(s)}>
             取消排程
           </button>

@@ -72,6 +72,9 @@ export const userStatusLabel: Record<UserStatus, string> = { active: '啟用', d
 export const permissionLabel: Record<PermissionLevel, string> = { none: '禁止', read: '唯讀', write: '可編輯' };
 export const resourceLabel: Record<ResourceKey, string> = {
   customers: '客戶',
+  dealers: '經銷商',
+  catalog: '品牌與產品',
+  schedules: '排程',
   subscriptions: '訂閱',
   workOrders: '執行單',
   gcpUsage: 'GCP 用量',
@@ -80,7 +83,8 @@ export const resourceLabel: Record<ResourceKey, string> = {
   auditLogs: '系統日誌',
   billing: '帳單',
 };
-export const resourceOrder: ResourceKey[] = ['customers', 'subscriptions', 'workOrders', 'gcpUsage', 'accounts', 'roles', 'auditLogs', 'billing'];
+/** 順序與左側選單一致 */
+export const resourceOrder: ResourceKey[] = ['customers', 'dealers', 'workOrders', 'catalog', 'subscriptions', 'gcpUsage', 'schedules', 'accounts', 'roles', 'auditLogs', 'billing'];
 
 export const logCategoryLabel: Record<LogCategory, string> = {
   customer: '客戶資料',
