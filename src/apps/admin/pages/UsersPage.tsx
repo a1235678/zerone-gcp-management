@@ -15,6 +15,7 @@ import { Tabs } from '@shared/components/Tabs';
 import { useToast } from '@shared/components/Toast';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
+import { useAuth } from '../auth';
 import { UserStatusTag } from '../tags';
 
 const PAGE_SIZE = 15;
@@ -24,6 +25,7 @@ type Confirm = { user: UserListItem; kind: 'disable' | 'enable' | 'reset' };
 
 export function UsersPage() {
   const toast = useToast();
+  const { session } = useAuth();
   const [params, setParams] = useSearchParams();
   const orgType = (params.get('orgType') ?? '') as OrgType | '';
   const orgId = params.get('org') ?? '';
@@ -119,7 +121,7 @@ export function UsersPage() {
               啟用
             </button>
           ) : (
-            <button className="btn btn--sm btn--danger" disabled={u.id === 'U001'} title={u.id === 'U001' ? '不能停用自己' : undefined} onClick={() => setConfirm({ user: u, kind: 'disable' })}>
+            <button className="btn btn--sm btn--danger" disabled={u.id === session?.id} title={u.id === session?.id ? '不能停用自己' : undefined} onClick={() => setConfirm({ user: u, kind: 'disable' })}>
               停用
             </button>
           )}

@@ -1,7 +1,9 @@
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
+import { AuthProvider, useAuth } from './auth';
 import { adminNav } from './nav';
+import { ForgotPasswordPage, LoginPage } from './pages/LoginPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { BrandsPage, ProductsPage } from './pages/CatalogPages';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
@@ -24,8 +26,42 @@ export function App() {
   return (
     <HashRouter>
       <ToastProvider>
-        <AppShell siteName="零壹 SaaS 平台" siteSubtitle="管理端" nav={adminNav} user={{ name: '林怡君', role: '後台管理員' }}>
+        <AuthProvider>
           <Routes>
+            <Route path="/login" element={<LoginRoute />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="*" element={<Protected />} />
+          </Routes>
+        </AuthProvider>
+      </ToastProvider>
+    </HashRouter>
+  );
+}
+
+/** 已登入時開登入頁，直接回首頁 */
+function LoginRoute() {
+  const { session } = useAuth();
+  return session ? <Navigate to="/" replace /> : <LoginPage />;
+}
+
+/** 沒登入時導到登入頁，登入後回到原本要開的頁面 */
+function Protected() {
+  const { session, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  if (!session) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  return (
+    <AppShell
+      siteName="零壹 SaaS 平台"
+      siteSubtitle="管理端"
+      nav={adminNav}
+      user={{ name: session.name, role: session.role, email: session.email }}
+      onLogout={async () => {
+        await logout();
+        navigate('/login', { replace: true });
+      }}
+    >
+      <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<NewCustomerPage key="new" />} />
@@ -45,9 +81,7 @@ export function App() {
             <Route path="/system/roles" element={<RolesPage />} />
             <Route path="/system/logs" element={<AuditLogsPage />} />
             <Route path="*" element={<PlaceholderPage title="找不到頁面" />} />
-          </Routes>
-        </AppShell>
-      </ToastProvider>
-    </HashRouter>
+      </Routes>
+    </AppShell>
   );
 }

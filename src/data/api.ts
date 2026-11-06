@@ -54,6 +54,7 @@ import type {
   SubscriptionQuery,
   UserListItem,
   UserQuery,
+  User,
   UserStatus,
   WorkOrder,
   WorkOrderAction,
@@ -68,8 +69,8 @@ export const TODAY = '2026-11-05';
 /** 「即將到期」的天數門檻 */
 export const EXPIRING_DAYS = 30;
 
-/** 目前登入者（之後由登入狀態取得） */
-export const currentUser = { id: 'U001', name: '林怡君', role: '後台管理員' };
+/** 目前登入者。由 login() 設定；頁面請用 getSession() 取得 */
+export const currentUser = { id: '', name: '', role: '', roleId: '', email: '' };
 
 const db = {
   dealers: structuredClone(seedDealers),
@@ -118,6 +119,98 @@ const normKw = (kw?: string) => kw?.trim().toLowerCase() ?? '';
 function log(category: LogCategory, target: string, action: string, result: LogResult = 'success', customerId?: string, actor = currentUser.name) {
   const id = `L${String(db.logs.length + 1).padStart(4, '0')}`;
   db.logs.unshift({ id, at: now(), actor, actorRole: actor === currentUser.name ? currentUser.role : roleOfActor(actor), category, target, customerId, action, result });
+}
+
+// ═════════ 登入 ═════════
+// Prototype 不驗證密碼，只要有填就算正確。正式版的驗證、鎖定、重設密碼都由後端處理。
+
+export interface Session {
+  id: string;
+  name: string;
+  email: string;
+  roleId: string;
+  role: string;
+  permissions: Role['permissions'];
+}
+
+const SESSION_KEY = 'zerone-admin-session';
+
+function sessionOf(userId: string): Session | undefined {
+  const u = db.users.find((x) => x.id === userId);
+  const r = u && db.roles.find((x) => x.id === u.roleId);
+  if (!u || !r) return undefined;
+  return { id: u.id, name: u.name, email: u.email, roleId: r.id, role: r.name, permissions: r.permissions };
+}
+
+function setCurrent(s: Session | undefined) {
+  Object.assign(currentUser, s ? { id: s.id, name: s.name, role: s.role, roleId: s.roleId, email: s.email } : { id: '', name: '', role: '', roleId: '', email: '' });
+}
+
+/** 重新整理頁面後恢復登入狀態（只存在這個分頁） */
+export function getSession(): Session | undefined {
+  if (!currentUser.id) {
+    try {
+      const id = sessionStorage.getItem(SESSION_KEY);
+      if (id) setCurrent(sessionOf(id));
+    } catch {
+      // 瀏覽器不允許存取 sessionStorage 時，就當作沒有登入
+    }
+  }
+  return currentUser.id ? sessionOf(currentUser.id) : undefined;
+}
+
+export function login(email: string, password: string): Promise<Session> {
+  const e = email.trim().toLowerCase();
+  if (!e || !password) return fail('請輸入 Email 和密碼');
+  const u = db.users.find((x) => x.email === e);
+  if (!u) {
+    log('login', e, '登入失敗：Email 或密碼不正確', 'warning', undefined, e);
+    return fail('Email 或密碼不正確');
+  }
+  if (u.orgType !== 'internal') return fail(`這是${orgTypeLabel[u.orgType]}的帳號，請到${u.orgType === 'dealer' ? '經銷商端' : '客戶端'}登入`);
+  if (u.status === 'disabled') {
+    log('login', e, '登入失敗：帳號已停用', 'warning', undefined, u.name);
+    return fail('這個帳號已停用，請聯絡系統管理員');
+  }
+  if (u.status === 'invited') return fail('這個帳號還沒啟用，請先從邀請信設定密碼');
+  const s = sessionOf(u.id)!;
+  setCurrent(s);
+  u.lastLoginAt = now();
+  try {
+    sessionStorage.setItem(SESSION_KEY, u.id);
+  } catch {
+    // 忽略：只是重新整理後要重新登入
+  }
+  log('login', e, '登入管理端');
+  return delay(s);
+}
+
+export function logout(): Promise<void> {
+  if (currentUser.id) log('login', currentUser.email, '登出');
+  setCurrent(undefined);
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // 忽略
+  }
+  return delay(undefined);
+}
+
+/** 不論 Email 是否存在都回覆相同訊息，避免被拿來測試帳號是否存在 */
+export function requestPasswordReset(email: string): Promise<void> {
+  const e = email.trim().toLowerCase();
+  const u = db.users.find((x) => x.email === e && x.status === 'active');
+  if (u) log('login', e, '申請重設密碼，已寄出重設信', 'success', undefined, u.name);
+  return delay(undefined, 400);
+}
+
+/** Prototype 登入頁的測試帳號：零壹內部帳號，每個角色一個 */
+export function getTestAccounts(): Promise<{ email: string; name: string; role: string; status: User['status'] }[]> {
+  return delay(
+    db.users
+      .filter((u) => u.orgType === 'internal')
+      .map((u) => ({ email: u.email, name: u.name, role: db.roles.find((r) => r.id === u.roleId)?.name ?? '', status: u.status })),
+  );
 }
 
 // ═════════ 經銷商 ═════════

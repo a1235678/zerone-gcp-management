@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 
@@ -15,6 +15,7 @@ export interface NavGroup {
 export interface ShellUser {
   name: string;
   role: string;
+  email: string;
 }
 
 /**
@@ -26,15 +27,32 @@ export function AppShell({
   siteSubtitle,
   nav,
   user,
+  onLogout,
   children,
 }: {
   siteName: string;
   siteSubtitle: string;
   nav: NavGroup[];
   user: ShellUser;
+  onLogout: () => void;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // 點選單以外的地方或按 Esc 關閉使用者選單
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => menuRef.current && !menuRef.current.contains(e.target as Node) && setMenuOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
   const location = useLocation();
 
   useEffect(() => {
@@ -95,12 +113,36 @@ export function AppShell({
             <Icon name="info" size={13} />
             <span className="topbar__env-text">Prototype · 假資料</span>
           </span>
-          <div className="topbar__user">
-            <span className="avatar">{user.name.slice(0, 1)}</span>
-            <div className="topbar__user-meta">
-              <div>{user.name}</div>
-              <div className="topbar__user-role">{user.role}</div>
-            </div>
+          <div className="user-menu" ref={menuRef}>
+            <button type="button" className="topbar__user" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>
+              <span className="avatar">{user.name.slice(0, 1)}</span>
+              <span className="topbar__user-meta">
+                <span>{user.name}</span>
+                <span className="topbar__user-role">{user.role}</span>
+              </span>
+              <Icon name="chevronDown" size={14} className="topbar__user-caret" />
+            </button>
+            {menuOpen && (
+              <div className="user-menu__panel" role="menu">
+                <div className="user-menu__head">
+                  <strong>{user.name}</strong>
+                  <span className="muted">{user.role}</span>
+                  <span className="mono muted">{user.email}</span>
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="user-menu__item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onLogout();
+                  }}
+                >
+                  <Icon name="logout" size={16} />
+                  登出
+                </button>
+              </div>
+            )}
           </div>
         </header>
         <main className="content">{children}</main>

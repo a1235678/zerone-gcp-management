@@ -13,6 +13,7 @@ import { StatusTag } from '@shared/components/StatusTag';
 import { Tabs } from '@shared/components/Tabs';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { useAuth } from '../auth';
 
 const levels: PermissionLevel[] = ['none', 'read', 'write'];
 const rank: Record<PermissionLevel, number> = { none: 0, read: 1, write: 2 };
@@ -127,6 +128,7 @@ export function RolesPage() {
 
 function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => void; onSaved: (name: string, isNew: boolean) => void }) {
   const toast = useToast();
+  const { session } = useAuth();
   const mine = useAsync(getMyPermissions);
   const orgs = useAsync(getOrganizations);
   const [role, setRole] = useState<Draft>(draft);
@@ -238,7 +240,7 @@ function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => 
           })}
         </div>
         <p className="muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-          超過你自己權限的選項會停用。你目前是「後台管理員」，所有資源都是可編輯，所以這裡沒有停用的選項。
+          超過你自己權限的選項會停用（你目前的角色是「{session?.role}」）。
         </p>
       </div>
     </Modal>
