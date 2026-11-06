@@ -38,26 +38,26 @@ function op(
 }
 
 export const operations: GwsOperation[] = [
-  op('OP-1105-001', 'seats', 'C0012', 'S013', { fromSeats: 6, toSeats: 8 }, 'submitted', '2026-11-05 10:15', undefined, '王雅琪', { workOrderId: 'WO-1104-002' }),
-  op('OP-1104-002', 'renewal', 'C0002', 'S002', { renewMonths: 12 }, 'submitted', '2026-11-04 14:02', undefined, '王雅琪'),
-  op('OP-1104-001', 'seats', 'C0008', 'S009', { fromSeats: 70, toSeats: 75 }, 'completed', '2026-11-04 10:40', '2026-11-04 10:41', '王雅琪'),
-  op('OP-1103-001', 'seats', 'C0006', 'S007', { fromSeats: 130, toSeats: 120 }, 'failed', '2026-11-03 16:00', '2026-11-03 16:01', '王雅琪', {
+  op('OP-1105-001', 'seats', 'C0012', 'S013', { fromSeats: 6, toSeats: 8 }, 'submitted', '2026-11-05 10:15', undefined, '何佩真', { workOrderId: 'WO-1104-002' }),
+  op('OP-1104-002', 'renewal', 'C0002', 'S002', { renewMonths: 12 }, 'submitted', '2026-11-04 14:02', undefined, '何佩真'),
+  op('OP-1104-001', 'seats', 'C0008', 'S009', { fromSeats: 70, toSeats: 75 }, 'completed', '2026-11-04 10:40', '2026-11-04 10:41', '何佩真'),
+  op('OP-1103-001', 'seats', 'C0006', 'S007', { fromSeats: 130, toSeats: 120 }, 'failed', '2026-11-03 16:00', '2026-11-03 16:01', '何佩真', {
     failureReason: '席次不可低於目前已指派的授權數（124）',
   }),
-  op('OP-1103-002', 'transfer', 'C0023', undefined, { transferToken: 'K7Q2-9XMB-4TRW', tokenExpiresAt: '2026-11-12' }, 'completed', '2026-11-03 10:05', '2026-11-03 10:30', '王雅琪', {
+  op('OP-1103-002', 'transfer', 'C0023', undefined, { transferToken: 'K7Q2-9XMB-4TRW', tokenExpiresAt: '2026-11-12' }, 'completed', '2026-11-03 10:05', '2026-11-03 10:30', '何佩真', {
     workOrderId: 'WO-1027-002',
   }),
-  op('OP-1030-001', 'cancel', 'C0015', 'S016', { memo: '經銷商暫停合作' }, 'completed', '2026-10-30 10:30', '2026-10-30 10:31', '王雅琪'),
-  op('OP-1028-001', 'seats', 'C0011', 'S012', { fromSeats: 200, toSeats: 210 }, 'completed', '2026-10-28 14:40', '2026-10-28 14:41', '王雅琪', {
+  op('OP-1030-001', 'cancel', 'C0015', 'S016', { memo: '經銷商暫停合作' }, 'completed', '2026-10-30 10:30', '2026-10-30 10:31', '何佩真'),
+  op('OP-1028-001', 'seats', 'C0011', 'S012', { fromSeats: 200, toSeats: 210 }, 'completed', '2026-10-28 14:40', '2026-10-28 14:41', '何佩真', {
     workOrderId: 'WO-1027-001',
   }),
-  op('OP-1022-001', 'seats', 'C0024', 'S025', { fromSeats: 140, toSeats: 150 }, 'completed', '2026-10-22 11:30', '2026-10-22 11:31', '王雅琪'),
-  op('OP-1020-001', 'transfer', 'C0027', undefined, { transferToken: 'P3LM-7QZD-81CA', tokenExpiresAt: '2026-10-18' }, 'failed', '2026-10-20 14:00', '2026-10-20 14:01', '王雅琪', {
+  op('OP-1022-001', 'seats', 'C0024', 'S025', { fromSeats: 140, toSeats: 150 }, 'completed', '2026-10-22 11:30', '2026-10-22 11:31', '何佩真'),
+  op('OP-1020-001', 'transfer', 'C0027', undefined, { transferToken: 'P3LM-7QZD-81CA', tokenExpiresAt: '2026-10-18' }, 'failed', '2026-10-20 14:00', '2026-10-20 14:01', '何佩真', {
     workOrderId: 'WO-1017-001',
     failureReason: '轉移碼已過期，請客戶重新產生',
   }),
-  op('OP-1015-001', 'renewal', 'C0010', 'S011', { renewMonths: 12 }, 'manual', '2026-10-15 11:00', '2026-10-15 11:05', '王雅琪', {
+  op('OP-1015-001', 'renewal', 'C0010', 'S011', { renewMonths: 12 }, 'manual', '2026-10-15 11:00', '2026-10-15 11:05', '何佩真', {
     manualNote: '已在 Google 經銷商後台手動續約 12 個月，等下次同步確認',
   }),
-  op('OP-1002-001', 'cancel', 'C0009', 'S010', { memo: '客戶停止合作' }, 'completed', '2026-10-02 10:00', '2026-10-02 10:01', '王雅琪'),
+  op('OP-1002-001', 'cancel', 'C0009', 'S010', { memo: '客戶停止合作' }, 'completed', '2026-10-02 10:00', '2026-10-02 10:01', '何佩真'),
 ];

@@ -3,7 +3,7 @@ import type { HistoryEvent, NewCustomerDraft, WorkOrder, WorkOrderPayload, WorkO
 // 執行單：業務接到客戶需求後開立，業務主管、技術主管依序簽核，再由後勤處理。
 export const SALES_MANAGER = '蔡明峰';
 export const TECH_MANAGER = '鄭志豪';
-const OPS = '王雅琪';
+const OPS = '何佩真';
 
 type Step = [at: string, status: WorkOrderStatus];
 
