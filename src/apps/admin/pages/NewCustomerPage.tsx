@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { TODAY, TRANSFER_TOKEN_VALID_DAYS, addDays, checkDomain, checkTransferToken, createCustomer, createTransferInCustomer, getDealers } from '@data/api';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  TODAY,
+  TRANSFER_TOKEN_VALID_DAYS,
+  addDays,
+  checkDomain,
+  checkTransferToken,
+  createCustomer,
+  createTransferInCustomer,
+  getDealers,
+  getWorkOrder,
+  linkCustomerToWorkOrder,
+} from '@data/api';
 import type { DomainCheck } from '@data/types';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
@@ -30,14 +41,37 @@ type Key = keyof typeof empty;
 
 /**
  * 新增客戶，或「轉入客戶」：從其他經銷商轉進來的客戶。
- * 轉入時同一張表單多了轉移碼欄位，送出後同時建立客戶主檔與轉移執行單。
+ * 轉入時同一張表單多了轉移碼欄位，送出後建立客戶主檔並直接送出 Google 轉移。
+ * 網址帶 ?fromWo=單號 時，從執行單帶入新客戶資料，建立後接回執行單。
  */
 export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
   const isTransfer = mode === 'transfer';
   const navigate = useNavigate();
   const toast = useToast();
   const dealers = useAsync(getDealers);
+  const [params] = useSearchParams();
+  const fromWo = isTransfer ? null : params.get('fromWo');
+  const wo = useAsync(() => (fromWo ? getWorkOrder(fromWo) : Promise.resolve(undefined)), [fromWo]);
   const [form, setForm] = useState(empty);
+  const [prefilled, setPrefilled] = useState(false);
+
+  // 從執行單帶入新客戶資料
+  useEffect(() => {
+    const n = wo.data?.newCustomer;
+    if (!n || prefilled) return;
+    setForm((f) => ({
+      ...f,
+      name: n.name,
+      taxId: n.taxId,
+      primaryDomain: n.primaryDomain,
+      dealerId: wo.data!.dealerId,
+      contactName: n.contactName,
+      contactEmail: n.contactEmail,
+      contactPhone: n.contactPhone,
+      note: n.note,
+    }));
+    setPrefilled(true);
+  }, [wo.data, prefilled]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [sameAsContact, setSameAsContact] = useState(true);
   const [domain, setDomain] = useState<{ checking: boolean; result?: DomainCheck }>({ checking: false });
@@ -79,24 +113,25 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
   const err = (key: Key) => (touched[key] ? errors[key] : undefined);
   const errState = (key: Key) => (err(key) ? ('error' as const) : undefined);
 
-  const submit = async (submitNow: boolean) => {
+  const submit = async () => {
     setTouched(Object.fromEntries(Object.keys(empty).map((k) => [k, true])));
     if (!canSubmit) return;
     setSaving(true);
     try {
       if (isTransfer) {
-        const { customer, workOrder } = await createTransferInCustomer({
-          ...form,
-          ...admin,
-          memo: form.transferMemo,
-          submit: submitNow,
-        });
-        toast(`已建立「${customer.name}」並開立轉移執行單 ${workOrder.id}（${submitNow ? '待確認' : '草稿'}）`);
-        navigate(`/work-orders/${workOrder.id}`);
+        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, memo: form.transferMemo });
+        toast(`已建立「${customer.name}」並送出 Google 轉移（${operation.id}）`);
+        navigate(`/customers/${customer.id}`);
       } else {
         const c = await createCustomer({ ...form, ...admin });
-        toast(`已建立客戶「${c.name}」，並寄出組織管理員邀請`);
-        navigate(`/customers/${c.id}`);
+        if (fromWo) {
+          await linkCustomerToWorkOrder(fromWo, c.id);
+          toast(`已建立客戶「${c.name}」，回到執行單 ${fromWo} 繼續處理`);
+          navigate(`/work-orders/${fromWo}`);
+        } else {
+          toast(`已建立客戶「${c.name}」，並寄出組織管理員邀請`);
+          navigate(`/customers/${c.id}`);
+        }
       }
     } catch (error) {
       toast((error as Error).message, 'danger');
@@ -158,16 +193,23 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         }
         description={
           isTransfer
-            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，同時開立客戶轉移執行單。'
+            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，並直接送出 Google 轉移。'
             : '建立客戶主檔，同時建立該客戶的第一個「組織管理員」帳號。'
         }
       />
 
+      {fromWo && (
+        <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
+          <Callout tone="info" title={`依執行單 ${fromWo} 建立客戶`}>
+            客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。
+          </Callout>
+        </div>
+      )}
       <form
         className="card form-card"
         onSubmit={(e) => {
           e.preventDefault();
-          submit(true);
+          submit();
         }}
         noValidate
       >
@@ -238,7 +280,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           </FormSection>
 
           {isTransfer && (
-            <FormSection title="轉移資訊" description="送出後會開立一張客戶轉移執行單，流程與其他執行單相同。">
+            <FormSection title="轉移資訊" description="建立客戶後會直接送出 Google，畫面會顯示處理結果。">
               <FormField label="轉移碼" required message={err('transferToken')} state={errState('transferToken')}>
                 {(p) => (
                   <input
@@ -266,7 +308,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
                   />
                 )}
               </FormField>
-              <FormField label="執行單備註" className="is-full">
+              <FormField label="轉移備註" className="is-full">
                 {(p) => <textarea {...p} className="textarea" value={form.transferMemo} onChange={set('transferMemo')} />}
               </FormField>
               <Callout tone="neutral">客戶的訂閱會全部轉入，不能只轉一部分。原訂閱會取消並在我方底下重建，承諾期方案的承諾期會重新計算。</Callout>
@@ -302,20 +344,9 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           <Link to="/customers" className="btn">
             取消
           </Link>
-          {isTransfer ? (
-            <>
-              <button type="button" className="btn" disabled={!canSubmit} onClick={() => submit(false)}>
-                建立並存成草稿
-              </button>
-              <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
-                {saving ? '建立中…' : '建立並送出確認'}
-              </button>
-            </>
-          ) : (
-            <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
-              {saving ? '建立中…' : '建立客戶'}
-            </button>
-          )}
+          <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
+            {saving ? '處理中…' : isTransfer ? '建立客戶並送出 Google 轉移' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
+          </button>
         </div>
       </form>
     </>

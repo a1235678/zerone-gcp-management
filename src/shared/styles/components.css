@@ -1423,3 +1423,55 @@ fieldset.field legend {
 .rank-list li .tnum {
   margin-left: auto;
 }
+.segmented--wrap {
+  flex-wrap: wrap;
+}
+
+/* 執行單處理步驟 */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.steps__item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+.steps__item:last-child {
+  border-bottom: none;
+}
+.steps__no {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gray-300);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+.steps__item.is-done .steps__no { background: var(--success-fg); border-color: var(--success-fg); color: #fff; }
+.steps__item.is-todo .steps__no,
+.steps__item.is-inProgress .steps__no { border-color: var(--color-accent); color: var(--color-accent-text); }
+.steps__item.is-failed .steps__no { border-color: var(--danger-fg); color: var(--danger-fg); }
+.steps__item.is-blocked { color: var(--color-text-tertiary); }
+.steps__body {
+  flex: 1;
+  min-width: 0;
+}
+.steps__op {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+.form-field > .segmented {
+  align-self: flex-start;
+  max-width: 100%;
+}

@@ -21,6 +21,8 @@ export const roles: Role[] = [
   { id: 'R05', name: '工作人員－技術', orgType: 'internal', orgId: null, isPreset: true, description: '確認並送出執行單、處理同步問題', permissions: P('read', 'write', 'write', 'write', 'read', 'none', 'read', 'none') },
   { id: 'R06', name: '工作人員－業務', orgType: 'internal', orgId: null, isPreset: true, description: '維護客戶資料、開立執行單', permissions: P('write', 'read', 'write', 'read', 'none', 'none', 'none', 'none') },
   { id: 'R07', name: '工作人員－業務 PickUp', orgType: 'internal', orgId: null, isPreset: true, description: '查看客戶與執行單', permissions: P('read', 'read', 'read', 'none', 'none', 'none', 'none', 'none') },
+  { id: 'R12', name: '業務主管', orgType: 'internal', orgId: null, isPreset: true, description: '執行單第一關簽核', permissions: P('write', 'read', 'write', 'read', 'none', 'none', 'read', 'read') },
+  { id: 'R13', name: '技術主管', orgType: 'internal', orgId: null, isPreset: true, description: '執行單第二關簽核', permissions: P('read', 'write', 'write', 'write', 'read', 'none', 'read', 'none') },
   { id: 'R08', name: '組織管理員', orgType: 'dealer', orgId: null, isPreset: true, description: '經銷商的第一個帳號，由零壹建立；可管理自家帳號與角色', permissions: P('write', 'write', 'write', 'read', 'write', 'write', 'read', 'read') },
   { id: 'R09', name: '組織管理員', orgType: 'customer', orgId: null, isPreset: true, description: '客戶的第一個帳號，由零壹建立；可管理自家帳號與角色', permissions: P('read', 'read', 'read', 'read', 'write', 'write', 'read', 'read') },
   { id: 'R10', name: '帳務專員', orgType: 'dealer', orgId: 'D001', isPreset: false, description: '北辰資訊自建：只看訂閱與帳單', permissions: P('read', 'read', 'none', 'read', 'none', 'none', 'none', 'read') },

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { EXPIRING_DAYS, daysUntil, getDealers, getPlans, getSubscriptions } from '@data/api';
+import { Link, useSearchParams } from 'react-router-dom';
+import { EXPIRING_DAYS, daysUntil, getCustomers, getDealers, getPlans, getSubscriptions } from '@data/api';
 import { subscriptionStatusLabel } from '@data/labels';
-import type { SubscriptionListItem, SubscriptionStatus, WorkOrderType } from '@data/types';
+import type { OperationType, SubscriptionListItem, SubscriptionStatus } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState, type Column } from '@shared/components/DataTable';
 import { FilterBar, SearchField, SelectField } from '@shared/components/FilterBar';
@@ -12,13 +12,17 @@ import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
 import { formatDate, formatDateTime, formatNumber } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
-import { WorkOrderModal } from '../components/WorkOrderModal';
+import { OperationModal, type OperationTarget } from '../components/OperationModal';
+import { OperationPanel } from '../components/OperationPanel';
+import { Modal } from '@shared/components/Modal';
+import { FormField } from '@shared/components/Form';
+import { Icon } from '@shared/components/Icon';
+import { OperationStatusTag } from '../tags';
 import { SubscriptionStatusTag } from '../tags';
 
 const PAGE_SIZE = 15;
 
 export function GwsSubscriptionsPage() {
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const keyword = params.get('q') ?? '';
   const dealerId = params.get('dealer') ?? '';
@@ -26,7 +30,20 @@ export function GwsSubscriptionsPage() {
   const plan = params.get('plan') ?? '';
   const page = Number(params.get('page') ?? '1');
   const [version, setVersion] = useState(0);
-  const [action, setAction] = useState<{ type: WorkOrderType; sub: SubscriptionListItem } | null>(null);
+  const [action, setAction] = useState<{ type: OperationType; target: OperationTarget } | null>(null);
+  const [panelId, setPanelId] = useState<string | null>(null);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [pickId, setPickId] = useState('');
+  const customers = useAsync(() => getCustomers({ status: 'active' }));
+  const toTarget = (s: SubscriptionListItem): OperationTarget => ({
+    customerId: s.customerId,
+    customerName: s.customerName,
+    primaryDomain: s.primaryDomain,
+    subscriptionId: s.id,
+    plan: s.plan,
+    seats: s.seats,
+    expiresAt: s.expiresAt,
+  });
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -86,19 +103,26 @@ export function GwsSubscriptionsPage() {
       render: (s) =>
         s.status === 'cancelled' ? (
           <span className="muted">—</span>
-        ) : s.openWorkOrderId ? (
-          <Link to={`/work-orders/${s.openWorkOrderId}`} className="inline" onClick={(e) => e.stopPropagation()}>
-            處理中 <span className="mono">{s.openWorkOrderId}</span>
-          </Link>
+        ) : s.openOperationId && s.openOperationStatus !== 'failed' ? (
+          <button type="button" className="link-button inline" onClick={() => setPanelId(s.openOperationId!)}>
+            <OperationStatusTag value={s.openOperationStatus!} />
+            <span className="mono">{s.openOperationId}</span>
+          </button>
         ) : (
           <div className="row-actions">
-            <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', sub: s })}>
+            {s.openOperationStatus === 'failed' && (
+              <button type="button" className="btn btn--sm btn--ghost text-danger" onClick={() => setPanelId(s.openOperationId!)} title="上次送出 Google 失敗，點選查看">
+                <Icon name="alert" size={14} />
+                上次失敗
+              </button>
+            )}
+            <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}>
               續約
             </button>
-            <button className="btn btn--sm" onClick={() => setAction({ type: 'seats', sub: s })}>
+            <button className="btn btn--sm" onClick={() => setAction({ type: 'seats', target: toTarget(s) })}>
               調整席次
             </button>
-            <button className="btn btn--sm btn--danger" onClick={() => setAction({ type: 'cancel', sub: s })}>
+            <button className="btn btn--sm btn--danger" onClick={() => setAction({ type: 'cancel', target: toTarget(s) })}>
               取消訂閱
             </button>
           </div>
@@ -110,10 +134,16 @@ export function GwsSubscriptionsPage() {
     <>
       <PageHeader
         title="GWS 訂閱"
+        actions={
+          <button className="btn btn--primary" onClick={() => setPickOpen(true)}>
+            <Icon name="plus" size={16} />
+            新增訂閱
+          </button>
+        }
         titleAddon={<PendingTag id={5} hint="PM 想看哪些 GWS 資訊" />}
         description={
           <span className="inline">
-            以訂閱為單位，資料由 Google 同步回來。可在這裡開立續約、調整席次、取消訂閱執行單。
+            以訂閱為單位，資料由 Google 同步回來。後勤可以直接在這裡續約、調整席次、取消訂閱，按下去就會送出 Google。
             <PendingTag id={3} hint="能否抓到已購買方案" />
           </span>
         }
@@ -127,7 +157,13 @@ export function GwsSubscriptionsPage() {
             只看即將到期
           </button>
         } />
-        <Stat label="處理中的執行單" value={live.filter((s) => s.openWorkOrderId).length} unit="筆" sub={<Link to="/work-orders">前往執行單</Link>} />
+        <Stat
+          label="Google 處理中"
+          value={live.filter((s) => s.openOperationId).length}
+          unit="筆"
+          tone={live.some((s) => s.openOperationStatus === 'failed') ? 'danger' : undefined}
+          sub={`其中失敗 ${live.filter((s) => s.openOperationStatus === 'failed').length} 筆`}
+        />
       </StatGrid>
 
       <Card bodyless>
@@ -157,18 +193,58 @@ export function GwsSubscriptionsPage() {
       </Card>
 
       {action && (
-        <WorkOrderModal
+        <OperationModal
           open
           type={action.type}
-          subscription={action.sub}
+          target={action.target}
           onClose={() => setAction(null)}
-          onCreated={(wo) => {
+          onSubmitted={(op) => {
             setAction(null);
             setVersion((v) => v + 1);
-            navigate(`/work-orders/${wo.id}`);
+            setPanelId(op.id);
           }}
         />
       )}
+      <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={() => setVersion((v) => v + 1)} />
+      <Modal
+        open={pickOpen}
+        onClose={() => setPickOpen(false)}
+        title="新增訂閱"
+        width={480}
+        footer={
+          <>
+            <button className="btn" onClick={() => setPickOpen(false)}>
+              取消
+            </button>
+            <button
+              className="btn btn--primary"
+              disabled={!pickId}
+              onClick={() => {
+                const c = customers.data?.find((x) => x.id === pickId);
+                if (!c) return;
+                setPickOpen(false);
+                setPickId('');
+                setAction({ type: 'new', target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain } });
+              }}
+            >
+              下一步
+            </button>
+          </>
+        }
+      >
+        <FormField label="客戶" required help="還沒建檔的客戶，請先到「客戶管理」新增。">
+          {(p) => (
+            <select {...p} className="select" value={pickId} onChange={(e) => setPickId(e.target.value)}>
+              <option value="">請選擇</option>
+              {(customers.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}（{c.primaryDomain}）
+                </option>
+              ))}
+            </select>
+          )}
+        </FormField>
+      </Modal>
     </>
   );
 }

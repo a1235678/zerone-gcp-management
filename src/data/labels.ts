@@ -15,6 +15,7 @@ import type {
   UserStatus,
   WorkOrderStatus,
   WorkOrderType,
+  OperationStatus,
 } from './types';
 
 export const orgTypeLabel: Record<OrgType, string> = { internal: '內部', dealer: '經銷商', customer: '客戶' };
@@ -30,15 +31,26 @@ export const workOrderTypeLabel: Record<WorkOrderType, string> = {
   transfer: '客戶轉移',
   cancel: '取消訂閱',
 };
+export const operationTypeLabel = workOrderTypeLabel;
+
 export const workOrderStatusLabel: Record<WorkOrderStatus, string> = {
   draft: '草稿',
-  pending: '待確認',
+  salesReview: '業務審核中',
+  techReview: '技術審核中',
+  approved: '待處理',
+  processing: '處理中',
+  completed: '完成',
+  returned: '已退回',
+};
+/** 狀態示意條的順序（退回是審核關卡的分支） */
+export const workOrderFlow: WorkOrderStatus[] = ['draft', 'salesReview', 'techReview', 'approved', 'processing', 'completed'];
+
+export const operationStatusLabel: Record<OperationStatus, string> = {
   submitted: '已送出 Google',
   completed: '完成',
   failed: '失敗',
+  manual: '手動處理・待同步確認',
 };
-/** 狀態流程的順序（失敗是「已送出 Google」之後的分支） */
-export const workOrderFlow: WorkOrderStatus[] = ['draft', 'pending', 'submitted', 'completed'];
 
 export const scheduleKindLabel: Record<ScheduleKind, string> = { once: '單次', monthly: '每月', yearly: '每年' };
 export const scheduleActionLabel: Record<ScheduleAction, string> = {
@@ -73,6 +85,7 @@ export const resourceOrder: ResourceKey[] = ['customers', 'subscriptions', 'work
 export const logCategoryLabel: Record<LogCategory, string> = {
   customer: '客戶資料',
   workOrder: '執行單',
+  gws: 'GWS 操作',
   permission: '權限',
   login: '登入',
   sync: '同步',

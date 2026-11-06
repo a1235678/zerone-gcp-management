@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getDealers, getWorkOrders } from '@data/api';
 import { workOrderStatusLabel, workOrderTypeLabel } from '@data/labels';
 import type { WorkOrderListItem, WorkOrderStatus, WorkOrderType } from '@data/types';
@@ -12,7 +11,6 @@ import { Pagination, paginate } from '@shared/components/Pagination';
 import { PendingTag } from '@shared/components/PendingTag';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
-import { WorkOrderModal } from '../components/WorkOrderModal';
 import { WorkOrderStatusTag } from '../tags';
 
 const PAGE_SIZE = 15;
@@ -38,15 +36,17 @@ const columns: Column<WorkOrderListItem>[] = [
     render: (w) => (
       <div>
         <WorkOrderStatusTag value={w.status} />
-        {w.status === 'failed' && <div className="table__secondary text-danger">{w.failureReason}</div>}
+        {w.operation?.status === 'failed' && <div className="table__secondary text-danger">Google 失敗：{w.operation.failureReason}</div>}
+        {w.operation?.status === 'manual' && <div className="table__secondary text-warning">手動處理，待同步確認</div>}
+        {w.status === 'returned' && <div className="table__secondary text-danger">退回：{w.returnReason}</div>}
       </div>
     ),
   },
-  { key: 'createdBy', header: '建立人', render: (w) => w.createdBy },
-  { key: 'createdAt', header: '建立時間', render: (w) => <span className="mono">{formatDateTime(w.createdAt)}</span> },
+  { key: 'createdBy', header: '開單人', render: (w) => w.createdBy },
+  { key: 'createdAt', header: '開單時間', render: (w) => <span className="mono">{formatDateTime(w.createdAt)}</span> },
 ];
 
-const statusOrder: WorkOrderStatus[] = ['draft', 'pending', 'submitted', 'failed', 'completed'];
+const statusOrder: WorkOrderStatus[] = ['draft', 'returned', 'salesReview', 'techReview', 'approved', 'processing', 'completed'];
 
 export function WorkOrdersPage() {
   const navigate = useNavigate();
@@ -56,7 +56,6 @@ export function WorkOrdersPage() {
   const status = (params.get('status') ?? '') as WorkOrderStatus | '';
   const dealerId = params.get('dealer') ?? '';
   const page = Number(params.get('page') ?? '1');
-  const [newOpen, setNewOpen] = useState(false);
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -80,12 +79,12 @@ export function WorkOrdersPage() {
       <PageHeader
         title="執行單"
         titleAddon={<PendingTag id={6} hint="是否列入第一階段上線" />}
-        description="開立後依序：草稿 → 待確認 → 已送出 Google → 完成；失敗可以重送。續約、調整席次、取消訂閱請從「產品 › GWS」的訂閱開立，客戶轉移從客戶詳情開立。"
+        description="業務接到客戶需求後開立，依序由業務主管、技術主管簽核，核准後由後勤處理。後勤也可以不經執行單，直接在「產品 › GWS」操作訂閱。"
         actions={
-          <button className="btn btn--primary" onClick={() => setNewOpen(true)}>
+          <Link to="/work-orders/new" className="btn btn--primary">
             <Icon name="plus" size={16} />
-            開立新訂閱
-          </button>
+            開立執行單
+          </Link>
         }
       />
 
@@ -141,15 +140,6 @@ export function WorkOrdersPage() {
         />
       </Card>
 
-      <WorkOrderModal
-        open={newOpen}
-        type="new"
-        onClose={() => setNewOpen(false)}
-        onCreated={(wo) => {
-          setNewOpen(false);
-          navigate(`/work-orders/${wo.id}`);
-        }}
-      />
     </>
   );
 }
