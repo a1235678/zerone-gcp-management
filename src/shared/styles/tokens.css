@@ -1,82 +1,89 @@
 /*
- * 零壹 SaaS 平台：設計變數（管理端、經銷商端、客戶端共用）
+ * 零壹雲管家（Zerone Cloud）：設計變數（管理端、經銷商端、客戶端共用）
  *
- * 設計方向：「安靜的工作台」
- * - 中性色帶一點暖灰，長時間看螢幕比冷藍灰不刺眼
- * - 只用一個強調色（靛藍），用在主要動作、選取狀態與連結
+ * 設計方向：「深色側欄・海軍藍」（樣板 B，2026/11/10 選定）
+ * - 海軍藍深色側欄框住整個工作區，內容區是冷灰底加白色卡片，偏正式的企業後台
+ * - 只用一個強調色（藍），用在主要動作、目前所在的選單與連結
  * - 狀態色用低彩度底色加深色文字，狀態標籤一定附文字與符號，不只靠顏色
  * - 資訊密度偏高但留白一致，間距全部是 4 的倍數
  *
- * 各網站之後只需覆寫 --brand-* 這幾個變數（例如經銷商端換一個強調色），其他保持一致。
+ * 各網站之後只需覆寫 --brand-* 與 --sidebar-* 這幾個變數，其他保持一致。
  */
 
 :root {
-  /* ── 中性色（暖灰） ───────────────────────── */
+  /* ── 中性色（冷灰） ───────────────────────── */
   --gray-0: #ffffff;
-  --gray-25: #fbfbfa;
-  --gray-50: #f6f6f4;
-  --gray-100: #eeeeeb;
-  --gray-150: #e6e6e2;
-  --gray-200: #dcdcd7;
-  --gray-300: #c8c8c2;
-  --gray-400: #9e9e97;
-  --gray-500: #74746d;
-  --gray-600: #585852;
-  --gray-700: #41413c;
-  --gray-800: #2a2a26;
-  --gray-900: #1b1b18;
+  --gray-25: #f8fafc;
+  --gray-50: #f3f5f8;
+  --gray-100: #eef1f5;
+  --gray-150: #e2e6ec;
+  --gray-200: #cbd2dc;
+  --gray-300: #b4bdc9;
+  --gray-400: #9aa4b2;
+  --gray-500: #6b7686;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
 
-  /* ── 強調色（靛藍） ───────────────────────── */
-  --brand-50: #eef2fe;
-  --brand-100: #dde5fc;
-  --brand-200: #bccbf8;
-  --brand-500: #3a5bd9;
-  --brand-600: #2f4bc0;
-  --brand-700: #263d9c;
+  /* ── 強調色（藍） ───────────────────────── */
+  --brand-50: #eff4ff;
+  --brand-100: #dbe6fe;
+  --brand-200: #bfd3fe;
+  --brand-500: #2563eb;
+  --brand-600: #1d4ed8;
+  --brand-700: #1e40af;
 
   /* ── 狀態色（文字／底色／邊框） ───────────── */
-  --success-fg: #1b6a3d;
-  --success-bg: #e4f2e9;
-  --success-bd: #b9dcc6;
+  --success-fg: #166534;
+  --success-bg: #dcfce7;
+  --success-bd: #dcfce7;
 
-  --warning-fg: #835000;
-  --warning-bg: #fcf0d6;
-  --warning-bd: #efd395;
+  --warning-fg: #92400e;
+  --warning-bg: #fef3c7;
+  --warning-bd: #fef3c7;
 
-  --danger-fg: #a3271f;
-  --danger-bg: #fbe6e3;
-  --danger-bd: #f0bfb9;
+  --danger-fg: #b91c1c;
+  --danger-bg: #fee2e2;
+  --danger-bd: #fee2e2;
 
-  --info-fg: #24489f;
-  --info-bg: #e6edfc;
-  --info-bd: #bccbf3;
+  --info-fg: #1e40af;
+  --info-bg: #dbeafe;
+  --info-bd: #dbeafe;
 
-  --neutral-fg: #4c4c46;
-  --neutral-bg: #eeeeeb;
-  --neutral-bd: #d6d6d0;
+  --neutral-fg: #374151;
+  --neutral-bg: #f1f3f6;
+  --neutral-bd: #f1f3f6;
 
   /* ── 語意色 ─────────────────────────────── */
   --color-bg: var(--gray-50);
   --color-surface: var(--gray-0);
   --color-surface-muted: var(--gray-25);
-  --color-surface-hover: #f3f3f0;
+  --color-surface-hover: #f1f4f8;
   --color-border: var(--gray-150);
   --color-border-strong: var(--gray-200);
   --color-text: var(--gray-900);
   --color-text-secondary: var(--gray-600);
-  --color-text-tertiary: var(--gray-500);
+  --color-text-tertiary: #5f6b7a;
   --color-text-disabled: var(--gray-400);
   --color-accent: var(--brand-500);
   --color-accent-hover: var(--brand-600);
   --color-accent-soft: var(--brand-50);
-  --color-accent-text: var(--brand-700);
-  --color-focus: rgba(58, 91, 217, 0.35);
+  --color-accent-text: var(--brand-600);
+  --color-focus: rgba(37, 99, 235, 0.3);
 
-  --sidebar-bg: var(--gray-25);
-  --sidebar-text: var(--gray-700);
-  --sidebar-text-muted: var(--gray-500);
-  --sidebar-active-bg: var(--brand-50);
-  --sidebar-active-text: var(--brand-700);
+  /* 深色側欄 */
+  --sidebar-bg: #0f1b2d;
+  --sidebar-border: #1f2e46;
+  --sidebar-title: #ffffff;
+  --sidebar-text: #c9d2e0;
+  --sidebar-text-muted: #8a97ad;
+  --sidebar-icon: #8a97ad;
+  --sidebar-hover-bg: #1a2840;
+  --sidebar-active-bg: var(--brand-500);
+  --sidebar-active-text: #ffffff;
+
+  --topbar-bg: var(--gray-0);
 
   /* ── 字型 ───────────────────────────────── */
   --font-sans: 'Inter', 'Noto Sans TC', -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
@@ -111,21 +118,22 @@
 
   /* ── 圓角、陰影 ───────────────────────────── */
   --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-tag: 6px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(27, 27, 24, 0.05);
-  --shadow-md: 0 2px 8px rgba(27, 27, 24, 0.08), 0 1px 2px rgba(27, 27, 24, 0.04);
-  --shadow-lg: 0 12px 32px rgba(27, 27, 24, 0.14), 0 2px 6px rgba(27, 27, 24, 0.06);
+  --shadow-sm: 0 1px 3px rgba(15, 27, 45, 0.06);
+  --shadow-md: 0 2px 8px rgba(15, 27, 45, 0.08), 0 1px 2px rgba(15, 27, 45, 0.04);
+  --shadow-lg: 0 12px 32px rgba(15, 27, 45, 0.16), 0 2px 6px rgba(15, 27, 45, 0.06);
 
   /* ── 版型尺寸 ───────────────────────────── */
   --sidebar-width: 240px;
-  --topbar-height: 56px;
+  --topbar-height: 60px;
   --content-max-width: 1440px;
   --page-padding-x: var(--space-8);
   --page-padding-y: var(--space-6);
-  --control-height: 36px;
+  --control-height: 38px;
   --control-height-sm: 30px;
   --table-row-height: 48px;
 
