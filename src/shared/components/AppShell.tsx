@@ -3,9 +3,12 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 
 export interface NavItem {
+  /** 有 children 時是網址前綴，用來判斷要不要展開 */
   to: string;
   label: string;
-  icon: IconName;
+  icon?: IconName;
+  /** 可展開的子選單（只做一層） */
+  children?: NavItem[];
 }
 export interface NavGroup {
   label: string;
@@ -76,17 +79,21 @@ export function AppShell({
           {nav.map((group) => (
             <div className="nav-group" key={group.label}>
               <div className="nav-group__label">{group.label}</div>
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) => `nav-item ${isActive ? 'is-active' : ''}`}
-                >
-                  <Icon name={item.icon} />
-                  {item.label}
-                </NavLink>
-              ))}
+              {group.items.map((item) =>
+                item.children ? (
+                  <NavParent key={item.to} item={item} pathname={location.pathname} />
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={({ isActive }) => `nav-item ${isActive ? 'is-active' : ''}`}
+                  >
+                    {item.icon && <Icon name={item.icon} />}
+                    {item.label}
+                  </NavLink>
+                ),
+              )}
             </div>
           ))}
         </nav>
@@ -100,13 +107,18 @@ export function AppShell({
             <Icon name="menu" />
           </button>
           <div className="topbar__crumbs">
-            {current ? (
-              <>
-                <span>{current.group}</span>
-                <Icon name="chevronRight" size={14} />
-                <strong>{current.label}</strong>
-              </>
-            ) : null}
+            {current
+              ? current.trail.map((t, i) =>
+                  i === current.trail.length - 1 ? (
+                    <strong key={t}>{t}</strong>
+                  ) : (
+                    <span key={t} className="topbar__crumb">
+                      <span>{t}</span>
+                      <Icon name="chevronRight" size={14} />
+                    </span>
+                  ),
+                )
+              : null}
           </div>
           <div className="topbar__spacer" />
           <span className="topbar__env" title="此網站僅供需求確認，未連接任何後端或 Google API">
@@ -151,12 +163,45 @@ export function AppShell({
   );
 }
 
+const matches = (to: string, pathname: string) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/'));
+
+/** 可展開的上層選單：目前所在頁面在底下時自動展開 */
+function NavParent({ item, pathname }: { item: NavItem; pathname: string }) {
+  const inside = matches(item.to, pathname);
+  const [open, setOpen] = useState(inside);
+  useEffect(() => {
+    if (inside) setOpen(true);
+  }, [inside]);
+  const id = `nav-sub-${item.to.replace(/\W/g, '-')}`;
+  return (
+    <div className={`nav-parent ${inside ? 'is-inside' : ''}`}>
+      <button type="button" className="nav-item nav-item--parent" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
+        {item.icon && <Icon name={item.icon} />}
+        {item.label}
+        <Icon name="chevronDown" size={14} className="nav-item__caret" />
+      </button>
+      {open && (
+        <div className="nav-sub" id={id}>
+          {item.children!.map((c) => (
+            <NavLink key={c.to} to={c.to} className={({ isActive }) => `nav-item nav-item--child ${isActive ? 'is-active' : ''}`}>
+              {c.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function findCurrent(nav: NavGroup[], pathname: string) {
-  let best: { group: string; label: string; len: number } | undefined;
+  let best: { trail: string[]; len: number } | undefined;
+  const consider = (to: string, trail: string[]) => {
+    if (matches(to, pathname) && (!best || to.length > best.len)) best = { trail, len: to.length };
+  };
   for (const g of nav) {
     for (const item of g.items) {
-      const match = item.to === '/' ? pathname === '/' : pathname === item.to || pathname.startsWith(item.to + '/');
-      if (match && (!best || item.to.length > best.len)) best = { group: g.label, label: item.label, len: item.to.length };
+      if (item.children) item.children.forEach((c) => consider(c.to, [g.label, item.label, c.label]));
+      else consider(item.to, [g.label, item.label]);
     }
   }
   return best;

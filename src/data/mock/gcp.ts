@@ -26,7 +26,7 @@ const seeds: GcpSeed[] = [
   { customerId: 'C0022', projects: 1, dailyUsd: 6, egressGb: 14, changePct: -2.0 },
 ];
 
-function mulberry32(seed: number) {
+export function mulberry32(seed: number) {
   return () => {
     seed |= 0;
     seed = (seed + 0x6d2b79f5) | 0;

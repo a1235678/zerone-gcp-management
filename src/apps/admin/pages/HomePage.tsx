@@ -141,7 +141,7 @@ export function HomePage() {
         <Card
           title="GCP 用量摘要"
           actions={
-            <Link to="/products/gcp" style={{ fontSize: 'var(--text-sm)' }}>
+            <Link to="/products/gcp/usage" style={{ fontSize: 'var(--text-sm)' }}>
               查看明細
             </Link>
           }

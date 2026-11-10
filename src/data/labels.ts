@@ -8,6 +8,9 @@ import type {
   OrgType,
   PermissionLevel,
   ResourceKey,
+  BillDisplayStatus,
+  ReconcileState,
+  ReconcileHow,
   ScheduleAction,
   ScheduleKind,
   ScheduleStatus,
@@ -90,8 +93,15 @@ export const logCategoryLabel: Record<LogCategory, string> = {
   customer: '客戶資料',
   workOrder: '執行單',
   gws: 'GWS 操作',
+  billing: '帳單',
   permission: '權限',
   login: '登入',
   sync: '同步',
 };
 export const logResultLabel: Record<LogResult, string> = { success: '成功', failure: '失敗', warning: '警示' };
+
+export const billStatusLabel: Record<BillDisplayStatus, string> = { pending: '待確認', billed: '已出帳', overdue: '逾期', paid: '已收款' };
+export const reconcileStateLabel: Record<ReconcileState, string> = { match: '一致', mismatch: '有差異', resolved: '已處理', noInvoice: '尚無 Google 帳單' };
+export const reconcileHowLabel: Record<ReconcileHow, string> = { adoptGoogle: '採用 Google 金額', keepOurs: '維持我方金額' };
+/** 對帳差異的常見原因，處理差異時選一個 */
+export const reconcileReasons = ['折抵或促銷額度', '費用資料晚到', 'Google 事後調整或退費', '稅金或四捨五入', '其他'];
