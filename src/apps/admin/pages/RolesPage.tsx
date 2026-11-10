@@ -8,7 +8,6 @@ import { Callout, FormField } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { Modal } from '@shared/components/Modal';
 import { PageHeader } from '@shared/components/PageHeader';
-import { PendingTag } from '@shared/components/PendingTag';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Tabs } from '@shared/components/Tabs';
 import { useToast } from '@shared/components/Toast';
@@ -22,16 +21,8 @@ const rank: Record<PermissionLevel, number> = { none: 0, read: 1, write: 2 };
 const LevelTag = ({ level }: { level: PermissionLevel }) =>
   level === 'none' ? <span className="muted">{permissionLabel[level]}</span> : <StatusTag tone={level === 'write' ? 'info' : 'neutral'}>{permissionLabel[level]}</StatusTag>;
 
-/** 資源欄位標題；「帳單」是否為獨立權限尚未決定 */
-const ResourceHeader = ({ r }: { r: ResourceKey }) =>
-  r === 'billing' ? (
-    <span className="inline">
-      {resourceLabel[r]}
-      <PendingTag id={2} />
-    </span>
-  ) : (
-    <>{resourceLabel[r]}</>
-  );
+/** 資源欄位標題 */
+const ResourceHeader = ({ r }: { r: ResourceKey }) => <>{resourceLabel[r]}</>;
 
 type Draft = Omit<Role, 'id'> & { id?: string };
 
