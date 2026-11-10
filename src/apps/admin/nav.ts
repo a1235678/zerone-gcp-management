@@ -18,7 +18,15 @@ export const adminNav: NavGroup[] = [
     label: '產品',
     items: [
       { to: '/products/gws', label: 'GWS', icon: 'workspace' },
-      { to: '/products/gcp', label: 'GCP', icon: 'cloud' },
+      {
+        to: '/products/gcp',
+        label: 'GCP',
+        icon: 'cloud',
+        children: [
+          { to: '/products/gcp/usage', label: '流量與用量' },
+          { to: '/products/gcp/billing', label: '帳單' },
+        ],
+      },
     ],
   },
   { label: '排程', items: [{ to: '/schedules/gws', label: 'GWS 排程中心', icon: 'schedule' }] },
@@ -40,16 +48,31 @@ export const pageResource: Record<string, ResourceKey> = {
   '/brands': 'catalog',
   '/catalog': 'catalog',
   '/products/gws': 'subscriptions',
-  '/products/gcp': 'gcpUsage',
+  '/products/gcp/usage': 'gcpUsage',
+  '/products/gcp/billing': 'billing',
   '/schedules/gws': 'schedules',
   '/system/users': 'accounts',
   '/system/roles': 'roles',
   '/system/logs': 'auditLogs',
 };
 
-/** 依權限過濾選單，整組都看不到的群組一起拿掉 */
+/** 這個網址需要的資源：取最長的前綴，例如 /products/gcp/billing/BILL-… 對到 billing */
+export function resourceOf(pathname: string): ResourceKey | undefined {
+  const key = Object.keys(pageResource)
+    .filter((p) => pathname === p || pathname.startsWith(p + '/'))
+    .sort((a, b) => b.length - a.length)[0];
+  return key ? pageResource[key] : undefined;
+}
+
+/** 依權限過濾選單：子選單全部看不到時上層一起拿掉，整組都看不到的群組也拿掉 */
 export function visibleNav(can: (r: ResourceKey) => boolean): NavGroup[] {
+  const ok = (to: string) => !pageResource[to] || can(pageResource[to]);
   return adminNav
-    .map((g) => ({ ...g, items: g.items.filter((i) => !pageResource[i.to] || can(pageResource[i.to])) }))
+    .map((g) => ({
+      ...g,
+      items: g.items
+        .map((i) => (i.children ? { ...i, children: i.children.filter((c) => ok(c.to)) } : i))
+        .filter((i) => (i.children ? i.children.length > 0 : ok(i.to))),
+    }))
     .filter((g) => g.items.length > 0);
 }

@@ -1,5 +1,7 @@
 // 各種狀態對應的標籤顏色。文字一律來自 data/labels，顏色只是輔助。
 import {
+  billStatusLabel,
+  reconcileStateLabel,
   customerStatusLabel,
   dealerStatusLabel,
   domainVerificationLabel,
@@ -11,6 +13,8 @@ import {
   workOrderStatusLabel,
 } from '@data/labels';
 import type {
+  BillDisplayStatus,
+  ReconcileState,
   CustomerStatus,
   DealerStatus,
   DomainVerification,
@@ -45,3 +49,5 @@ export const OperationStatusTag = tag<OperationStatus>(operationStatusLabel, { s
 export const ScheduleStatusTag = tag<ScheduleStatus>(scheduleStatusLabel, { waiting: 'neutral', running: 'info', done: 'success', failed: 'danger', cancelled: 'neutral' });
 export const UserStatusTag = tag<UserStatus>(userStatusLabel, { active: 'success', disabled: 'neutral', invited: 'info' });
 export const LogResultTag = tag<LogResult>(logResultLabel, { success: 'success', failure: 'danger', warning: 'warning' });
+export const BillStatusTag = tag<BillDisplayStatus>(billStatusLabel, { pending: 'warning', billed: 'info', overdue: 'danger', paid: 'success' });
+export const ReconcileStateTag = tag<ReconcileState>(reconcileStateLabel, { match: 'success', mismatch: 'warning', resolved: 'info', noInvoice: 'neutral' });

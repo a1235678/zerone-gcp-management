@@ -3,7 +3,7 @@ import type { ResourceKey } from '@data/types';
 import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
 import { AuthProvider, useAuth, usePermission } from './auth';
-import { pageResource, visibleNav } from './nav';
+import { resourceOf, visibleNav } from './nav';
 import { NoPermissionPage } from './pages/PlaceholderPage';
 import { ForgotPasswordPage, LoginPage } from './pages/LoginPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
@@ -11,6 +11,8 @@ import { BrandsPage, ProductsPage } from './pages/CatalogPages';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { DealersPage } from './pages/DealersPage';
+import { GcpBillDetailPage } from './pages/GcpBillDetailPage';
+import { GcpBillingPage } from './pages/GcpBillingPage';
 import { GcpUsagePage } from './pages/GcpUsagePage';
 import { GwsSubscriptionsPage } from './pages/GwsSubscriptionsPage';
 import { HomePage } from './pages/HomePage';
@@ -79,7 +81,10 @@ function Protected() {
             <Route path="/brands" element={<BrandsPage />} />
             <Route path="/catalog" element={<ProductsPage />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
-            <Route path="/products/gcp" element={<GcpUsagePage />} />
+            <Route path="/products/gcp" element={<GcpIndex />} />
+            <Route path="/products/gcp/usage" element={<GcpUsagePage />} />
+            <Route path="/products/gcp/billing" element={<GcpBillingPage />} />
+            <Route path="/products/gcp/billing/:id" element={<GcpBillDetailPage />} />
             <Route path="/schedules/gws" element={<SchedulesPage />} />
             <Route path="/system/users" element={<UsersPage />} />
             <Route path="/system/roles" element={<RolesPage />} />
@@ -95,6 +100,12 @@ function Protected() {
 
 /** 依網址前綴找出這一頁需要的資源 */
 function pageAllowed(pathname: string, can: (r: ResourceKey) => boolean) {
-  const key = Object.keys(pageResource).find((p) => pathname === p || pathname.startsWith(p + '/'));
-  return !key || can(pageResource[key]);
+  const r = resourceOf(pathname);
+  return !r || can(r);
+}
+
+/** /products/gcp 本身沒有頁面：有用量權限去用量，否則去帳單 */
+function GcpIndex() {
+  const { can } = usePermission();
+  return <Navigate to={can('gcpUsage') || !can('billing') ? '/products/gcp/usage' : '/products/gcp/billing'} replace />;
 }

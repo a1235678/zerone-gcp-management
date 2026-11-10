@@ -248,6 +248,100 @@ export interface GcpUsage {
   rows: GcpUsageRow[];
 }
 
+// ── GCP 帳單 ───────────────────────────
+/** 存在資料裡的狀態；「逾期」由已出帳＋付款期限推算，不另外存 */
+export type BillStatus = 'pending' | 'billed' | 'paid';
+export type BillDisplayStatus = 'pending' | 'billed' | 'overdue' | 'paid';
+export interface BillLine {
+  service: string;
+  project: string;
+  costCents: number;
+}
+export interface BillEvent {
+  at: string;
+  actor: string;
+  text: string;
+}
+export interface GcpBill {
+  id: string;
+  /** 帳單月份，例如 2026-10 */
+  month: string;
+  customerId: string;
+  projects: number;
+  /** Billing 匯出的費用明細（美分） */
+  lines: BillLine[];
+  /** 對帳時採用 Google 金額產生的成本調整（美分，可正可負） */
+  adjustmentCents: number;
+  markupPct: number;
+  /** 1 USD 換多少 TWD */
+  rate: number;
+  status: BillStatus;
+  issuedAt?: string;
+  dueDate?: string;
+  paidAt?: string;
+  note?: string;
+  history: BillEvent[];
+}
+export type ReconcileState = 'match' | 'mismatch' | 'resolved' | 'noInvoice';
+export interface GcpBillListItem extends GcpBill {
+  customerName: string;
+  dealerName: string;
+  /** 匯出費用＋調整（美分） */
+  costCents: number;
+  amountTwd: number;
+  displayStatus: BillDisplayStatus;
+  reconcile: ReconcileState;
+}
+export interface GcpBillDetail extends GcpBillListItem {
+  exportCents: number;
+  contactName: string;
+  contactEmail: string;
+  googleCents?: number;
+}
+export interface BillQuery {
+  month: string;
+  keyword?: string;
+  dealerId?: string;
+  status?: BillDisplayStatus | '';
+}
+export interface BillMonth {
+  month: string;
+  label: string;
+  rate: number;
+}
+export type ReconcileHow = 'adoptGoogle' | 'keepOurs';
+export interface ReconcileResolution {
+  how: ReconcileHow;
+  reason: string;
+  note: string;
+  by: string;
+  at: string;
+}
+export interface GoogleInvoice {
+  month: string;
+  fileName: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  /** 各客戶（Google 帳務帳戶）的 Google 帳單金額（美分） */
+  amounts: Record<string, number>;
+  resolutions: Record<string, ReconcileResolution>;
+}
+export interface ReconcileRow {
+  customerId: string;
+  customerName: string;
+  billId: string;
+  oursCents: number;
+  googleCents?: number;
+  diffCents: number;
+  state: ReconcileState;
+  resolution?: ReconcileResolution;
+}
+export interface Reconciliation {
+  month: string;
+  invoice?: Omit<GoogleInvoice, 'amounts' | 'resolutions'>;
+  rows: ReconcileRow[];
+}
+
 // ── 排程 ───────────────────────────────
 export type ScheduleKind = 'once' | 'monthly' | 'yearly';
 export type ScheduleAction = 'addSeats' | 'removeSeats' | 'renew' | 'cancel' | 'sync';
@@ -341,7 +435,7 @@ export interface RoleListItem extends Role {
 }
 
 // ── 操作紀錄 ───────────────────────────
-export type LogCategory = 'customer' | 'workOrder' | 'gws' | 'permission' | 'login' | 'sync';
+export type LogCategory = 'customer' | 'workOrder' | 'gws' | 'billing' | 'permission' | 'login' | 'sync';
 export type LogResult = 'success' | 'failure' | 'warning';
 export interface AuditLog {
   id: string;

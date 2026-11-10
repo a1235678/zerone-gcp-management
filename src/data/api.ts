@@ -7,6 +7,7 @@
 import { brands as seedBrands, products as seedProducts } from './mock/brands';
 import { customers as seedCustomers } from './mock/customers';
 import { dealers as seedDealers } from './mock/dealers';
+import { BILL_MONTHS, PAYMENT_DAYS, gcpBills as seedBills, googleInvoices as seedInvoices } from './mock/billing';
 import { GCP_DAYS, GCP_PERIOD_END, gcpAccounts, gcpDates } from './mock/gcp';
 import { auditLogs as seedLogs, roleOfActor } from './mock/logs';
 import { roles as seedRoles } from './mock/roles';
@@ -28,6 +29,16 @@ import type {
   DealerListItem,
   DomainCheck,
   GcpUsage,
+  BillDisplayStatus,
+  BillMonth,
+  BillQuery,
+  GcpBill,
+  GcpBillDetail,
+  GcpBillListItem,
+  ReconcileHow,
+  ReconcileRow,
+  ReconcileState,
+  Reconciliation,
   LogCategory,
   LogResult,
   NewCustomerInput,
@@ -84,6 +95,8 @@ const db = {
   logs: structuredClone(seedLogs),
   brands: structuredClone(seedBrands),
   products: structuredClone(seedProducts),
+  bills: structuredClone(seedBills),
+  invoices: structuredClone(seedInvoices),
 };
 
 /** 模擬網路延遲，回傳複本避免頁面直接改到資料 */
@@ -910,6 +923,207 @@ export function getGcpUsage(): Promise<GcpUsage> {
   });
 }
 export const GCP_PERIOD_DAYS = GCP_DAYS;
+
+// ═════════ GCP 帳單 ═════════
+// 流程：系統匯入 Billing 費用並計算 → 後勤上傳 Google 帳單對帳 → 確認並出帳 → 標記已收款。
+// 「逾期」= 已出帳且今天超過付款期限。不開立發票。
+
+export const BILL_PAYMENT_DAYS = PAYMENT_DAYS;
+
+export function getBillMonths(): Promise<BillMonth[]> {
+  return delay(BILL_MONTHS);
+}
+
+const exportCents = (b: GcpBill) => b.lines.reduce((s, l) => s + l.costCents, 0);
+const billCost = (b: GcpBill) => exportCents(b) + b.adjustmentCents;
+/** 應收 TWD：Google 費用 ×（1＋加成）× 匯率，四捨五入到元 */
+export const billAmountTwd = (costCents: number, markupPct: number, rate: number) => Math.round(((costCents * (100 + markupPct)) / 100 / 100) * rate);
+const displayStatus = (b: GcpBill): BillDisplayStatus => (b.status === 'billed' && b.dueDate && b.dueDate < TODAY ? 'overdue' : b.status);
+
+function reconcileOf(b: GcpBill): { state: ReconcileState; googleCents?: number } {
+  const inv = db.invoices.find((i) => i.month === b.month);
+  const googleCents = inv?.amounts[b.customerId];
+  if (!inv || googleCents === undefined) return { state: 'noInvoice' };
+  if (googleCents === exportCents(b)) return { state: 'match', googleCents };
+  return { state: inv.resolutions[b.customerId] ? 'resolved' : 'mismatch', googleCents };
+}
+
+function toBillItem(b: GcpBill): GcpBillListItem {
+  const c = customerOf(b.customerId)!;
+  const costCents = billCost(b);
+  return {
+    ...b,
+    customerName: c.name,
+    dealerName: dealerName(c.dealerId),
+    costCents,
+    amountTwd: billAmountTwd(costCents, b.markupPct, b.rate),
+    displayStatus: displayStatus(b),
+    reconcile: reconcileOf(b).state,
+  };
+}
+
+export function getGcpBills(query: BillQuery): Promise<GcpBillListItem[]> {
+  const kw = normKw(query.keyword);
+  const rows = db.bills
+    .filter((b) => b.month === query.month)
+    .map(toBillItem)
+    .filter((b) => !query.dealerId || customerOf(b.customerId)?.dealerId === query.dealerId)
+    .filter((b) => !query.status || b.displayStatus === query.status)
+    .filter((b) => includesKw(kw, b.customerName, b.id))
+    .sort((a, b) => b.costCents - a.costCents);
+  return delay(rows);
+}
+
+/** 客戶詳情頁用：這個客戶所有月份的帳單 */
+export function getCustomerBills(customerId: string): Promise<GcpBillListItem[]> {
+  return delay(db.bills.filter((b) => b.customerId === customerId).map(toBillItem).sort((a, b) => b.month.localeCompare(a.month)));
+}
+
+export function getGcpBill(id: string): Promise<GcpBillDetail> {
+  const b = db.bills.find((x) => x.id === id);
+  if (!b) return fail('找不到這張帳單');
+  const c = customerOf(b.customerId)!;
+  return delay({ ...toBillItem(b), exportCents: exportCents(b), contactName: c.contactName, contactEmail: c.contactEmail, googleCents: reconcileOf(b).googleCents });
+}
+
+const billOrFail = (id: string) => {
+  const b = db.bills.find((x) => x.id === id);
+  if (!b) throw new Error('找不到這張帳單');
+  return b;
+};
+const billEvent = (b: GcpBill, text: string) => b.history.unshift({ at: now(), actor: currentUser.name, text });
+
+/** 為什麼這張帳單還不能出帳；可以出帳回傳 undefined */
+export function issueBlocker(b: Pick<GcpBillListItem, 'status' | 'reconcile'>): string | undefined {
+  if (b.status !== 'pending') return '這張帳單已經出帳';
+  if (b.reconcile === 'noInvoice') return '還沒上傳這個月的 Google 帳單，請先到「成本對帳」上傳並比對';
+  if (b.reconcile === 'mismatch') return '和 Google 帳單的金額有差異，請先到「成本對帳」處理';
+  return undefined;
+}
+
+export function updateBill(id: string, input: { markupPct: number; note: string }): Promise<void> {
+  try {
+    const b = billOrFail(id);
+    if (b.status !== 'pending') return fail('已出帳的帳單不能修改');
+    if (!Number.isFinite(input.markupPct) || input.markupPct < 0 || input.markupPct > 100) return fail('加成請填 0 到 100 之間的數字');
+    const changes: string[] = [];
+    if (input.markupPct !== b.markupPct) changes.push(`加成 ${b.markupPct}% → ${input.markupPct}%`);
+    if ((input.note.trim() || undefined) !== b.note) changes.push('更新備註');
+    if (!changes.length) return delay(undefined);
+    b.markupPct = input.markupPct;
+    b.note = input.note.trim() || undefined;
+    billEvent(b, `調整帳單：${changes.join('、')}`);
+    log('billing', b.id, `調整帳單：${changes.join('、')}`, 'success', b.customerId);
+    return delay(undefined);
+  } catch (e) {
+    return fail((e as Error).message);
+  }
+}
+
+/** 確認並出帳。不能出帳的會略過並回報原因 */
+export function issueBills(ids: string[]): Promise<{ issued: string[]; skipped: { id: string; reason: string }[] }> {
+  const issued: string[] = [];
+  const skipped: { id: string; reason: string }[] = [];
+  for (const id of ids) {
+    const b = db.bills.find((x) => x.id === id);
+    if (!b) continue;
+    const reason = issueBlocker({ status: b.status, reconcile: reconcileOf(b).state });
+    if (reason) {
+      skipped.push({ id, reason });
+      continue;
+    }
+    b.status = 'billed';
+    b.issuedAt = TODAY;
+    b.dueDate = addDays(TODAY, PAYMENT_DAYS);
+    billEvent(b, '確認並出帳，帳單已寄給帳務聯絡人');
+    log('billing', b.id, `確認並出帳，應收 ${billAmountTwd(billCost(b), b.markupPct, b.rate).toLocaleString('en-US')} TWD`, 'success', b.customerId);
+    issued.push(id);
+  }
+  return delay({ issued, skipped });
+}
+
+export function markBillPaid(id: string, input: { paidAt: string; note: string }): Promise<void> {
+  try {
+    const b = billOrFail(id);
+    if (b.status !== 'billed') return fail('只有已出帳的帳單可以標記收款');
+    if (!input.paidAt) return fail('請填收款日期');
+    if (input.paidAt > TODAY) return fail('收款日期不能晚於今天');
+    if (b.issuedAt && input.paidAt < b.issuedAt) return fail('收款日期不能早於出帳日');
+    b.status = 'paid';
+    b.paidAt = input.paidAt;
+    billEvent(b, `標記已收款（${input.paidAt.replace(/-/g, '/')}）${input.note.trim() ? `：${input.note.trim()}` : ''}`);
+    log('billing', b.id, '標記已收款', 'success', b.customerId);
+    return delay(undefined);
+  } catch (e) {
+    return fail((e as Error).message);
+  }
+}
+
+export function resendBill(id: string): Promise<void> {
+  try {
+    const b = billOrFail(id);
+    if (b.status === 'pending') return fail('還沒出帳的帳單不能寄送');
+    const c = customerOf(b.customerId)!;
+    billEvent(b, `重新寄送帳單給 ${c.contactEmail}`);
+    log('billing', b.id, '重新寄送帳單', 'success', b.customerId);
+    return delay(undefined);
+  } catch (e) {
+    return fail((e as Error).message);
+  }
+}
+
+export function getReconciliation(month: string): Promise<Reconciliation> {
+  const inv = db.invoices.find((i) => i.month === month);
+  const rows: ReconcileRow[] = db.bills
+    .filter((b) => b.month === month)
+    .map((b) => {
+      const { state, googleCents } = reconcileOf(b);
+      const oursCents = exportCents(b);
+      return {
+        customerId: b.customerId,
+        customerName: customerOf(b.customerId)!.name,
+        billId: b.id,
+        oursCents,
+        googleCents,
+        diffCents: googleCents === undefined ? 0 : googleCents - oursCents,
+        state,
+        resolution: inv?.resolutions[b.customerId],
+      };
+    })
+    .sort((a, b) => b.oursCents - a.oursCents);
+  return delay({ month, invoice: inv && { month: inv.month, fileName: inv.fileName, uploadedAt: inv.uploadedAt, uploadedBy: inv.uploadedBy }, rows });
+}
+
+/** 模擬上傳 Google 帳單：Prototype 不讀檔案內容，只更新上傳紀錄，比對結果維持假資料 */
+export function uploadGoogleInvoice(month: string, fileName: string): Promise<void> {
+  const inv = db.invoices.find((i) => i.month === month);
+  if (!fileName) return fail('請選擇檔案');
+  if (!inv) return fail('這個月份沒有 Google 帳單資料');
+  inv.fileName = fileName;
+  inv.uploadedAt = now();
+  inv.uploadedBy = currentUser.name;
+  log('billing', `${month} Google 帳單`, `上傳 Google 帳單（${fileName}）`);
+  return delay(undefined);
+}
+
+export function resolveReconcile(month: string, customerId: string, input: { how: ReconcileHow; reason: string; note: string }): Promise<void> {
+  const inv = db.invoices.find((i) => i.month === month);
+  const b = db.bills.find((x) => x.month === month && x.customerId === customerId);
+  if (!inv || !b) return fail('找不到對帳資料');
+  if (reconcileOf(b).state !== 'mismatch') return fail('這筆已經處理過了');
+  if (b.status !== 'pending') return fail('帳單已出帳，不能再調整');
+  if (!input.reason) return fail('請選擇差異原因');
+  if (!input.note.trim()) return fail('請填寫說明');
+  const google = inv.amounts[customerId];
+  inv.resolutions[customerId] = { ...input, note: input.note.trim(), by: currentUser.name, at: now() };
+  const diff = google - exportCents(b);
+  b.adjustmentCents = input.how === 'adoptGoogle' ? diff : 0;
+  const diffText = `${diff > 0 ? '+' : '−'}${(Math.abs(diff) / 100).toFixed(2)} USD`;
+  const howText = input.how === 'adoptGoogle' ? '採用 Google 金額' : '維持我方金額';
+  billEvent(b, `對帳差異 ${diffText} 已處理：${howText}（${input.reason}）`);
+  log('billing', b.id, `處理對帳差異 ${diffText}：${howText}`, 'success', customerId);
+  return delay(undefined);
+}
 
 // ═════════ 排程 ═════════
 
