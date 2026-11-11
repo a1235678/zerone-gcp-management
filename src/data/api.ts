@@ -23,6 +23,7 @@ import type {
   Brand,
   BrandListItem,
   Customer,
+  SalesAssignment,
   CustomerListItem,
   CustomerQuery,
   Dealer,
@@ -297,7 +298,7 @@ export function getCustomers(query: CustomerQuery = {}): Promise<CustomerListIte
   const rows = db.customers
     .filter((c) => !query.dealerId || c.dealerId === query.dealerId)
     .filter((c) => !query.status || c.status === query.status)
-    .filter((c) => includesKw(kw, c.name, c.primaryDomain, c.taxId, c.contactName))
+    .filter((c) => includesKw(kw, c.name, c.primaryDomain, c.taxId, c.contactName, ...c.otherDomains, ...c.salesAssignments.map((a) => a.salesName)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .map(withDealer);
   return delay(rows);
@@ -323,9 +324,45 @@ export function checkDomain(domain: string): DomainCheck {
         : '格式不正確，例如 company.example';
     return { ok: false, reason: 'format', message: hint };
   }
-  const existing = db.customers.find((c) => c.primaryDomain === d);
+  const existing = db.customers.find((c) => c.primaryDomain === d || c.otherDomains.includes(d));
   if (existing) return { ok: false, reason: 'duplicate', message: `這個網域已被「${existing.name}」使用`, existingCustomer: existing.id };
   return { ok: true };
+}
+
+/** 新增客戶的其他網域（一個客戶可以有多個網域） */
+export function addCustomerDomain(customerId: string, domain: string): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  const check = checkDomain(domain);
+  if (!check.ok) return fail(check.message);
+  c.otherDomains.push(domain.trim());
+  log('customer', c.name, `新增網域 ${domain.trim()}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
+export function removeCustomerDomain(customerId: string, domain: string): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  c.otherDomains = c.otherDomains.filter((d) => d !== domain);
+  log('customer', c.name, `移除網域 ${domain}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
+/** 可以指定為負責業務的內部帳號（業務、業務主管） */
+export function getSalesPeople(): Promise<string[]> {
+  return delay(db.users.filter((u) => u.orgType === 'internal' && (u.roleId === 'R03' || u.roleId === 'R12') && u.status === 'active').map((u) => u.name));
+}
+
+/** 更新負責業務：依產品 × 新約／續約 */
+export function saveSalesAssignments(customerId: string, assignments: SalesAssignment[]): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  const clean = assignments.filter((a) => a.salesName);
+  const keys = new Set(clean.map((a) => `${a.product}-${a.term}`));
+  if (keys.size !== clean.length) return fail('同一個產品的新約或續約只能指定一位業務');
+  c.salesAssignments = clean;
+  log('customer', c.name, `更新負責業務：${clean.map((a) => `${a.product}${a.term === 'new' ? '新約' : '續約'} ${a.salesName}`).join('、') || '無'}`, 'success', c.id);
+  return delay(withDealer(c));
 }
 
 export function createCustomer(input: NewCustomerInput): Promise<CustomerListItem> {
@@ -348,6 +385,11 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
     note: input.note.trim(),
     status: 'active',
     domainVerification: 'pending',
+    otherDomains: [],
+    salesAssignments: [
+      ...(input.salesNew ? [{ product: 'GWS' as const, term: 'new' as const, salesName: input.salesNew }] : []),
+      ...(input.salesRenewal ? [{ product: 'GWS' as const, term: 'renewal' as const, salesName: input.salesRenewal }] : []),
+    ],
   };
   db.customers.push(customer);
   db.users.push({

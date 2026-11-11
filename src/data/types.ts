@@ -24,12 +24,21 @@ export interface DealerListItem extends Dealer {
 export type CustomerStatus = 'active' | 'disabled';
 /** Google 網域驗證：建立客戶後才檢查 */
 export type DomainVerification = 'verified' | 'pending' | 'failed';
+/** 負責業務：依「產品／新約或續約」指定，同一客戶可以不同（2026/11/10 會議） */
+export interface SalesAssignment {
+  product: ProductCode;
+  term: 'new' | 'renewal';
+  salesName: string;
+}
 export interface Customer {
   id: string;
   name: string;
   /** 統一編號（8 碼） */
   taxId: string;
   primaryDomain: string;
+  /** 主網域以外的其他網域（一個客戶可以有多個網域） */
+  otherDomains: string[];
+  salesAssignments: SalesAssignment[];
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -59,6 +68,9 @@ export interface NewCustomerInput {
   note: string;
   adminName: string;
   adminEmail: string;
+  /** GWS 新約、續約的負責業務 */
+  salesNew?: string;
+  salesRenewal?: string;
 }
 export type DomainCheck =
   | { ok: true }

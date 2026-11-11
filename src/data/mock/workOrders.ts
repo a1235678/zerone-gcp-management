@@ -93,7 +93,7 @@ export const workOrders: WorkOrder[] = [
     ['2026-10-27 14:12', 'salesReview'],
     ['2026-10-27 17:00', 'techReview'],
     ['2026-10-28 10:00', 'approved'],
-    ['2026-10-28 14:40', 'processing'],
+    ['2026-10-28 14:30', 'processing'],
     ['2026-10-28 14:41', 'completed'],
   ], { operationId: 'OP-1028-001' }),
   wo(

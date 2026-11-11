@@ -9,6 +9,7 @@ import {
   createCustomer,
   createTransferInCustomer,
   getDealers,
+  getSalesPeople,
   getWorkOrder,
   linkCustomerToWorkOrder,
 } from '@data/api';
@@ -37,6 +38,8 @@ const empty = {
   transferToken: '',
   tokenExpiresAt: '',
   transferMemo: '',
+  salesNew: '',
+  salesRenewal: '',
 };
 type Key = keyof typeof empty;
 
@@ -51,6 +54,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
   const navigate = useNavigate();
   const toast = useToast();
   const dealers = useAsync(getDealers);
+  const salesPeople = useAsync(getSalesPeople);
   const [params] = useSearchParams();
   const fromWo = isTransfer ? null : params.get('fromWo');
   const wo = useAsync(() => (fromWo ? getWorkOrder(fromWo) : Promise.resolve(undefined)), [fromWo]);
@@ -286,6 +290,21 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             <FormField label="備註" className="is-full">
               {(p) => <textarea {...p} className="textarea" value={form.note} onChange={set('note')} />}
             </FormField>
+          </FormSection>
+
+          <FormSection title="負責業務" description="依產品、新約或續約指定，同一個客戶可以是不同業務。建立後可以在客戶詳情修改，也可以指定 GCP 的業務。">
+            {(['salesNew', 'salesRenewal'] as const).map((k) => (
+              <FormField key={k} label={k === 'salesNew' ? 'GWS 新約業務' : 'GWS 續約業務'} help={k === 'salesRenewal' ? 'GWS 到期通知會寄給續約業務。' : undefined}>
+                {(p) => (
+                  <select {...p} className="select" value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}>
+                    <option value="">未指定</option>
+                    {(salesPeople.data ?? []).map((n) => (
+                      <option key={n}>{n}</option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+            ))}
           </FormSection>
 
           {isTransfer && (

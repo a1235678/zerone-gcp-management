@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getAuditLogs, getCustomer, getOperations, recheckDomainVerification, setCustomerStatus } from '@data/api';
+import { addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { EmptyState } from '@shared/components/DataTable';
-import { Callout } from '@shared/components/Form';
+import { Callout, FormField } from '@shared/components/Form';
+import { StatusTag } from '@shared/components/StatusTag';
 import { Icon } from '@shared/components/Icon';
 import { Modal } from '@shared/components/Modal';
 import { PageHeader } from '@shared/components/PageHeader';
@@ -31,6 +32,11 @@ export function CustomerDetailPage() {
   const logs = useAsync(() => getAuditLogs({ customerId: id }), [id, version]);
 
   const [transferOpen, setTransferOpen] = useState(false);
+  const [domainOpen, setDomainOpen] = useState(false);
+  const [domainInput, setDomainInput] = useState('');
+  const [salesOpen, setSalesOpen] = useState(false);
+  const [salesForm, setSalesForm] = useState<Record<string, string>>({});
+  const salesPeople = useAsync(getSalesPeople);
   const [statusOpen, setStatusOpen] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -46,6 +52,43 @@ export function CustomerDetailPage() {
       </Card>
     );
 
+  const canEdit = can('customers', 'write');
+  const openSales = () => {
+    setSalesForm(Object.fromEntries(c.salesAssignments.map((a) => [`${a.product}-${a.term}`, a.salesName])));
+    setSalesOpen(true);
+  };
+  const saveSales = async () => {
+    try {
+      await saveSalesAssignments(
+        c.id,
+        Object.entries(salesForm).map(([k, salesName]) => {
+          const [product, term] = k.split('-') as ['GWS' | 'GCP', 'new' | 'renewal'];
+          return { product, term, salesName };
+        }),
+      );
+      toast('已更新負責業務');
+      setSalesOpen(false);
+      reload();
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    }
+  };
+  const domainCheck = domainInput ? checkDomain(domainInput) : undefined;
+  const addDomain = async () => {
+    try {
+      await addCustomerDomain(c.id, domainInput);
+      toast(`已新增網域 ${domainInput.trim()}`);
+      setDomainOpen(false);
+      reload();
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    }
+  };
+  const removeDomain = async (d: string) => {
+    await removeCustomerDomain(c.id, d);
+    toast(`已移除網域 ${d}`);
+    reload();
+  };
   const openTransfer = transfers.data?.find((o) => ['scheduled', 'pendingManual', 'submitted', 'manual'].includes(o.status));
 
   const recheck = async () => {
@@ -104,6 +147,7 @@ export function CustomerDetailPage() {
                 { label: '客戶名稱', value: c.name },
                 { label: '統一編號', value: <span className="mono">{c.taxId}</span> },
                 { label: '主網域', value: <span className="mono">{c.primaryDomain}</span> },
+                { label: '其他網域', value: c.otherDomains.length ? <span className="mono">{c.otherDomains.join('、')}</span> : '' },
                 { label: '經銷商', value: c.dealerName },
                 { label: '聯絡人', value: c.contactName },
                 { label: 'Email', value: <span className="mono">{c.contactEmail}</span> },
@@ -117,6 +161,55 @@ export function CustomerDetailPage() {
           </Card>
 
           <div className="stack">
+            <Card title="負責業務" actions={canEdit ? <button className="btn btn--sm" onClick={openSales}>編輯</button> : undefined} bodyless>
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>產品</th>
+                      <th>新約</th>
+                      <th>續約</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(['GWS', 'GCP'] as const).map((prod) => (
+                      <tr key={prod}>
+                        <td>
+                          {prod}
+                          {prod === 'GCP' && <div className="table__secondary">第一階段不納入</div>}
+                        </td>
+                        {(['new', 'renewal'] as const).map((term) => (
+                          <td key={term}>{c.salesAssignments.find((a) => a.product === prod && a.term === term)?.salesName ?? <span className="muted">未指定</span>}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted card__body" style={{ fontSize: 'var(--text-sm)', margin: 0, paddingTop: 'var(--space-3)' }}>
+                GWS 到期通知會寄給「續約」的負責業務和後勤。
+              </p>
+            </Card>
+
+            <Card title="網域" actions={canEdit ? <button className="btn btn--sm" onClick={() => { setDomainInput(''); setDomainOpen(true); }}>新增網域</button> : undefined} bodyless>
+              <ul className="list-plain">
+                <li>
+                  <span className="mono">{c.primaryDomain}</span>
+                  <StatusTag tone="info">主網域</StatusTag>
+                </li>
+                {c.otherDomains.map((d) => (
+                  <li key={d}>
+                    <span className="mono">{d}</span>
+                    {canEdit && (
+                      <button className="btn btn--sm btn--ghost" onClick={() => removeDomain(d)}>
+                        移除
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+
             <Card title="Google 網域驗證">
               <div className="stack" style={{ gap: 'var(--space-3)' }}>
                 <div className="inline">
@@ -198,6 +291,69 @@ export function CustomerDetailPage() {
         }}
       />
       <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={reload} />
+      <Modal
+        open={domainOpen}
+        onClose={() => setDomainOpen(false)}
+        title="新增網域"
+        width={440}
+        footer={
+          <>
+            <button className="btn" onClick={() => setDomainOpen(false)}>
+              取消
+            </button>
+            <button className="btn btn--primary" disabled={!domainCheck?.ok} onClick={addDomain}>
+              新增
+            </button>
+          </>
+        }
+      >
+        <FormField
+          label="網域"
+          required
+          help="例如 company-shop.example。和主網域一樣會檢查格式與是否重複。"
+          message={domainCheck && !domainCheck.ok ? domainCheck.message : domainCheck?.ok ? '可以使用' : undefined}
+          state={domainCheck ? (domainCheck.ok ? 'success' : 'error') : undefined}
+        >
+          {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={domainInput} onChange={(e) => setDomainInput(e.target.value)} />}
+        </FormField>
+      </Modal>
+      <Modal
+        open={salesOpen}
+        onClose={() => setSalesOpen(false)}
+        title="編輯負責業務"
+        width={520}
+        footer={
+          <>
+            <button className="btn" onClick={() => setSalesOpen(false)}>
+              取消
+            </button>
+            <button className="btn btn--primary" onClick={saveSales}>
+              儲存
+            </button>
+          </>
+        }
+      >
+        <p className="muted" style={{ marginTop: 0 }}>同一個客戶可以依產品、新約或續約指定不同業務。</p>
+        <div className="form-grid">
+          {(['GWS', 'GCP'] as const).flatMap((prod) =>
+            (['new', 'renewal'] as const).map((term) => {
+              const k = `${prod}-${term}`;
+              return (
+                <FormField key={k} label={`${prod} ${term === 'new' ? '新約' : '續約'}`}>
+                  {(p) => (
+                    <select {...p} className="select" value={salesForm[k] ?? ''} onChange={(e) => setSalesForm({ ...salesForm, [k]: e.target.value })}>
+                      <option value="">未指定</option>
+                      {(salesPeople.data ?? []).map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  )}
+                </FormField>
+              );
+            }),
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={statusOpen}

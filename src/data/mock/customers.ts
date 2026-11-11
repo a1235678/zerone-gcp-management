@@ -1,7 +1,7 @@
 import type { Customer } from '../types';
 
 // 名稱、統編、聯絡人皆為虛構；網域一律 .example
-export const customers: Customer[] = [
+const base: Customer[] = [
   c('C0001', '晨光設計工作室', '90010001', 'chenguang-design.example', 'D000', '陳品妤', '02-2700-1001', '林怡君', '2024-03-12'),
   c('C0002', '禾豐食品股份有限公司', '90010002', 'hefeng-foods.example', 'D001', '王建宏', '04-2300-1002', '林怡君', '2024-04-02'),
   c('C0003', '海岸線旅行社', '90010003', 'coastline-travel.example', 'D002', '張雅婷', '07-5500-1003', '黃柏翰', '2024-05-20'),
@@ -59,5 +59,31 @@ function c(
     note,
     status,
     domainVerification,
+    otherDomains: [],
+    salesAssignments: [],
   };
 }
+
+// 其他網域（一個客戶可以有多個網域）
+const otherDomains: Record<string, string[]> = {
+  C0002: ['hefeng-bakery.example'],
+  C0011: ['heguang-lab.example', 'heguang-care.example'],
+  C0024: ['qingchuan-semi.example'],
+};
+// 有 GCP 的客戶
+const gcpCustomers = new Set(['C0003', 'C0006', 'C0007', 'C0008', 'C0011', 'C0016', 'C0020', 'C0022', 'C0024']);
+const SALES = ['黃柏翰', '李冠霖'];
+
+/** 負責業務：新約沿用開發的業務；續約輪流分給兩位業務，示意同一客戶可以新約、續約不同人 */
+export const customers: Customer[] = base.map((c, i) => {
+  const newSales = SALES.includes(c.createdBy) ? c.createdBy : '李冠霖';
+  const renewalSales = SALES[i % 2];
+  const assignments: Customer['salesAssignments'] = [
+    { product: 'GWS', term: 'new', salesName: newSales },
+    { product: 'GWS', term: 'renewal', salesName: renewalSales },
+  ];
+  if (gcpCustomers.has(c.id)) {
+    assignments.push({ product: 'GCP', term: 'new', salesName: '黃柏翰' }, { product: 'GCP', term: 'renewal', salesName: '黃柏翰' });
+  }
+  return { ...c, otherDomains: otherDomains[c.id] ?? [], salesAssignments: assignments };
+});

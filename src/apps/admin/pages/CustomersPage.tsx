@@ -30,7 +30,16 @@ const columns: Column<CustomerListItem>[] = [
     ),
   },
   { key: 'taxId', header: '統一編號', render: (c) => <span className="mono">{c.taxId}</span> },
-  { key: 'domain', header: '主網域', render: (c) => <span className="mono">{c.primaryDomain}</span> },
+  {
+    key: 'domain',
+    header: '主網域',
+    render: (c) => (
+      <div>
+        <span className="mono">{c.primaryDomain}</span>
+        {c.otherDomains.length > 0 && <div className="table__secondary">另有 {c.otherDomains.length} 個網域</div>}
+      </div>
+    ),
+  },
   { key: 'dealer', header: '經銷商', render: (c) => c.dealerName },
   {
     key: 'contact',
@@ -41,6 +50,20 @@ const columns: Column<CustomerListItem>[] = [
         <div className="table__secondary mono">{c.contactEmail}</div>
       </div>
     ),
+  },
+  {
+    key: 'sales',
+    header: '負責業務（GWS）',
+    render: (c) => {
+      const n = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'new')?.salesName;
+      const r = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'renewal')?.salesName;
+      return (
+        <div>
+          <div>新約 {n ?? '—'}</div>
+          <div className="table__secondary">續約 {r ?? '—'}</div>
+        </div>
+      );
+    },
   },
   { key: 'createdAt', header: '建立日期', render: (c) => <span className="mono">{formatDate(c.createdAt)}</span> },
   {
@@ -114,7 +137,7 @@ export function CustomersPage() {
 
       <Card bodyless>
         <FilterBar onReset={hasFilter ? () => setParams({}, { replace: true }) : undefined}>
-          <SearchField label="關鍵字" value={keyword} onChange={(v) => setParam('q', v)} placeholder="客戶名稱、網域、統一編號或聯絡人" />
+          <SearchField label="關鍵字" value={keyword} onChange={(v) => setParam('q', v)} placeholder="客戶名稱、網域、統編、聯絡人或業務" />
           <SelectField
             label="經銷商"
             value={dealerId}
