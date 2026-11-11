@@ -21,6 +21,7 @@ import { NewCustomerPage } from './pages/NewCustomerPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RolesPage } from './pages/RolesPage';
 import { SchedulesPage } from './pages/SchedulesPage';
+import { SubscriptionDetailPage } from './pages/SubscriptionDetailPage';
 import { UsersPage } from './pages/UsersPage';
 import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
 import { WorkOrderFormPage } from './pages/WorkOrderFormPage';
@@ -83,6 +84,7 @@ function Protected() {
             <Route path="/catalog" element={<ProductsPage />} />
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
+            <Route path="/products/gws/:id" element={<SubscriptionDetailPage />} />
             <Route path="/products/gcp" element={<GcpIndex />} />
             <Route path="/products/gcp/usage" element={<GcpUsagePage />} />
             <Route path="/products/gcp/billing" element={<GcpBillingPage />} />

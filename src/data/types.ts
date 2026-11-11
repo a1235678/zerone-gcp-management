@@ -269,6 +269,7 @@ export interface WorkOrderQuery {
   status?: WorkOrderStatus | '';
   dealerId?: string;
   customerId?: string;
+  subscriptionId?: string;
 }
 export interface WorkOrderInput {
   type: WorkOrderType;
@@ -422,6 +423,7 @@ export interface ScheduleListItem extends Schedule {
   dealerName: string;
 }
 export interface ScheduleQuery {
+  subscriptionId?: string;
   kind?: ScheduleKind | '';
   action?: ScheduleAction | '';
   status?: ScheduleStatus | '';

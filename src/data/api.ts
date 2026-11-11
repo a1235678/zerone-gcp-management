@@ -508,6 +508,14 @@ export function getSubscriptions(query: SubscriptionQuery = {}): Promise<Subscri
 }
 
 /** 上架中的 GWS 方案名稱，依等級由低到高 */
+export function getSubscription(id: string): Promise<(SubscriptionListItem & { planTier: number; salesNew?: string; salesRenewal?: string }) | undefined> {
+  const s = db.subscriptions.find((x) => x.id === id);
+  if (!s) return delay(undefined);
+  const c = customerOf(s.customerId)!;
+  const sales = (term: 'new' | 'renewal') => c.salesAssignments.find((a) => a.product === s.product && a.term === term)?.salesName;
+  return delay({ ...subscriptionListItem(s), planTier: planTier(s.plan), salesNew: sales('new'), salesRenewal: sales('renewal') });
+}
+
 export function getPlans(): Promise<string[]> {
   return delay(activeGwsPlans().map((p) => p.name));
 }
@@ -602,10 +610,11 @@ export function getOperation(id: string): Promise<OperationListItem | undefined>
   return delay(op ? operationListItem(op) : undefined);
 }
 
-export function getOperations(query: { customerId?: string; type?: OperationType } = {}): Promise<OperationListItem[]> {
+export function getOperations(query: { customerId?: string; subscriptionId?: string; type?: OperationType } = {}): Promise<OperationListItem[]> {
   return delay(
     db.operations
       .filter((o) => !query.customerId || o.customerId === query.customerId)
+      .filter((o) => !query.subscriptionId || o.subscriptionId === query.subscriptionId)
       .filter((o) => !query.type || o.type === query.type)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map(operationListItem),
@@ -905,6 +914,7 @@ export function getWorkOrders(query: WorkOrderQuery = {}): Promise<WorkOrderList
     .filter((w) => !query.status || w.status === query.status)
     .filter((w) => !query.dealerId || w.dealerId === query.dealerId)
     .filter((w) => !query.customerId || w.customerId === query.customerId)
+    .filter((w) => !query.subscriptionId || w.subscriptionId === query.subscriptionId)
     .map(workOrderListItem)
     .filter((w) => includesKw(kw, w.id, w.customerName, w.primaryDomain, w.summary, w.createdBy))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -1311,6 +1321,7 @@ export function resolveReconcile(month: string, customerId: string, input: { how
 
 export function getSchedules(query: ScheduleQuery = {}): Promise<ScheduleListItem[]> {
   const rows = db.schedules
+    .filter((s) => !query.subscriptionId || s.subscriptionId === query.subscriptionId)
     .filter((s) => !query.kind || s.kind === query.kind)
     .filter((s) => !query.action || s.action === query.action)
     .filter((s) => !query.status || s.status === query.status)
@@ -1383,6 +1394,11 @@ function noticeRows(): ExpiryNoticeRow[] {
       };
     })
     .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+}
+
+/** 一筆訂閱的到期通知（通知日、收件人、是否已寄出） */
+export function getExpiryNoticeFor(subscriptionId: string): Promise<ExpiryNoticeRow | undefined> {
+  return delay(noticeRows().find((r) => r.subscriptionId === subscriptionId));
 }
 
 export function getExpiryNotices(): Promise<{ settings: typeof noticeSettings; rows: ExpiryNoticeRow[] }> {

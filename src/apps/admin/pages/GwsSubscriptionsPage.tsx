@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { EXPIRING_DAYS, daysUntil, getCustomers, getDealers, getPlans, getSubscriptions } from '@data/api';
 import { operationTypeLabel, subscriptionStatusLabel } from '@data/labels';
 import type { OperationType, SubscriptionListItem, SubscriptionStatus } from '@data/types';
@@ -25,6 +25,7 @@ const PAGE_SIZE = 15;
 
 export function GwsSubscriptionsPage() {
   const { can } = usePermission();
+  const navigate = useNavigate();
   const canOperate = can('subscriptions', 'write');
   const [params, setParams] = useSearchParams();
   const keyword = params.get('q') ?? '';
@@ -110,7 +111,7 @@ export function GwsSubscriptionsPage() {
       header: '進行中',
       render: (s) =>
         s.openOperations.length ? (
-          <div className="op-chips">
+          <div className="op-chips" onClick={(e) => e.stopPropagation()}>
             {s.openOperations.map((o) => (
               <button key={o.id} type="button" className="link-button inline" onClick={() => setPanelId(o.id)} title={`查看 ${o.id}`}>
                 <OperationStatusTag value={o.status} />
@@ -127,7 +128,7 @@ export function GwsSubscriptionsPage() {
       header: <span className="visually-hidden">操作</span>,
       render: (s) =>
         s.status === 'cancelled' || !canOperate ? null : (
-          <div className="row-actions">
+          <div className="row-actions" onClick={(e) => e.stopPropagation()}>
             <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}>
               續約
             </button>
@@ -162,7 +163,7 @@ export function GwsSubscriptionsPage() {
         titleAddon={<PendingTag id={5} hint="PM 想看哪些 GWS 資訊" />}
         description={
           <span className="inline">
-            以訂閱為單位，資料由 Google 同步回來。{canOperate ? '可以直接在這裡新訂、續約、加購、中途升版，依類型排程執行或人工執行。' : '你的角色只能查看；需要變更請開立執行單。'}
+            以訂閱為單位，資料由 Google 同步回來；點一列可以看訂閱詳情。{canOperate ? '可以直接在這裡新訂、續約、加購、中途升版，依類型排程執行或人工執行。' : '你的角色只能查看；需要變更請開立執行單。'}
             <PendingTag id={3} hint="能否抓到已購買方案" />
           </span>
         }
@@ -206,6 +207,7 @@ export function GwsSubscriptionsPage() {
           columns={columns}
           rows={pageRows}
           rowKey={(s) => s.id}
+          onRowClick={(s) => navigate(`/products/gws/${s.id}`)}
           loading={result.loading && !result.data}
           empty={<EmptyState title="沒有符合條件的訂閱" />}
         />
