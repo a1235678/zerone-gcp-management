@@ -140,7 +140,7 @@ export function WorkOrderDetailPage() {
           { label: '聯絡人', value: `${w.newCustomer.contactName}（${w.newCustomer.contactEmail}）` },
         ]
       : []),
-    { label: w.type === 'cancel' ? '取消原因' : '備註', value: p.memo ?? '', full: true },
+    { label: '備註', value: p.memo ?? '', full: true },
     { label: '開單人', value: w.createdBy },
     { label: '開單時間', value: <span className="mono">{formatDateTime(w.createdAt)}</span> },
   ];

@@ -76,9 +76,6 @@ export const operations: GwsOperation[] = [
   op('OP-1104-003', 'transfer', 'manual', 'C0027', undefined, { transferSource: 'otherDealer', transferToken: 'P3LM-7QZD-81CA', tokenExpiresAt: '2026-11-15' }, 'pendingManual', '2026-11-04 14:00', undefined, {
     workOrderId: 'WO-1017-001',
   }),
-  op('OP-1030-001', 'cancel', 'schedule', 'C0015', 'S016', { fromPlan: 'Business Standard', fromSeats: 22, memo: '經銷商暫停合作', scheduledAt: '2026-10-30' }, 'completed', '2026-10-29 17:00', '2026-10-30 10:31', {
-    scheduleId: 'J010',
-  }),
   op('OP-1028-001', 'addSeats', 'schedule', 'C0011', 'S012', { fromPlan: 'Enterprise Standard', fromSeats: 200, addSeats: 10, scheduledAt: '2026-10-28' }, 'completed', '2026-10-28 14:30', '2026-10-28 14:41', {
     workOrderId: 'WO-1027-001',
     scheduleId: 'J009',
@@ -96,5 +93,4 @@ export const operations: GwsOperation[] = [
     '2026-10-15 15:20',
     { manualNote: '已在 Google 經銷商後台設定續約並減為 12 席，等下次同步確認' },
   ),
-  op('OP-1002-001', 'cancel', 'schedule', 'C0009', 'S010', { fromPlan: 'Business Starter', fromSeats: 12, memo: '客戶停止合作', scheduledAt: '2026-10-02' }, 'completed', '2026-10-01 16:00', '2026-10-02 00:01'),
 ];

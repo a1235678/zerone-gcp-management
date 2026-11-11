@@ -114,9 +114,9 @@ export interface SubscriptionQuery {
 /**
  * 2026/11/10 會議定案的訂單類型：
  * new 新訂（全新客戶）、transfer 新訂（移轉進來）、renewal 續約、addSeats 加購、upgrade 中途升版。
- * cancel 取消訂閱：會議沒有列出，是否保留待確認。
+ * 不提供取消訂閱（2026/11/11 確認）；續約也不提供取消。
  */
-export type OperationType = 'new' | 'transfer' | 'renewal' | 'addSeats' | 'upgrade' | 'cancel';
+export type OperationType = 'new' | 'transfer' | 'renewal' | 'addSeats' | 'upgrade';
 /** 排程執行：到啟用時間由系統送 Google；人工執行：後勤在 Google 後台處理後回來標記 */
 export type ExecutionMode = 'schedule' | 'manual';
 /** selfPaid：客戶自己刷卡、要移轉進來；otherDealer：從其他經銷商移轉（需移轉 ID） */
@@ -195,7 +195,7 @@ export interface NewOperationInput {
 export interface OrderAnalysis {
   execution: ExecutionMode;
   /** 執行方式還沒定案時，對應的待確認編號 */
-  pendingId?: 16 | 17 | 19;
+  pendingId?: 16 | 17;
   planChange?: 'up' | 'down' | 'same';
   /** 續約後與目前的席次差 */
   seatChange?: number;
@@ -400,7 +400,7 @@ export interface Reconciliation {
 
 // ── 排程 ───────────────────────────────
 export type ScheduleKind = 'once' | 'monthly' | 'yearly';
-export type ScheduleAction = 'new' | 'addSeats' | 'renew' | 'upgrade' | 'cancel' | 'sync';
+export type ScheduleAction = 'new' | 'addSeats' | 'renew' | 'upgrade' | 'sync';
 export type ScheduleStatus = 'waiting' | 'running' | 'done' | 'failed' | 'cancelled';
 export interface Schedule {
   id: string;

@@ -35,7 +35,6 @@ export const workOrderTypeLabel: Record<WorkOrderType, string> = {
   renewal: '續約',
   addSeats: '加購',
   upgrade: '中途升版',
-  cancel: '取消訂閱',
 };
 export const operationTypeLabel = workOrderTypeLabel;
 
@@ -69,7 +68,6 @@ export const scheduleActionLabel: Record<ScheduleAction, string> = {
   addSeats: '加購席次',
   upgrade: '中途升版',
   renew: '續約',
-  cancel: '取消訂閱',
   sync: '同步訂閱資料',
 };
 export const scheduleStatusLabel: Record<ScheduleStatus, string> = {

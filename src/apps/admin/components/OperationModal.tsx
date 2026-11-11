@@ -49,7 +49,7 @@ export function ChangeTags({ planChange, seatChange }: { planChange?: 'up' | 'do
 }
 
 /**
- * 訂單操作：新訂、新訂（移轉）、續約、加購、中途升版、取消訂閱（2026/11/10 會議）。
+ * 訂單操作：新訂、新訂（移轉）、續約、加購、中途升版（2026/11/10 會議；不提供取消訂閱）。
  * 依類型與內容判斷「排程執行」或「人工執行」，畫面上直接顯示。
  * 從執行單開啟時，欄位會帶入執行單的內容（仍可修改），並記錄來源單號。
  */
@@ -139,7 +139,6 @@ export function OperationModal({
       if (date < TODAY) e.scheduledAt = '啟用日不能早於今天';
       else if (maxDate && date > maxDate) e.scheduledAt = `啟用日不能晚於合約結束日 ${formatDate(maxDate)}`;
     }
-    if (type === 'cancel' && !memo.trim()) e.memo = '請填寫取消原因';
     if (type === 'transfer') {
       if (!source) e.source = '請選擇移轉來源';
       if (source === 'otherDealer') Object.assign(e, checkTransferToken(token, tokenExpiresAt));
@@ -208,7 +207,7 @@ export function OperationModal({
           <button type="button" className="btn" onClick={onClose}>
             取消
           </button>
-          <button type="button" className={`btn ${type === 'cancel' ? 'btn--danger' : 'btn--primary'}`} disabled={saving} onClick={submit}>
+          <button type="button" className="btn btn--primary" disabled={saving} onClick={submit}>
             {saving ? '送出中…' : analysis.execution === 'schedule' ? '建立排程' : '建立人工執行'}
           </button>
         </>
@@ -323,7 +322,6 @@ export function OperationModal({
           </div>
         )}
 
-        {type === 'cancel' && <Callout tone="warning" title="取消後無法復原">執行後，這筆訂閱的所有授權會停止。</Callout>}
 
         {type === 'transfer' && (
           <>
@@ -370,7 +368,7 @@ export function OperationModal({
           </>
         )}
 
-        <FormField label={type === 'cancel' ? '取消原因' : '備註'} required={type === 'cancel'} message={show('memo')} state={st('memo')}>
+        <FormField label="備註">
           {(p) => <textarea {...p} className="textarea" value={memo} onChange={(e) => setMemo(e.target.value)} />}
         </FormField>
 

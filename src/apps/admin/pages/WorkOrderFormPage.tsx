@@ -14,8 +14,8 @@ import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
 
 const emptyCustomer: NewCustomerDraft = { name: '', taxId: '', primaryDomain: '', contactName: '', contactEmail: '', contactPhone: '', note: '' };
-const types: WorkOrderType[] = ['new', 'transfer', 'renewal', 'addSeats', 'upgrade', 'cancel'];
-const needsSubscription = (t: WorkOrderType) => t === 'renewal' || t === 'addSeats' || t === 'upgrade' || t === 'cancel';
+const types: WorkOrderType[] = ['new', 'transfer', 'renewal', 'addSeats', 'upgrade'];
+const needsSubscription = (t: WorkOrderType) => t === 'renewal' || t === 'addSeats' || t === 'upgrade';
 
 /** 業務開立或修改執行單（草稿、已退回才能修改） */
 export function WorkOrderFormPage() {
@@ -143,7 +143,7 @@ export function WorkOrderFormPage() {
                     type="button"
                     aria-pressed={input.customerMode === 'new'}
                     disabled={needsSubscription(input.type)}
-                    title={needsSubscription(input.type) ? '續約、加購、中途升版、取消訂閱只適用現有客戶' : undefined}
+                    title={needsSubscription(input.type) ? '續約、加購、中途升版只適用現有客戶' : undefined}
                     onClick={() => setInput((x) => ({ ...x, customerMode: 'new', customerId: undefined, subscriptionId: undefined }))}
                   >
                     新客戶
@@ -348,11 +348,6 @@ export function WorkOrderFormPage() {
                 )}
               </>
             )}
-            {input.type === 'cancel' && (
-              <Callout tone="warning" title={<span className="inline">取消訂閱 <PendingTag id={19} /></span>}>
-                核准後由後勤處理，完成後這筆訂閱的所有授權會停止。
-              </Callout>
-            )}
             {(input.type === 'new' || input.type === 'transfer' || sub) && (
               <div className="is-full exec-box" style={{ gridColumn: '1 / -1' }}>
                 <div className="exec-box__head">
@@ -368,7 +363,7 @@ export function WorkOrderFormPage() {
                 </ul>
               </div>
             )}
-            <FormField label={input.type === 'cancel' ? '取消原因' : '備註'} required={input.type === 'cancel'} className="is-full" message={show('memo')} state={st('memo')}>
+            <FormField label="備註" className="is-full">
               {(p) => <textarea {...p} className="textarea" value={input.payload.memo ?? ''} onChange={(e) => setPayload('memo', e.target.value)} />}
             </FormField>
           </FormSection>

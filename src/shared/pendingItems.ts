@@ -1,5 +1,5 @@
 // 對應 docs/handoff.md「待確認事項」。答案出來後在這裡移除或更新，畫面上的「待確認」標籤會跟著變。
-// 已確認並移除：#2 帳單是獨立權限項目、#8 不做發票功能（2026/11/10）。
+// 已確認並移除：#2 帳單是獨立權限項目、#8 不做發票功能（2026/11/10）；#19 不提供取消訂閱（2026/11/11）。
 export const pendingItems = {
   1: { question: '客戶由誰建立？目前傳聞是 Connie', owner: 'Connie' },
   3: { question: 'API 能不能抓到 GWS 已購買的方案', owner: 'Terry' },
@@ -17,7 +17,6 @@ export const pendingItems = {
   16: { question: '合約未到期前的中途升版，能否做自動排程', owner: 'Terry' },
   17: { question: '續約降版能否排程執行（目前先人工執行）', owner: 'Terry' },
   18: { question: '到期通知要提前幾天寄', owner: '待指定' },
-  19: { question: '會議沒有列出「取消訂閱」，是否保留', owner: '待指定' },
 } as const;
 
 export type PendingId = keyof typeof pendingItems;

@@ -566,8 +566,6 @@ export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan'
         reasons: ['合約未到期前升版，預計排程執行（能否自動排程待 Terry 確認）'],
         defaultDate: TODAY,
       };
-    case 'cancel':
-      return { execution: 'schedule', pendingId: 19, reasons: ['會議沒有列出取消訂閱，是否保留待確認'], defaultDate: TODAY };
   }
 }
 
@@ -591,8 +589,6 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
       return `加購 ${p.addSeats} 席（${fromSeats} → ${fromSeats + (p.addSeats ?? 0)}）`;
     case 'upgrade':
       return `${fromPlan} → ${p.plan}`;
-    case 'cancel':
-      return `取消 ${fromPlan}`;
   }
 }
 
@@ -638,7 +634,7 @@ export function validateOperation(input: NewOperationInput): string | undefined 
   if (input.type !== 'new' && input.type !== 'transfer') {
     if (!sub) return '找不到訂閱';
     if (sub.status === 'cancelled') return '這筆訂閱已取消';
-    const same = db.operations.find((o) => o.subscriptionId === sub.id && isOpen(o) && (o.type === input.type || input.type === 'cancel'));
+    const same = db.operations.find((o) => o.subscriptionId === sub.id && isOpen(o) && o.type === input.type);
     if (same) return `這筆訂閱已有處理中的${operationTypeLabel[same.type]} ${same.id}`;
   }
   const activePlans = activeGwsPlans().map((x) => x.name);
@@ -652,7 +648,6 @@ export function validateOperation(input: NewOperationInput): string | undefined 
   }
   if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) return '加購人數需為大於 0 的整數，加購不能減人';
   if (input.type === 'upgrade' && planChangeOf(sub?.plan, p.plan) !== 'up') return '中途升版只能選比目前高的方案';
-  if (input.type === 'cancel' && !p.memo?.trim()) return '請填寫取消原因';
   if (p.scheduledAt && p.scheduledAt < TODAY) return '啟用日不能早於今天';
   if (input.type === 'transfer') {
     if (!p.transferSource) return '請選擇移轉來源';
@@ -672,7 +667,6 @@ const scheduleActionOf: Record<OperationType, Schedule['action'] | undefined> = 
   renewal: 'renew',
   addSeats: 'addSeats',
   upgrade: 'upgrade',
-  cancel: 'cancel',
 };
 
 /** 建立訂單操作：排程執行的建立排程，人工執行的進入「待人工執行」 */
@@ -803,9 +797,6 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
     case 'upgrade':
       if (sub && p.plan) sub.plan = p.plan;
       break;
-    case 'cancel':
-      if (sub) sub.status = 'cancelled';
-      break;
     case 'new': {
       const id = `S${String(db.subscriptions.length + 1).padStart(3, '0')}`;
       const start = p.scheduledAt ?? TODAY;
@@ -928,8 +919,8 @@ export function getWorkOrder(id: string): Promise<WorkOrderListItem | undefined>
 /** 檢查執行單內容，回傳欄位錯誤（key 為欄位名稱） */
 export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Record<string, string> {
   const e: Record<string, string> = {};
-  const needsSubscription = input.type === 'renewal' || input.type === 'addSeats' || input.type === 'upgrade' || input.type === 'cancel';
-  if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、加購、中途升版、取消訂閱只適用現有客戶';
+  const needsSubscription = input.type === 'renewal' || input.type === 'addSeats' || input.type === 'upgrade';
+  if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、加購、中途升版只適用現有客戶';
   if (input.customerMode === 'existing' && !input.customerId) e.customerId = '請選擇客戶';
   if (needsSubscription && input.customerId && !input.subscriptionId) e.subscriptionId = '請選擇訂閱';
   if (input.customerMode === 'new') {
@@ -960,7 +951,6 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
   if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) e.addSeats = '加購人數需為大於 0 的整數';
   if (input.type === 'upgrade' && p.plan && sub && planChangeOf(sub.plan, p.plan) !== 'up') e.plan = '中途升版只能選比目前高的方案';
   if (input.type === 'transfer' && !p.transferSource) e.transferSource = '請選擇移轉來源';
-  if (input.type === 'cancel' && !p.memo?.trim()) e.memo = '請填寫取消原因';
   return e;
 }
 
@@ -981,7 +971,6 @@ function applyInput(wo: WorkOrder, input: WorkOrderInput) {
     renewal: { plan: p.plan, seats: p.seats, renewMonths: p.renewMonths, memo },
     addSeats: { addSeats: p.addSeats, memo },
     upgrade: { plan: p.plan, memo },
-    cancel: { memo },
   };
   wo.payload = pick[input.type];
 }

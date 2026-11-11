@@ -142,9 +142,6 @@ export function GwsSubscriptionsPage() {
             >
               中途升版
             </button>
-            <button className="btn btn--sm btn--danger" onClick={() => setAction({ type: 'cancel', target: toTarget(s) })}>
-              取消訂閱
-            </button>
           </div>
         ),
     },
