@@ -1346,6 +1346,75 @@ export function cancelSchedule(id: string): Promise<void> {
   return delay(undefined);
 }
 
+// ═════════ 到期通知 ═════════
+// GWS 到期前 N 天寄信給負責續約的業務和後勤（2026/11/10 會議；天數待定 #18、是否第一階段待定 #7）
+
+const OPS_NOTICE = { name: '何佩真', email: 'peichen.ho@zerone.example' };
+const noticeSettings = { enabled: true, daysBefore: 30 };
+const manualNotices: Record<string, string> = {};
+
+export interface ExpiryNoticeRow {
+  subscriptionId: string;
+  customerId: string;
+  customerName: string;
+  primaryDomain: string;
+  plan: string;
+  seats: number | null;
+  expiresAt: string;
+  noticeDate: string;
+  recipients: { name: string; email: string; role: string }[];
+  /** 已寄出的時間；還沒寄是 undefined */
+  sentAt?: string;
+}
+
+function noticeRows(): ExpiryNoticeRow[] {
+  return db.subscriptions
+    .filter((s) => s.product === 'GWS' && s.status !== 'cancelled')
+    .map((s) => {
+      const c = customerOf(s.customerId)!;
+      const salesName = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'renewal')?.salesName;
+      const sales = db.users.find((u) => u.name === salesName);
+      const noticeDate = addDays(s.expiresAt, -noticeSettings.daysBefore);
+      const recipients = [
+        ...(sales ? [{ name: sales.name, email: sales.email, role: '續約業務' }] : []),
+        { ...OPS_NOTICE, role: '後勤' },
+      ];
+      const autoSent = noticeSettings.enabled && noticeDate <= TODAY && noticeDate >= addDays(TODAY, -45) ? `${noticeDate} 08:00` : undefined;
+      return {
+        subscriptionId: s.id,
+        customerId: c.id,
+        customerName: c.name,
+        primaryDomain: c.primaryDomain,
+        plan: s.plan,
+        seats: s.seats,
+        expiresAt: s.expiresAt,
+        noticeDate,
+        recipients,
+        sentAt: manualNotices[s.id] ?? autoSent,
+      };
+    })
+    .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+}
+
+export function getExpiryNotices(): Promise<{ settings: typeof noticeSettings; rows: ExpiryNoticeRow[] }> {
+  return delay({ settings: noticeSettings, rows: noticeRows().filter((r) => r.expiresAt >= TODAY && r.expiresAt <= addDays(TODAY, 120)) });
+}
+
+export function saveExpiryNoticeSettings(input: { enabled: boolean; daysBefore: number }): Promise<void> {
+  if (!Number.isInteger(input.daysBefore) || input.daysBefore < 1 || input.daysBefore > 180) return fail('天數請填 1 到 180 的整數');
+  Object.assign(noticeSettings, input);
+  log('sync', '到期通知', `${input.enabled ? '啟用' : '停用'}到期通知，到期前 ${input.daysBefore} 天寄出`);
+  return delay(undefined);
+}
+
+export function sendExpiryNoticeNow(subscriptionId: string): Promise<void> {
+  const r = noticeRows().find((x) => x.subscriptionId === subscriptionId);
+  if (!r) return fail('找不到訂閱');
+  manualNotices[subscriptionId] = now();
+  log('sync', r.primaryDomain, `手動寄出到期通知給 ${r.recipients.map((x) => x.name).join('、')}`, 'success', r.customerId);
+  return delay(undefined);
+}
+
 // ═════════ 使用者 ═════════
 
 function nextUserId() {

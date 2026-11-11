@@ -62,7 +62,12 @@ export function GcpUsagePage() {
     <>
       <PageHeader
         title="GCP 流量與用量"
-        titleAddon={<PendingTag hint="資料來源預計為 GCP Billing 匯出，待 Terry 確認" />}
+        titleAddon={
+          <>
+            <PendingTag hint="第一階段不納入，保留供討論" />
+            <PendingTag hint="資料來源預計為 GCP Billing 匯出，待 Terry 確認" />
+          </>
+        }
         description={
           <>
             統計期間 <span className="mono">{formatDate(u.periodStart)}</span> 至 <span className="mono">{formatDate(u.periodEnd)}</span>（近 30 天）。

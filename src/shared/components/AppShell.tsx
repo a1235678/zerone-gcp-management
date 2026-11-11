@@ -110,9 +110,9 @@ export function AppShell({
             {current
               ? current.trail.map((t, i) =>
                   i === current.trail.length - 1 ? (
-                    <strong key={t}>{t}</strong>
+                    <strong key={i}>{t}</strong>
                   ) : (
-                    <span key={t} className="topbar__crumb">
+                    <span key={i} className="topbar__crumb">
                       <span>{t}</span>
                       <Icon name="chevronRight" size={14} />
                     </span>
@@ -201,7 +201,7 @@ function findCurrent(nav: NavGroup[], pathname: string) {
   for (const g of nav) {
     for (const item of g.items) {
       if (item.children) item.children.forEach((c) => consider(c.to, [g.label, item.label, c.label]));
-      else consider(item.to, [g.label, item.label]);
+      else consider(item.to, g.label === item.label ? [item.label] : [g.label, item.label]);
     }
   }
   return best;

@@ -30,7 +30,13 @@ export const adminNav: NavGroup[] = [
       },
     ],
   },
-  { label: '排程', items: [{ to: '/schedules/gws', label: 'GWS 排程中心', icon: 'schedule' }] },
+  {
+    label: '排程',
+    items: [
+      { to: '/schedules/gws', label: 'GWS 排程中心', icon: 'schedule' },
+      { to: '/schedules/notifications', label: '到期通知', icon: 'bell' },
+    ],
+  },
   {
     label: '系統',
     items: [
@@ -53,6 +59,7 @@ export const pageResource: Record<string, ResourceKey> = {
   '/products/gcp/usage': 'gcpUsage',
   '/products/gcp/billing': 'billing',
   '/schedules/gws': 'schedules',
+  '/schedules/notifications': 'schedules',
   '/system/users': 'accounts',
   '/system/roles': 'roles',
   '/system/logs': 'auditLogs',
