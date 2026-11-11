@@ -42,7 +42,7 @@ type Key = keyof typeof empty;
 
 /**
  * 新增客戶，或「轉入客戶」：從其他經銷商轉進來的客戶。
- * 轉入時同一張表單多了轉移碼欄位，送出後建立客戶主檔並直接送出 Google 轉移。
+ * 轉入時同一張表單多了轉移碼欄位，送出後建立客戶主檔，並建立一筆「新訂（移轉）」由後勤人工執行。
  * 網址帶 ?fromWo=單號 時，從執行單帶入新客戶資料，建立後接回執行單。
  */
 export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
@@ -122,7 +122,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     try {
       if (isTransfer) {
         const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, memo: form.transferMemo });
-        toast(`已建立「${customer.name}」並送出 Google 轉移（${operation.id}）`);
+        toast(`已建立「${customer.name}」，移轉（${operation.id}）待後勤人工執行`);
         navigate(`/customers/${customer.id}`);
       } else {
         const c = await createCustomer({ ...form, ...admin });
@@ -202,7 +202,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         }
         description={
           isTransfer
-            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，並直接送出 Google 轉移。'
+            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，並建立一筆移轉，由後勤在 Google 後台人工執行。'
             : '建立客戶主檔，同時建立該客戶的第一個「組織管理員」帳號。'
         }
       />
@@ -289,7 +289,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           </FormSection>
 
           {isTransfer && (
-            <FormSection title="轉移資訊" description="建立客戶後會直接送出 Google，畫面會顯示處理結果。">
+            <FormSection title="轉移資訊" description="從其他經銷商移轉由後勤人工執行：建立客戶後狀態為「待人工執行」，後勤在 Google 後台接受移轉後回來標記。">
               <FormField label="轉移碼" required message={err('transferToken')} state={errState('transferToken')}>
                 {(p) => (
                   <input
@@ -354,7 +354,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             取消
           </Link>
           <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
-            {saving ? '處理中…' : isTransfer ? '建立客戶並送出 Google 轉移' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
+            {saving ? '處理中…' : isTransfer ? '建立客戶並建立移轉' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
           </button>
         </div>
       </form>

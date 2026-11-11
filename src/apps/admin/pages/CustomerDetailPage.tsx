@@ -46,7 +46,7 @@ export function CustomerDetailPage() {
       </Card>
     );
 
-  const openTransfer = transfers.data?.find((o) => o.status === 'submitted' || o.status === 'manual');
+  const openTransfer = transfers.data?.find((o) => ['scheduled', 'pendingManual', 'submitted', 'manual'].includes(o.status));
 
   const recheck = async () => {
     setChecking(true);
@@ -149,7 +149,7 @@ export function CustomerDetailPage() {
                           {o.id}
                         </button>
                         <div className="table__secondary">
-                          {formatDateTime(o.createdAt)} · 轉移碼 <span className="mono">{o.payload.transferToken}</span>
+                          {formatDateTime(o.createdAt)} · {o.summary}
                           {o.workOrderId && (
                             <>
                               {' '}
@@ -166,14 +166,14 @@ export function CustomerDetailPage() {
               ) : (
                 <div className="card__body">
                   <p className="muted">
-                    這個客戶沒有轉移紀錄。新客戶從其他經銷商轉入時，請用客戶管理的「轉入客戶」；已在系統裡的客戶才從這裡送出轉移。
+                    這個客戶沒有移轉紀錄。新客戶要移轉進來時，請用客戶管理的「轉入客戶」；已在系統裡的客戶才從這裡建立移轉。
                   </p>
                 </div>
               )}
               {openTransfer && (
                 <div className="card__body" style={{ borderTop: '1px solid var(--color-border)' }}>
                   <Callout tone="neutral">
-                    已有處理中的轉移 {openTransfer.id}，處理完才能再送出。
+                    已有處理中的移轉 {openTransfer.id}，處理完才能再建立。
                   </Callout>
                 </div>
               )}

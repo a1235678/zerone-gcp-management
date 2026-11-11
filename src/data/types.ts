@@ -86,9 +86,8 @@ export interface SubscriptionListItem extends Subscription {
   primaryDomain: string;
   dealerId: string;
   dealerName: string;
-  /** 這筆訂閱目前有沒有送出中（或待處理）的 Google 操作 */
-  openOperationId?: string;
-  openOperationStatus?: OperationStatus;
+  /** 這筆訂閱尚未結束的操作（已排程、待人工、送出中、手動待同步），加上最近一次失敗的 */
+  openOperations: { id: string; type: OperationType; status: OperationStatus }[];
 }
 export interface SubscriptionQuery {
   product?: ProductCode;
@@ -99,21 +98,44 @@ export interface SubscriptionQuery {
   plan?: string;
 }
 
-// ── GWS 操作（後勤直接送 Google 的變更） ─────
-export type OperationType = 'new' | 'renewal' | 'seats' | 'transfer' | 'cancel';
+// ── GWS 訂單操作（後勤直接處理的變更） ─────
 /**
+ * 2026/11/10 會議定案的訂單類型：
+ * new 新訂（全新客戶）、transfer 新訂（移轉進來）、renewal 續約、addSeats 加購、upgrade 中途升版。
+ * cancel 取消訂閱：會議沒有列出，是否保留待確認。
+ */
+export type OperationType = 'new' | 'transfer' | 'renewal' | 'addSeats' | 'upgrade' | 'cancel';
+/** 排程執行：到啟用時間由系統送 Google；人工執行：後勤在 Google 後台處理後回來標記 */
+export type ExecutionMode = 'schedule' | 'manual';
+/** selfPaid：客戶自己刷卡、要移轉進來；otherDealer：從其他經銷商移轉（需移轉 ID） */
+export type TransferSource = 'selfPaid' | 'otherDealer';
+/**
+ * scheduled：已排程，等啟用時間
+ * pendingManual：待人工執行
  * submitted：已送出 Google，等待回應
  * completed：完成
  * failed：Google 回應失敗，可以重試或改為手動
- * manual：改為在 Google 手動處理，等下次同步確認
+ * manual：已在 Google 手動處理，等下次同步確認
+ * cancelled：已取消（取消排程）
  */
-export type OperationStatus = 'submitted' | 'completed' | 'failed' | 'manual';
+export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'completed' | 'failed' | 'manual' | 'cancelled';
 export interface OperationPayload {
+  /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
+  /** 新訂的席次，或續約後的席次 */
   seats?: number;
+  /** 加購的人數 */
+  addSeats?: number;
+  /** 送出當下的方案與席次（續約、加購、升版） */
+  fromPlan?: string;
   fromSeats?: number;
-  toSeats?: number;
   renewMonths?: number;
+  /** 續約後的新合約起迄 */
+  newStartsAt?: string;
+  newExpiresAt?: string;
+  /** 排程執行的啟用日 */
+  scheduledAt?: string;
+  transferSource?: TransferSource;
   transferToken?: string;
   tokenExpiresAt?: string;
   memo?: string;
@@ -133,6 +155,9 @@ export interface GwsOperation {
   /** 由執行單發起時記錄來源 */
   workOrderId?: string;
   payload: OperationPayload;
+  execution: ExecutionMode;
+  /** 排程執行時在 GWS 排程中心建立的排程 */
+  scheduleId?: string;
   status: OperationStatus;
   failureReason?: string;
   manualNote?: string;
@@ -154,7 +179,22 @@ export interface NewOperationInput {
   workOrderId?: string;
   payload: OperationPayload;
 }
-export type OperationAction = 'simulateSuccess' | 'simulateFailure' | 'retry' | 'markManual' | 'simulateSync';
+/** 一筆訂單依規則判斷出來的結果，畫面與資料層共用 */
+export interface OrderAnalysis {
+  execution: ExecutionMode;
+  /** 執行方式還沒定案時，對應的待確認編號 */
+  pendingId?: 16 | 17 | 19;
+  planChange?: 'up' | 'down' | 'same';
+  /** 續約後與目前的席次差 */
+  seatChange?: number;
+  /** 為什麼用這種執行方式 */
+  reasons: string[];
+  /** 排程執行的預設啟用日 */
+  defaultDate?: string;
+  newStartsAt?: string;
+  newExpiresAt?: string;
+}
+export type OperationAction = 'runSchedule' | 'cancelSchedule' | 'simulateSuccess' | 'simulateFailure' | 'retry' | 'completeManual' | 'markManual' | 'simulateSync';
 
 // ── 執行單（業務的需求單，簽核後由後勤處理） ─────
 export type WorkOrderType = OperationType;
@@ -172,8 +212,9 @@ export interface NewCustomerDraft {
 export interface WorkOrderPayload {
   plan?: string;
   seats?: number;
-  toSeats?: number;
+  addSeats?: number;
   renewMonths?: number;
+  transferSource?: TransferSource;
   memo?: string;
 }
 export interface WorkOrder {
@@ -347,7 +388,7 @@ export interface Reconciliation {
 
 // ── 排程 ───────────────────────────────
 export type ScheduleKind = 'once' | 'monthly' | 'yearly';
-export type ScheduleAction = 'addSeats' | 'removeSeats' | 'renew' | 'cancel' | 'sync';
+export type ScheduleAction = 'new' | 'addSeats' | 'renew' | 'upgrade' | 'cancel' | 'sync';
 export type ScheduleStatus = 'waiting' | 'running' | 'done' | 'failed' | 'cancelled';
 export interface Schedule {
   id: string;
@@ -358,6 +399,8 @@ export interface Schedule {
   enabledAt: string;
   customerId: string;
   subscriptionId?: string;
+  /** 由訂單操作建立的排程 */
+  operationId?: string;
   detail: string;
   createdBy: string;
 }

@@ -8,6 +8,8 @@ import type {
   OrgType,
   PermissionLevel,
   ResourceKey,
+  ExecutionMode,
+  TransferSource,
   BillDisplayStatus,
   ReconcileState,
   ReconcileHow,
@@ -28,10 +30,11 @@ export const domainVerificationLabel: Record<DomainVerification, string> = { ver
 export const subscriptionStatusLabel: Record<SubscriptionStatus, string> = { active: '使用中', expiring: '即將到期', cancelled: '已取消' };
 
 export const workOrderTypeLabel: Record<WorkOrderType, string> = {
-  new: '新訂閱',
+  new: '新訂',
+  transfer: '新訂（移轉）',
   renewal: '續約',
-  seats: '調整席次',
-  transfer: '客戶轉移',
+  addSeats: '加購',
+  upgrade: '中途升版',
   cancel: '取消訂閱',
 };
 export const operationTypeLabel = workOrderTypeLabel;
@@ -49,16 +52,22 @@ export const workOrderStatusLabel: Record<WorkOrderStatus, string> = {
 export const workOrderFlow: WorkOrderStatus[] = ['draft', 'salesReview', 'techReview', 'approved', 'processing', 'completed'];
 
 export const operationStatusLabel: Record<OperationStatus, string> = {
+  scheduled: '已排程',
+  pendingManual: '待人工執行',
   submitted: '已送出 Google',
   completed: '完成',
   failed: '失敗',
-  manual: '手動處理・待同步確認',
+  manual: '已手動處理・待同步',
+  cancelled: '已取消',
 };
+export const executionModeLabel: Record<ExecutionMode, string> = { schedule: '排程執行', manual: '人工執行' };
+export const transferSourceLabel: Record<TransferSource, string> = { selfPaid: '客戶自己刷卡，要移轉進來', otherDealer: '從其他經銷商移轉' };
 
 export const scheduleKindLabel: Record<ScheduleKind, string> = { once: '單次', monthly: '每月', yearly: '每年' };
 export const scheduleActionLabel: Record<ScheduleAction, string> = {
-  addSeats: '增加席次',
-  removeSeats: '減少席次',
+  new: '新訂',
+  addSeats: '加購席次',
+  upgrade: '中途升版',
   renew: '續約',
   cancel: '取消訂閱',
   sync: '同步訂閱資料',

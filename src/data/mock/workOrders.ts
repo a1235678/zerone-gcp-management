@@ -68,14 +68,14 @@ const newClinic: NewCustomerDraft = {
 };
 
 export const workOrders: WorkOrder[] = [
-  wo('WO-1105-002', 'renewal', { customerId: 'C0019' }, 'D001', 'S020', { renewMonths: 12 }, '李冠霖', '2026-11-05 09:40', [['2026-11-05 09:44', 'salesReview']]),
-  wo('WO-1105-001', 'seats', { customerId: 'C0016' }, 'D002', 'S017', { toSeats: 70, memo: '新進人員 6 名' }, '黃柏翰', '2026-11-05 09:12', []),
+  wo('WO-1105-002', 'renewal', { customerId: 'C0019' }, 'D001', 'S020', { plan: 'Business Plus', seats: 16, renewMonths: 12, memo: '客戶要升級到 Business Plus' }, '李冠霖', '2026-11-05 09:40', [['2026-11-05 09:44', 'salesReview']]),
+  wo('WO-1105-001', 'addSeats', { customerId: 'C0016' }, 'D002', 'S017', { addSeats: 6, memo: '新進人員 6 名' }, '黃柏翰', '2026-11-05 09:12', []),
   wo('WO-1104-001', 'new', { newCustomer: newClinic }, 'D000', undefined, { plan: 'Business Starter', seats: 10 }, '黃柏翰', '2026-11-04 15:10', [
     ['2026-11-04 15:12', 'salesReview'],
     ['2026-11-04 16:30', 'techReview'],
     ['2026-11-05 09:05', 'approved'],
   ]),
-  wo('WO-1104-002', 'seats', { customerId: 'C0012' }, 'D000', 'S013', { toSeats: 8 }, '黃柏翰', '2026-11-04 09:58', [
+  wo('WO-1104-002', 'addSeats', { customerId: 'C0012' }, 'D000', 'S013', { addSeats: 2 }, '黃柏翰', '2026-11-04 09:58', [
     ['2026-11-04 10:02', 'salesReview'],
     ['2026-11-04 14:20', 'techReview'],
     ['2026-11-05 09:00', 'approved'],
@@ -85,11 +85,11 @@ export const workOrders: WorkOrder[] = [
     ['2026-11-03 16:31', 'salesReview'],
     ['2026-11-04 11:00', 'techReview'],
   ]),
-  wo('WO-1102-001', 'renewal', { customerId: 'C0005' }, 'D003', 'S006', { renewMonths: 12 }, '李冠霖', '2026-11-02 17:45', [
+  wo('WO-1102-001', 'renewal', { customerId: 'C0005' }, 'D003', 'S006', { plan: 'Business Standard', seats: 60, renewMonths: 12 }, '李冠霖', '2026-11-02 17:45', [
     ['2026-11-02 17:50', 'salesReview'],
     ['2026-11-03 10:20', 'returned'],
   ], { returnReason: '請先和客戶確認是否改為 24 個月' }),
-  wo('WO-1027-001', 'seats', { customerId: 'C0011' }, 'D002', 'S012', { toSeats: 210 }, '黃柏翰', '2026-10-27 14:10', [
+  wo('WO-1027-001', 'addSeats', { customerId: 'C0011' }, 'D002', 'S012', { addSeats: 10 }, '黃柏翰', '2026-10-27 14:10', [
     ['2026-10-27 14:12', 'salesReview'],
     ['2026-10-27 17:00', 'techReview'],
     ['2026-10-28 10:00', 'approved'],
@@ -113,14 +113,14 @@ export const workOrders: WorkOrder[] = [
     },
     'D002',
     undefined,
-    { memo: '客戶從其他經銷商轉入' },
+    { transferSource: 'otherDealer', memo: '客戶從其他經銷商轉入' },
     '黃柏翰',
     '2026-10-27 09:20',
     [
       ['2026-10-27 09:25', 'salesReview'],
       ['2026-10-27 15:00', 'techReview'],
       ['2026-10-28 09:00', 'approved'],
-      ['2026-10-28 09:15', 'processing'],
+      ['2026-10-29 10:05', 'processing'],
       ['2026-11-03 10:30', 'completed'],
     ],
     { operationId: 'OP-1103-002' },
@@ -142,15 +142,15 @@ export const workOrders: WorkOrder[] = [
     },
     'D003',
     undefined,
-    { memo: '客戶從其他經銷商轉入' },
+    { transferSource: 'otherDealer', memo: '客戶從其他經銷商轉入' },
     '黃柏翰',
     '2026-10-17 13:30',
     [
       ['2026-10-17 13:40', 'salesReview'],
       ['2026-10-17 17:00', 'techReview'],
       ['2026-10-19 09:00', 'approved'],
-      ['2026-10-19 15:02', 'processing'],
+      ['2026-11-04 14:00', 'processing'],
     ],
-    { operationId: 'OP-1020-001' },
+    { operationId: 'OP-1104-003' },
   ),
 ];

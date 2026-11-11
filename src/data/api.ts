@@ -16,7 +16,7 @@ import { subscriptions as seedSubscriptions } from './mock/subscriptions';
 import { users as seedUsers } from './mock/users';
 import { operations as seedOperations } from './mock/operations';
 import { workOrders as seedWorkOrders } from './mock/workOrders';
-import { operationStatusLabel, operationTypeLabel, orgTypeLabel, workOrderTypeLabel } from './labels';
+import { executionModeLabel, operationStatusLabel, operationTypeLabel, orgTypeLabel, transferSourceLabel, workOrderTypeLabel } from './labels';
 import type {
   AuditLog,
   AuditLogQuery,
@@ -49,8 +49,13 @@ import type {
   OperationPayload,
   OperationStatus,
   OperationType,
+  OrderAnalysis,
+  ExecutionMode,
+  Schedule,
   GwsOperation,
   WorkOrderInput,
+  WorkOrderPayload,
+  WorkOrderType,
   WorkOrderStep,
   WorkOrderStepState,
   OrgType,
@@ -387,7 +392,7 @@ export async function createTransferInCustomer(
   const operation = await createOperation({
     type: 'transfer',
     customerId: customer.id,
-    payload: { transferToken: input.transferToken.trim(), tokenExpiresAt: input.tokenExpiresAt, memo: input.memo.trim() || undefined },
+    payload: { transferSource: 'otherDealer', transferToken: input.transferToken.trim(), tokenExpiresAt: input.tokenExpiresAt, memo: input.memo.trim() || undefined },
   });
   return { customer, operation };
 }
@@ -424,17 +429,17 @@ function effectiveStatus(s: Subscription): Subscription['status'] {
   return daysUntil(s.expiresAt) <= EXPIRING_DAYS ? 'expiring' : 'active';
 }
 
-/** 一筆訂閱最近一次尚未完成的 Google 操作（送出中、失敗、手動待同步） */
-function latestOpenOperation(subscriptionId: string) {
-  return db.operations
-    .filter((o) => o.subscriptionId === subscriptionId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .find((o, i) => i === 0 && o.status !== 'completed');
+/** 一筆訂閱尚未結束的操作（已排程、待人工、送出中、手動待同步），加上最近一次失敗 */
+function openOperations(subscriptionId: string) {
+  const ops = db.operations.filter((o) => o.subscriptionId === subscriptionId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const open = ops.filter((o) => ['scheduled', 'pendingManual', 'submitted', 'manual'].includes(o.status));
+  const lastFailed = ops.find((o) => o.status === 'failed' && !open.some((x) => x.type === o.type));
+  return lastFailed ? [...open, lastFailed] : open;
 }
 
 function subscriptionListItem(s: Subscription): SubscriptionListItem {
   const c = customerOf(s.customerId)!;
-  const open = latestOpenOperation(s.id);
+  const open = openOperations(s.id);
   return {
     ...s,
     status: effectiveStatus(s),
@@ -442,8 +447,7 @@ function subscriptionListItem(s: Subscription): SubscriptionListItem {
     primaryDomain: c.primaryDomain,
     dealerId: c.dealerId,
     dealerName: dealerName(c.dealerId),
-    openOperationId: open?.id,
-    openOperationStatus: open?.status,
+    openOperations: open.map((o) => ({ id: o.id, type: o.type, status: o.status })),
   };
 }
 
@@ -469,21 +473,84 @@ const activeGwsPlans = () => db.plans.filter((p) => p.productId === 'P01' && p.s
 /** 方案等級；找不到回傳 0 */
 export const planTier = (name?: string) => db.plans.find((p) => p.name === name)?.tier ?? 0;
 
-// ═════════ GWS 操作（後勤直接送 Google） ═════════
+// ═════════ GWS 訂單操作（排程執行／人工執行） ═════════
+// 2026/11/10 會議：新訂（全新）排程、新訂（移轉）人工、續約升版或加人排程、續約減人人工、
+// 續約降版待確認（先人工）、加購排程（只能加人，期間到舊合約結束日）、中途升版排程（待確認）。
+
+/** 這個方案比目前的高、低或一樣 */
+function planChangeOf(from?: string, to?: string): 'up' | 'down' | 'same' {
+  const a = planTier(from);
+  const b = planTier(to);
+  return b > a ? 'up' : b < a ? 'down' : 'same';
+}
+
+/** 依類型與內容判斷執行方式；畫面（訂單對話框、執行單）與資料層用同一套規則 */
+export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan' | 'seats' | 'expiresAt'> | undefined, payload: OperationPayload): OrderAnalysis {
+  switch (type) {
+    case 'new':
+      return { execution: 'schedule', reasons: ['全新客戶的新訂由排程執行'], defaultDate: TODAY };
+    case 'transfer':
+      return {
+        execution: 'manual',
+        reasons: [payload.transferSource === 'selfPaid' ? '客戶自己刷卡、要移轉進來，由後勤人工執行' : '從其他經銷商移轉，由後勤人工執行'],
+      };
+    case 'renewal': {
+      const planChange = planChangeOf(sub?.plan, payload.plan ?? sub?.plan);
+      const seatChange = (payload.seats ?? sub?.seats ?? 0) - (sub?.seats ?? 0);
+      const start = sub ? addDays(sub.expiresAt, 1) : TODAY;
+      const end = addDays(addMonths(start, payload.renewMonths ?? 12), -1);
+      const reasons: string[] = [];
+      let execution: ExecutionMode = 'schedule';
+      let pendingId: OrderAnalysis['pendingId'];
+      if (planChange === 'down') {
+        execution = 'manual';
+        pendingId = 17;
+        reasons.push('降版能否排程還在等 Terry 確認，先由後勤人工執行');
+      }
+      if (seatChange < 0) {
+        execution = 'manual';
+        reasons.push('續約減人數由後勤人工執行');
+      }
+      if (execution === 'schedule') reasons.push(`排在舊合約到期隔天（${start.replace(/-/g, '/')}）自動續約`);
+      return { execution, pendingId, planChange, seatChange, reasons, defaultDate: start, newStartsAt: start, newExpiresAt: end };
+    }
+    case 'addSeats':
+      return { execution: 'schedule', reasons: [`加購只能加人，期間到舊合約結束日（${sub?.expiresAt.replace(/-/g, '/') ?? '—'}）`], defaultDate: TODAY };
+    case 'upgrade':
+      return {
+        execution: 'schedule',
+        pendingId: 16,
+        planChange: planChangeOf(sub?.plan, payload.plan),
+        reasons: ['合約未到期前升版，預計排程執行（能否自動排程待 Terry 確認）'],
+        defaultDate: TODAY,
+      };
+    case 'cancel':
+      return { execution: 'schedule', pendingId: 19, reasons: ['會議沒有列出取消訂閱，是否保留待確認'], defaultDate: TODAY };
+  }
+}
 
 function describeOperation(op: { type: OperationType; subscriptionId?: string; payload: OperationPayload }): string {
-  const plan = db.subscriptions.find((s) => s.id === op.subscriptionId)?.plan ?? op.payload.plan ?? '';
+  const sub = db.subscriptions.find((s) => s.id === op.subscriptionId);
+  const p = op.payload;
+  const fromPlan = p.fromPlan ?? sub?.plan ?? '';
+  const fromSeats = p.fromSeats ?? sub?.seats ?? 0;
   switch (op.type) {
     case 'new':
-      return `${op.payload.plan} ${op.payload.seats} 席`;
-    case 'renewal':
-      return `${plan} 續約 ${op.payload.renewMonths} 個月`;
-    case 'seats':
-      return `${plan}：${op.payload.fromSeats} → ${op.payload.toSeats} 席`;
-    case 'cancel':
-      return `取消 ${plan}`;
+      return `${p.plan} ${p.seats} 席`;
     case 'transfer':
-      return op.payload.transferToken ? `轉入，轉移碼 ${op.payload.transferToken}` : '轉入';
+      return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.transferToken ? `，移轉 ID ${p.transferToken}` : ''}`;
+    case 'renewal': {
+      const plan = p.plan ?? fromPlan;
+      const seats = p.seats ?? fromSeats;
+      const change = plan !== fromPlan || seats !== fromSeats ? `${fromPlan} ${fromSeats} 席 → ${plan} ${seats} 席，` : `${plan} ${seats} 席，`;
+      return `${change}續約 ${p.renewMonths ?? 12} 個月`;
+    }
+    case 'addSeats':
+      return `加購 ${p.addSeats} 席（${fromSeats} → ${fromSeats + (p.addSeats ?? 0)}）`;
+    case 'upgrade':
+      return `${fromPlan} → ${p.plan}`;
+    case 'cancel':
+      return `取消 ${fromPlan}`;
   }
 }
 
@@ -514,56 +581,113 @@ function nextId(prefix: string, ids: string[], at: string) {
   return `${head}${String(max + 1).padStart(3, '0')}`;
 }
 
+const OPEN_STATUSES: OperationStatus[] = ['scheduled', 'pendingManual', 'submitted', 'manual'];
+const isOpen = (o: GwsOperation) => OPEN_STATUSES.includes(o.status);
+
+/** 這個客戶（網域）目前等待執行的排程，加購時用來提醒排程衝突 */
+export function getPendingSchedules(customerId: string): Promise<ScheduleListItem[]> {
+  return getSchedules({ status: 'waiting' }).then((rows) => rows.filter((s) => s.customerId === customerId).sort((a, b) => a.enabledAt.localeCompare(b.enabledAt)));
+}
+
 /** 檢查操作內容，回傳錯誤訊息（沒有錯誤回傳 undefined） */
 export function validateOperation(input: NewOperationInput): string | undefined {
   const sub = db.subscriptions.find((s) => s.id === input.subscriptionId);
+  const p = input.payload;
   if (input.type !== 'new' && input.type !== 'transfer') {
     if (!sub) return '找不到訂閱';
     if (sub.status === 'cancelled') return '這筆訂閱已取消';
-    const open = latestOpenOperation(sub.id);
-    if (open && open.status !== 'failed') return `這筆訂閱已有處理中的操作 ${open.id}`;
+    const same = db.operations.find((o) => o.subscriptionId === sub.id && isOpen(o) && (o.type === input.type || input.type === 'cancel'));
+    if (same) return `這筆訂閱已有處理中的${operationTypeLabel[same.type]} ${same.id}`;
   }
+  const activePlans = activeGwsPlans().map((x) => x.name);
   if (input.type === 'new') {
-    if (!input.payload.plan) return '請選擇方案';
-    if (!(Number(input.payload.seats) >= 1)) return '席次至少 1';
+    if (!p.plan || !activePlans.includes(p.plan)) return '請選擇方案';
+    if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) return '席次至少 1';
   }
-  if (input.type === 'seats') {
-    const n = Number(input.payload.toSeats);
-    if (!Number.isInteger(n) || n < 1) return '席次需為大於 0 的整數';
-    if (n === sub?.seats) return '與目前席次相同';
+  if (input.type === 'renewal') {
+    if (!p.plan || !activePlans.includes(p.plan)) return '請選擇續約方案';
+    if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) return '人數需為大於 0 的整數';
   }
+  if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) return '加購人數需為大於 0 的整數，加購不能減人';
+  if (input.type === 'upgrade' && planChangeOf(sub?.plan, p.plan) !== 'up') return '中途升版只能選比目前高的方案';
+  if (input.type === 'cancel' && !p.memo?.trim()) return '請填寫取消原因';
+  if (p.scheduledAt && p.scheduledAt < TODAY) return '啟用日不能早於今天';
   if (input.type === 'transfer') {
-    const e = checkTransferToken(input.payload.transferToken ?? '', input.payload.tokenExpiresAt ?? '');
-    if (e.token || e.tokenExpiresAt) return e.token ?? e.tokenExpiresAt;
-    const open = db.operations.find((o) => o.customerId === input.customerId && o.type === 'transfer' && (o.status === 'submitted' || o.status === 'manual'));
-    if (open) return `這個客戶已有處理中的轉移 ${open.id}`;
+    if (!p.transferSource) return '請選擇移轉來源';
+    if (p.transferSource === 'otherDealer') {
+      const e = checkTransferToken(p.transferToken ?? '', p.tokenExpiresAt ?? '');
+      if (e.token || e.tokenExpiresAt) return e.token ?? e.tokenExpiresAt;
+    }
+    const open = db.operations.find((o) => o.customerId === input.customerId && o.type === 'transfer' && isOpen(o));
+    if (open) return `這個客戶已有處理中的移轉 ${open.id}`;
   }
   return undefined;
 }
 
-/** 送出 Google：直接建立操作，狀態為「已送出 Google」 */
+const scheduleActionOf: Record<OperationType, Schedule['action'] | undefined> = {
+  new: 'new',
+  transfer: undefined,
+  renewal: 'renew',
+  addSeats: 'addSeats',
+  upgrade: 'upgrade',
+  cancel: 'cancel',
+};
+
+/** 建立訂單操作：排程執行的建立排程，人工執行的進入「待人工執行」 */
 export function createOperation(input: NewOperationInput): Promise<OperationListItem> {
   const c = customerOf(input.customerId);
   if (!c) return fail('找不到客戶');
   const error = validateOperation(input);
   if (error) return fail(error);
   const sub = db.subscriptions.find((s) => s.id === input.subscriptionId);
+  const analysis = analyzeOrder(input.type, sub, input.payload);
   const at = now();
+  const payload: OperationPayload = { ...input.payload };
+  if (sub) Object.assign(payload, { fromPlan: sub.plan, fromSeats: sub.seats ?? 0 });
+  if (input.type === 'renewal') Object.assign(payload, { newStartsAt: analysis.newStartsAt, newExpiresAt: analysis.newExpiresAt });
+  if (analysis.execution === 'schedule') payload.scheduledAt = payload.scheduledAt ?? analysis.defaultDate ?? TODAY;
+  else delete payload.scheduledAt;
   const op: GwsOperation = {
     id: nextId('OP', db.operations.map((o) => o.id), at),
     type: input.type,
     customerId: c.id,
     subscriptionId: input.subscriptionId,
     workOrderId: input.workOrderId,
-    payload: input.type === 'seats' ? { ...input.payload, fromSeats: sub?.seats ?? 0 } : input.payload,
-    status: 'submitted',
+    payload,
+    execution: analysis.execution,
+    status: analysis.execution === 'schedule' ? 'scheduled' : 'pendingManual',
     createdBy: currentUser.name,
     createdAt: at,
     updatedAt: at,
-    history: [{ at, by: currentUser.name, action: '送出 Google', status: 'submitted' }],
+    history: [],
   };
+  if (analysis.execution === 'schedule') {
+    const jid = `J${String(Math.max(0, ...db.schedules.map((x) => Number(x.id.slice(1)))) + 1).padStart(3, '0')}`;
+    db.schedules.push({
+      id: jid,
+      kind: 'once',
+      action: scheduleActionOf[op.type] ?? 'sync',
+      status: 'waiting',
+      enabledAt: `${payload.scheduledAt} 00:00`,
+      customerId: c.id,
+      subscriptionId: op.subscriptionId,
+      operationId: op.id,
+      detail: describeOperation(op),
+      createdBy: currentUser.name,
+    });
+    op.scheduleId = jid;
+    op.history.push({ at, by: currentUser.name, action: `建立排程 ${jid}，${payload.scheduledAt!.replace(/-/g, '/')} 執行`, status: 'scheduled' });
+  } else {
+    op.history.push({ at, by: currentUser.name, action: '建立，待後勤人工執行', status: 'pendingManual', note: analysis.reasons.join('；') });
+  }
   db.operations.push(op);
-  log('gws', op.id, `送出 Google：${operationTypeLabel[op.type]}，${describeOperation(op)}${op.workOrderId ? `（${op.workOrderId}）` : ''}`, 'success', c.id);
+  log(
+    'gws',
+    op.id,
+    `${operationTypeLabel[op.type]}（${executionModeLabel[op.execution]}）：${describeOperation(op)}${op.workOrderId ? `（${op.workOrderId}）` : ''}`,
+    'success',
+    c.id,
+  );
   if (op.workOrderId) {
     const wo = db.workOrders.find((w) => w.id === op.workOrderId);
     if (wo) {
@@ -575,9 +699,12 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
 }
 
 const operationTransitions: Record<OperationAction, { from: OperationStatus[]; to: OperationStatus; label: string; system?: boolean }> = {
+  runSchedule: { from: ['scheduled'], to: 'submitted', label: '排程啟動，送出 Google', system: true },
+  cancelSchedule: { from: ['scheduled'], to: 'cancelled', label: '取消排程' },
   simulateSuccess: { from: ['submitted'], to: 'completed', label: 'Google 回應完成', system: true },
   simulateFailure: { from: ['submitted'], to: 'failed', label: 'Google 回應失敗', system: true },
   retry: { from: ['failed'], to: 'submitted', label: '重新送出 Google' },
+  completeManual: { from: ['pendingManual'], to: 'manual', label: '已在 Google 完成人工處理' },
   markManual: { from: ['failed'], to: 'manual', label: '改為在 Google 手動處理' },
   simulateSync: { from: ['manual'], to: 'completed', label: '同步確認完成', system: true },
 };
@@ -587,7 +714,7 @@ export function actOnOperation(id: string, action: OperationAction, note?: strin
   if (!op) return fail('找不到操作');
   const t = operationTransitions[action];
   if (!t.from.includes(op.status)) return fail('狀態已變更，請重新整理');
-  if (action === 'markManual' && !note?.trim()) return fail('請填寫在 Google 做了什麼');
+  if ((action === 'markManual' || action === 'completeManual') && !note?.trim()) return fail('請填寫在 Google 做了什麼');
   const at = now();
   const by = t.system ? '系統' : currentUser.name;
   let eventNote = note?.trim() || undefined;
@@ -596,10 +723,17 @@ export function actOnOperation(id: string, action: OperationAction, note?: strin
     eventNote = op.failureReason;
   }
   if (action === 'retry') op.failureReason = undefined;
-  if (action === 'markManual') op.manualNote = eventNote;
+  if (action === 'markManual' || action === 'completeManual') op.manualNote = eventNote;
   op.status = t.to;
   op.updatedAt = at;
   op.history.push({ at, by, action: t.label, status: t.to, note: eventNote });
+  const schedule = db.schedules.find((x) => x.id === op.scheduleId);
+  if (schedule) {
+    if (action === 'runSchedule') schedule.status = 'running';
+    if (action === 'cancelSchedule') schedule.status = 'cancelled';
+    if (t.to === 'completed') schedule.status = 'done';
+    if (t.to === 'failed') schedule.status = 'failed';
+  }
   log('gws', op.id, eventNote ? `${t.label}：${eventNote}` : t.label, t.to === 'failed' ? 'failure' : t.to === 'manual' ? 'warning' : 'success', op.customerId, by);
   if (t.to === 'completed') applyCompletedOperation(op, at);
   const wo = db.workOrders.find((w) => w.id === op.workOrderId);
@@ -611,34 +745,44 @@ export function actOnOperation(id: string, action: OperationAction, note?: strin
 function applyCompletedOperation(op: GwsOperation, at: string) {
   const sub = db.subscriptions.find((s) => s.id === op.subscriptionId);
   const c = customerOf(op.customerId)!;
+  const p = op.payload;
   switch (op.type) {
-    case 'seats':
-      if (sub) sub.seats = op.payload.toSeats ?? sub.seats;
+    case 'addSeats':
+      if (sub) sub.seats = (sub.seats ?? 0) + (p.addSeats ?? 0);
       break;
     case 'renewal':
-      if (sub) sub.expiresAt = addMonths(sub.expiresAt, op.payload.renewMonths ?? 12);
+      if (sub) {
+        sub.plan = p.plan ?? sub.plan;
+        sub.seats = p.seats ?? sub.seats;
+        sub.startsAt = p.newStartsAt ?? addDays(sub.expiresAt, 1);
+        sub.expiresAt = p.newExpiresAt ?? addMonths(sub.expiresAt, p.renewMonths ?? 12);
+      }
+      break;
+    case 'upgrade':
+      if (sub && p.plan) sub.plan = p.plan;
       break;
     case 'cancel':
       if (sub) sub.status = 'cancelled';
       break;
     case 'new': {
       const id = `S${String(db.subscriptions.length + 1).padStart(3, '0')}`;
+      const start = p.scheduledAt ?? TODAY;
       db.subscriptions.push({
         id,
         customerId: c.id,
         product: 'GWS',
-        plan: op.payload.plan ?? 'Business Starter',
-        seats: op.payload.seats ?? 1,
+        plan: p.plan ?? 'Business Starter',
+        seats: p.seats ?? 1,
         status: 'active',
-        startsAt: TODAY,
-        expiresAt: addMonths(TODAY, 12),
+        startsAt: start,
+        expiresAt: addDays(addMonths(start, 12), -1),
         lastSyncedAt: at,
       });
       op.subscriptionId = id;
       break;
     }
     case 'transfer':
-      log('customer', c.name, `客戶轉入完成（${op.id}），訂閱將於下次同步時出現在 GWS 訂閱清單`, 'success', c.id, '系統');
+      log('customer', c.name, `客戶移轉完成（${op.id}），訂閱將於下次同步時出現在 GWS 訂閱清單`, 'success', c.id, '系統');
       break;
   }
   if (sub) sub.lastSyncedAt = at;
@@ -652,20 +796,8 @@ function workOrderCustomer(wo: WorkOrder) {
 }
 
 function describeWorkOrder(wo: WorkOrder): string {
-  const sub = db.subscriptions.find((s) => s.id === wo.subscriptionId);
-  const p = wo.payload;
-  switch (wo.type) {
-    case 'new':
-      return `${p.plan} ${p.seats} 席`;
-    case 'renewal':
-      return `${sub?.plan ?? ''} 續約 ${p.renewMonths} 個月`;
-    case 'seats':
-      return `${sub?.plan ?? ''}：${sub?.seats ?? '?'} → ${p.toSeats} 席`;
-    case 'cancel':
-      return `取消 ${sub?.plan ?? ''}`;
-    case 'transfer':
-      return wo.customerMode === 'new' ? '新客戶從其他經銷商轉入' : '客戶從其他經銷商轉入';
-  }
+  const text = describeOperation({ type: wo.type, subscriptionId: wo.subscriptionId, payload: wo.payload });
+  return wo.type === 'transfer' && wo.customerMode === 'new' ? `新客戶：${text}` : text;
 }
 
 const processable = (wo: WorkOrder) => wo.status === 'approved' || wo.status === 'processing' || wo.status === 'completed';
@@ -683,12 +815,21 @@ function workOrderSteps(wo: WorkOrder): WorkOrderStep[] {
     });
   }
   const op = db.operations.find((o) => o.id === wo.operationId);
-  const stateOf: Record<OperationStatus, WorkOrderStepState> = { submitted: 'inProgress', completed: 'done', failed: 'failed', manual: 'manual' };
+  const stateOf: Record<OperationStatus, WorkOrderStepState> = {
+    scheduled: 'inProgress',
+    pendingManual: 'manual',
+    submitted: 'inProgress',
+    completed: 'done',
+    failed: 'failed',
+    manual: 'manual',
+    cancelled: 'todo',
+  };
+  const mode = executionModeLabel[op?.execution ?? analyzeOrder(wo.type, db.subscriptions.find((x) => x.id === wo.subscriptionId), wo.payload).execution];
   steps.push({
     key: 'google',
-    label: `${operationTypeLabel[wo.type]}（送 Google）`,
+    label: `${operationTypeLabel[wo.type]}（${mode}）`,
     state: op ? stateOf[op.status] : canWork && wo.customerId ? 'todo' : 'blocked',
-    detail: op ? `${op.id}・${operationStatusLabel[op.status]}` : undefined,
+    detail: op ? `${op.id}・${operationStatusLabel[op.status]}${op.status === 'scheduled' && op.payload.scheduledAt ? `（${op.payload.scheduledAt.replace(/-/g, '/')}）` : ''}` : undefined,
   });
   return steps;
 }
@@ -745,8 +886,8 @@ export function getWorkOrder(id: string): Promise<WorkOrderListItem | undefined>
 /** 檢查執行單內容，回傳欄位錯誤（key 為欄位名稱） */
 export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Record<string, string> {
   const e: Record<string, string> = {};
-  const needsSubscription = input.type === 'renewal' || input.type === 'seats' || input.type === 'cancel';
-  if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、調整席次、取消訂閱只適用現有客戶';
+  const needsSubscription = input.type === 'renewal' || input.type === 'addSeats' || input.type === 'upgrade' || input.type === 'cancel';
+  if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、加購、中途升版、取消訂閱只適用現有客戶';
   if (input.customerMode === 'existing' && !input.customerId) e.customerId = '請選擇客戶';
   if (needsSubscription && input.customerId && !input.subscriptionId) e.subscriptionId = '請選擇訂閱';
   if (input.customerMode === 'new') {
@@ -765,18 +906,19 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(n?.contactEmail ?? '')) e.contactEmail = 'Email 格式不正確';
     if (!input.dealerId) e.dealerId = '請選擇經銷商';
   }
-  if (input.type === 'new') {
-    if (!input.payload.plan) e.plan = '請選擇方案';
-    if (!(Number(input.payload.seats) >= 1)) e.seats = '席次至少 1';
+  const p = input.payload;
+  const sub = db.subscriptions.find((x) => x.id === input.subscriptionId);
+  if (input.type === 'new' || input.type === 'renewal' || input.type === 'upgrade') {
+    if (!p.plan) e.plan = '請選擇方案';
   }
-  if (input.type === 'seats') {
-    const sub = db.subscriptions.find((s) => s.id === input.subscriptionId);
-    const n = Number(input.payload.toSeats);
-    if (!Number.isInteger(n) || n < 1) e.toSeats = '席次需為大於 0 的整數';
-    else if (sub && n === sub.seats) e.toSeats = '與目前席次相同';
+  if (input.type === 'new' || input.type === 'renewal') {
+    if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) e.seats = '人數需為大於 0 的整數';
   }
-  if (input.type === 'renewal' && !input.payload.renewMonths) e.renewMonths = '請選擇續約期間';
-  if (input.type === 'cancel' && !input.payload.memo?.trim()) e.memo = '請填寫取消原因';
+  if (input.type === 'renewal' && !p.renewMonths) e.renewMonths = '請選擇續約期間';
+  if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) e.addSeats = '加購人數需為大於 0 的整數';
+  if (input.type === 'upgrade' && p.plan && sub && planChangeOf(sub.plan, p.plan) !== 'up') e.plan = '中途升版只能選比目前高的方案';
+  if (input.type === 'transfer' && !p.transferSource) e.transferSource = '請選擇移轉來源';
+  if (input.type === 'cancel' && !p.memo?.trim()) e.memo = '請填寫取消原因';
   return e;
 }
 
@@ -791,14 +933,15 @@ function applyInput(wo: WorkOrder, input: WorkOrderInput) {
   const p = input.payload;
   const memo = p.memo?.trim() || undefined;
   // 只保留這個類型用得到的欄位
-  wo.payload =
-    input.type === 'new'
-      ? { plan: p.plan, seats: p.seats, memo }
-      : input.type === 'renewal'
-        ? { renewMonths: p.renewMonths, memo }
-        : input.type === 'seats'
-          ? { toSeats: p.toSeats, memo }
-          : { memo };
+  const pick: Record<WorkOrderType, WorkOrderPayload> = {
+    new: { plan: p.plan, seats: p.seats, memo },
+    transfer: { transferSource: p.transferSource, memo },
+    renewal: { plan: p.plan, seats: p.seats, renewMonths: p.renewMonths, memo },
+    addSeats: { addSeats: p.addSeats, memo },
+    upgrade: { plan: p.plan, memo },
+    cancel: { memo },
+  };
+  wo.payload = pick[input.type];
 }
 
 /** 建立或修改執行單。submit 為 true 時直接送出簽核 */
@@ -1154,8 +1297,10 @@ export function cancelSchedule(id: string): Promise<void> {
   const s = db.schedules.find((x) => x.id === id);
   if (!s) return fail('找不到排程');
   if (s.status !== 'waiting') return fail('只有「等待執行」的排程可以取消');
+  const op = db.operations.find((o) => o.id === s.operationId && o.status === 'scheduled');
+  if (op) return actOnOperation(op.id, 'cancelSchedule').then(() => undefined);
   s.status = 'cancelled';
-  log('workOrder', id, '取消排程', 'success', s.customerId);
+  log('gws', id, '取消排程', 'success', s.customerId);
   return delay(undefined);
 }
 

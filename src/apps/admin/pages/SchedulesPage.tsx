@@ -80,7 +80,16 @@ export function SchedulesPage() {
         </div>
       ),
     },
-    { key: 'detail', header: '內容', render: (s) => s.detail },
+    {
+      key: 'detail',
+      header: '內容',
+      render: (s) => (
+        <div>
+          <div>{s.detail}</div>
+          {s.operationId && <div className="table__secondary">來源訂單 <span className="mono">{s.operationId}</span></div>}
+        </div>
+      ),
+    },
     { key: 'enabledAt', header: '啟用時間', render: (s) => <span className="mono">{formatDateTime(s.enabledAt)}</span> },
     { key: 'status', header: '排程狀態', render: (s) => <ScheduleStatusTag value={s.status} /> },
     { key: 'createdBy', header: '建立人', render: (s) => s.createdBy },
@@ -103,10 +112,10 @@ export function SchedulesPage() {
         titleAddon={
           <>
             <PendingTag id={9} hint="欄位名稱待對照 API" />
-            <PendingTag id={7} hint="排程任務、信件通知是否不做" />
+            <PendingTag id={7} hint="排程任務是否不做" />
           </>
         }
-        description="依啟用時間自動執行的 GWS 變更與同步。"
+        description="依啟用時間自動執行的 GWS 變更與同步。新訂、續約（升版或加人）、加購、中途升版選「排程執行」時，會在這裡建立排程。"
         actions={
           <button className="btn" onClick={exportCsv} disabled={!rows.length}>
             <Icon name="download" size={16} />

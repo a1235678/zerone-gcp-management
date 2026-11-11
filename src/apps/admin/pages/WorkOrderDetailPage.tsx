@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { actOnWorkOrder, getCustomer, getSubscriptions, getWorkOrder } from '@data/api';
-import { workOrderFlow, workOrderStatusLabel, workOrderTypeLabel } from '@data/labels';
+import { actOnWorkOrder, analyzeOrder, getCustomer, getSubscriptions, getWorkOrder } from '@data/api';
+import { executionModeLabel, transferSourceLabel, workOrderFlow, workOrderStatusLabel, workOrderTypeLabel } from '@data/labels';
 import type { WorkOrderAction, WorkOrderStep } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
@@ -16,16 +16,16 @@ import { StatusTag } from '@shared/components/StatusTag';
 import { useToast } from '@shared/components/Toast';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
-import { OperationModal, type OperationTarget } from '../components/OperationModal';
+import { ChangeTags, OperationModal, type OperationTarget } from '../components/OperationModal';
 import { OperationBody } from '../components/OperationPanel';
 import { WorkOrderStatusTag } from '../tags';
 import { usePermission } from '../auth';
 
 const stepTag: Record<WorkOrderStep['state'], { tone: 'success' | 'info' | 'danger' | 'warning' | 'neutral'; text: string }> = {
   done: { tone: 'success', text: '完成' },
-  inProgress: { tone: 'info', text: '已送出 Google' },
+  inProgress: { tone: 'info', text: '進行中' },
   failed: { tone: 'danger', text: '失敗' },
-  manual: { tone: 'warning', text: '手動處理・待同步' },
+  manual: { tone: 'warning', text: '人工處理中' },
   todo: { tone: 'neutral', text: '待處理' },
   blocked: { tone: 'neutral', text: '尚未開始' },
 };
@@ -93,11 +93,13 @@ export function WorkOrderDetailPage() {
         subscriptionId: sub?.id,
         plan: sub?.plan,
         seats: sub?.seats,
+        startsAt: sub?.startsAt,
         expiresAt: sub?.expiresAt,
       }
     : undefined;
 
   const p = w.payload;
+  const analysis = analyzeOrder(w.type, sub, p);
   const items = [
     { label: '類型', value: workOrderTypeLabel[w.type] },
     { label: '單號', value: <span className="mono">{w.id}</span> },
@@ -116,11 +118,22 @@ export function WorkOrderDetailPage() {
       ),
     },
     { label: '經銷商', value: w.dealerName },
-    ...(sub ? [{ label: '訂閱', value: `${sub.plan} · 目前 ${sub.seats} 席 · 到期 ${sub.expiresAt.replace(/-/g, '/')}` }] : []),
-    ...(p.plan ? [{ label: '方案', value: <span className="inline">{p.plan} <PendingTag id={3} /></span> }] : []),
-    ...(p.seats !== undefined ? [{ label: '席次', value: `${p.seats} 席` }] : []),
-    ...(p.toSeats !== undefined ? [{ label: '調整後席次', value: `${p.toSeats} 席` }] : []),
+    ...(sub ? [{ label: '訂閱', value: `${sub.plan} · 目前 ${sub.seats} 席 · 合約 ${sub.startsAt.replace(/-/g, '/')} – ${sub.expiresAt.replace(/-/g, '/')}` }] : []),
+    ...(p.plan ? [{ label: w.type === 'upgrade' ? '升級後方案' : w.type === 'renewal' ? '續約方案' : '方案', value: <span className="inline">{p.plan} <PendingTag id={3} /></span> }] : []),
+    ...(p.seats !== undefined ? [{ label: w.type === 'renewal' ? '續約人數' : '人數', value: `${p.seats} 席` }] : []),
+    ...(p.addSeats !== undefined ? [{ label: '加購人數', value: `${p.addSeats} 席${sub ? `（${sub.seats} → ${(sub.seats ?? 0) + p.addSeats}）` : ''}` }] : []),
     ...(w.type === 'renewal' ? [{ label: '續約期間', value: `${p.renewMonths} 個月` }] : []),
+    ...(w.type === 'renewal' && sub ? [{ label: '變動', value: <ChangeTags planChange={analysis.planChange} seatChange={analysis.seatChange} /> }] : []),
+    ...(p.transferSource ? [{ label: '移轉來源', value: transferSourceLabel[p.transferSource] }] : []),
+    {
+      label: '執行方式',
+      value: (
+        <span className="inline">
+          {executionModeLabel[analysis.execution]}
+          {analysis.pendingId && <PendingTag id={analysis.pendingId} />}
+        </span>
+      ),
+    },
     ...(w.customerMode === 'new' && w.newCustomer
       ? [
           { label: '統一編號', value: <span className="mono">{w.newCustomer.taxId}</span> },
@@ -219,7 +232,7 @@ export function WorkOrderDetailPage() {
                     {s.key === 'google' && s.state === 'failed' && can('subscriptions', 'write') && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
                         <button className="btn btn--sm" disabled={!target} onClick={() => setOpOpen(true)}>
-                          重新填寫並送出{w.type === 'transfer' ? '（換新的轉移碼）' : ''}
+                          重新填寫並建立
                         </button>
                       </div>
                     )}
@@ -273,7 +286,7 @@ export function WorkOrderDetailPage() {
           type={w.type}
           target={target}
           workOrderId={w.id}
-          initial={{ plan: p.plan, seats: p.seats, toSeats: p.toSeats, renewMonths: p.renewMonths, memo: p.memo }}
+          initial={{ plan: p.plan, seats: p.seats, addSeats: p.addSeats, renewMonths: p.renewMonths, transferSource: p.transferSource, memo: p.memo }}
           onClose={() => setOpOpen(false)}
           onSubmitted={() => {
             setOpOpen(false);

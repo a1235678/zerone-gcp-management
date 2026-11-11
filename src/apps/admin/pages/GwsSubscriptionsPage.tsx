@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { EXPIRING_DAYS, daysUntil, getCustomers, getDealers, getPlans, getSubscriptions } from '@data/api';
-import { subscriptionStatusLabel } from '@data/labels';
+import { operationTypeLabel, subscriptionStatusLabel } from '@data/labels';
 import type { OperationType, SubscriptionListItem, SubscriptionStatus } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState, type Column } from '@shared/components/DataTable';
@@ -37,6 +37,7 @@ export function GwsSubscriptionsPage() {
   const [panelId, setPanelId] = useState<string | null>(null);
   const [pickOpen, setPickOpen] = useState(false);
   const [pickId, setPickId] = useState('');
+  const [pickType, setPickType] = useState<'new' | 'transfer'>('new');
   const customers = useAsync(() => getCustomers({ status: 'active' }));
   const toTarget = (s: SubscriptionListItem): OperationTarget => ({
     customerId: s.customerId,
@@ -45,6 +46,7 @@ export function GwsSubscriptionsPage() {
     subscriptionId: s.id,
     plan: s.plan,
     seats: s.seats,
+    startsAt: s.startsAt,
     expiresAt: s.expiresAt,
   });
 
@@ -58,6 +60,7 @@ export function GwsSubscriptionsPage() {
 
   const dealers = useAsync(getDealers);
   const plans = useAsync(getPlans);
+  const topPlan = plans.data?.[plans.data.length - 1];
   const all = useAsync(() => getSubscriptions({ product: 'GWS' }), [version]);
   const result = useAsync(() => getSubscriptions({ product: 'GWS', keyword, dealerId, status, plan }), [keyword, dealerId, status, plan, version]);
   const rows = result.data ?? [];
@@ -85,13 +88,15 @@ export function GwsSubscriptionsPage() {
     { key: 'seats', header: '席次', align: 'right', render: (s) => <span className="tnum">{s.seats}</span> },
     { key: 'status', header: '狀態', render: (s) => <SubscriptionStatusTag value={s.status} /> },
     {
-      key: 'expiresAt',
-      header: '到期日',
+      key: 'contract',
+      header: '合約期間',
       render: (s) => {
         const d = daysUntil(s.expiresAt);
         return (
           <div>
-            <div className="mono">{formatDate(s.expiresAt)}</div>
+            <div className="mono">
+              {formatDate(s.startsAt)} – {formatDate(s.expiresAt)}
+            </div>
             {s.status !== 'cancelled' && (
               <div className={`table__secondary ${d <= EXPIRING_DAYS ? 'text-warning' : ''}`}>{d >= 0 ? `剩 ${d} 天` : `已過 ${-d} 天`}</div>
             )}
@@ -101,37 +106,45 @@ export function GwsSubscriptionsPage() {
     },
     { key: 'sync', header: '最後同步', render: (s) => <span className={`mono ${s.lastSyncedAt < '2026-11-05' ? 'text-warning' : ''}`}>{formatDateTime(s.lastSyncedAt)}</span> },
     {
+      key: 'ops',
+      header: '進行中',
+      render: (s) =>
+        s.openOperations.length ? (
+          <div className="op-chips">
+            {s.openOperations.map((o) => (
+              <button key={o.id} type="button" className="link-button inline" onClick={() => setPanelId(o.id)} title={`查看 ${o.id}`}>
+                <OperationStatusTag value={o.status} />
+                <span className="table__secondary">{operationTypeLabel[o.type]}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="muted">—</span>
+        ),
+    },
+    {
       key: 'actions',
       header: <span className="visually-hidden">操作</span>,
       render: (s) =>
-        s.status === 'cancelled' ? (
-          <span className="muted">—</span>
-        ) : s.openOperationId && s.openOperationStatus !== 'failed' ? (
-          <button type="button" className="link-button inline" onClick={() => setPanelId(s.openOperationId!)}>
-            <OperationStatusTag value={s.openOperationStatus!} />
-            <span className="mono">{s.openOperationId}</span>
-          </button>
-        ) : (
+        s.status === 'cancelled' || !canOperate ? null : (
           <div className="row-actions">
-            {s.openOperationStatus === 'failed' && (
-              <button type="button" className="btn btn--sm btn--ghost text-danger" onClick={() => setPanelId(s.openOperationId!)} title="上次送出 Google 失敗，點選查看">
-                <Icon name="alert" size={14} />
-                上次失敗
-              </button>
-            )}
-            {canOperate && (
-              <>
-                <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}>
-                  續約
-                </button>
-                <button className="btn btn--sm" onClick={() => setAction({ type: 'seats', target: toTarget(s) })}>
-                  調整席次
-                </button>
-                <button className="btn btn--sm btn--danger" onClick={() => setAction({ type: 'cancel', target: toTarget(s) })}>
-                  取消訂閱
-                </button>
-              </>
-            )}
+            <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}>
+              續約
+            </button>
+            <button className="btn btn--sm" onClick={() => setAction({ type: 'addSeats', target: toTarget(s) })}>
+              加購
+            </button>
+            <button
+              className="btn btn--sm"
+              disabled={topPlan === s.plan}
+              title={topPlan === s.plan ? '已經是最高等級的方案' : undefined}
+              onClick={() => setAction({ type: 'upgrade', target: toTarget(s) })}
+            >
+              中途升版
+            </button>
+            <button className="btn btn--sm btn--danger" onClick={() => setAction({ type: 'cancel', target: toTarget(s) })}>
+              取消訂閱
+            </button>
           </div>
         ),
     },
@@ -145,14 +158,14 @@ export function GwsSubscriptionsPage() {
           canOperate ? (
             <button className="btn btn--primary" onClick={() => setPickOpen(true)}>
               <Icon name="plus" size={16} />
-              新增訂閱
+              新訂
             </button>
           ) : undefined
         }
         titleAddon={<PendingTag id={5} hint="PM 想看哪些 GWS 資訊" />}
         description={
           <span className="inline">
-            以訂閱為單位，資料由 Google 同步回來。{canOperate ? '可以直接在這裡續約、調整席次、取消訂閱，按下去就會送出 Google。' : '你的角色只能查看；需要變更請開立執行單。'}
+            以訂閱為單位，資料由 Google 同步回來。{canOperate ? '可以直接在這裡新訂、續約、加購、中途升版，依類型排程執行或人工執行。' : '你的角色只能查看；需要變更請開立執行單。'}
             <PendingTag id={3} hint="能否抓到已購買方案" />
           </span>
         }
@@ -167,11 +180,11 @@ export function GwsSubscriptionsPage() {
           </button>
         } />
         <Stat
-          label="Google 處理中"
-          value={live.filter((s) => s.openOperationId).length}
-          unit="筆"
-          tone={live.some((s) => s.openOperationStatus === 'failed') ? 'danger' : undefined}
-          sub={`其中失敗 ${live.filter((s) => s.openOperationStatus === 'failed').length} 筆`}
+          label="進行中的訂單"
+          value={live.filter((s) => s.openOperations.some((o) => o.status !== 'failed')).length}
+          unit="筆訂閱"
+          tone={live.some((s) => s.openOperations.some((o) => o.status === 'failed')) ? 'danger' : undefined}
+          sub={`待人工執行 ${live.filter((s) => s.openOperations.some((o) => o.status === 'pendingManual')).length} 筆 · 失敗 ${live.filter((s) => s.openOperations.some((o) => o.status === 'failed')).length} 筆`}
         />
       </StatGrid>
 
@@ -218,7 +231,7 @@ export function GwsSubscriptionsPage() {
       <Modal
         open={pickOpen}
         onClose={() => setPickOpen(false)}
-        title="新增訂閱"
+        title="新訂"
         width={480}
         footer={
           <>
@@ -233,7 +246,7 @@ export function GwsSubscriptionsPage() {
                 if (!c) return;
                 setPickOpen(false);
                 setPickId('');
-                setAction({ type: 'new', target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain } });
+                setAction({ type: pickType, target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain } });
               }}
             >
               下一步
@@ -241,7 +254,24 @@ export function GwsSubscriptionsPage() {
           </>
         }
       >
-        <FormField label="客戶" required help="還沒建檔的客戶，請先到「客戶管理」新增。">
+        <fieldset className="plain-fieldset" style={{ marginBottom: 'var(--space-4)' }}>
+          <legend className="form-field__label">新訂類型</legend>
+          <label className="radio-row">
+            <input type="radio" name="pickType" checked={pickType === 'new'} onChange={() => setPickType('new')} />
+            <span>
+              <strong>全新客戶</strong>
+              <span className="muted">：排程執行</span>
+            </span>
+          </label>
+          <label className="radio-row">
+            <input type="radio" name="pickType" checked={pickType === 'transfer'} onChange={() => setPickType('transfer')} />
+            <span>
+              <strong>移轉進來</strong>
+              <span className="muted">：客戶自己刷卡或從其他經銷商移轉，人工執行</span>
+            </span>
+          </label>
+        </fieldset>
+        <FormField label="客戶" required help="還沒建檔的客戶，請先到「客戶管理」新增；從其他經銷商轉入的新客戶也可以用「轉入客戶」一次建好。">
           {(p) => (
             <select {...p} className="select" value={pickId} onChange={(e) => setPickId(e.target.value)}>
               <option value="">請選擇</option>
