@@ -12,6 +12,7 @@ export const adminNav: NavGroup[] = [
       { to: '/work-orders', label: '執行單', icon: 'workOrders' },
       { to: '/brands', label: '品牌管理', icon: 'brand' },
       { to: '/catalog', label: '產品管理', icon: 'product' },
+      { to: '/plans', label: '方案管理', icon: 'layers' },
     ],
   },
   {
@@ -47,6 +48,7 @@ export const pageResource: Record<string, ResourceKey> = {
   '/work-orders': 'workOrders',
   '/brands': 'catalog',
   '/catalog': 'catalog',
+  '/plans': 'catalog',
   '/products/gws': 'subscriptions',
   '/products/gcp/usage': 'gcpUsage',
   '/products/gcp/billing': 'billing',

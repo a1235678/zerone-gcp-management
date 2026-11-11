@@ -41,9 +41,15 @@ export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, s
   plan,
   seats,
   status: cancelled ? 'cancelled' : 'active',
+  startsAt: contractStart(expiresAt),
   expiresAt,
   lastSyncedAt: lastSyncedAt ?? '2026-11-05 06:00',
 }));
 
-/** 新訂閱可選的方案（之後應由 API 提供，見待確認 #3） */
-export const gwsPlans = ['Business Starter', 'Business Standard', 'Business Plus', 'Enterprise Standard'];
+/** 假資料的合約都是一年：迄日往前推一年再加一天 */
+function contractStart(expiresAt: string) {
+  const d = new Date(`${expiresAt}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() - 1);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}

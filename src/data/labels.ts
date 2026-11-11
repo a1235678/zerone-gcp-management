@@ -94,6 +94,7 @@ export const logCategoryLabel: Record<LogCategory, string> = {
   workOrder: '執行單',
   gws: 'GWS 操作',
   billing: '帳單',
+  catalog: '品牌與產品',
   permission: '權限',
   login: '登入',
   sync: '同步',

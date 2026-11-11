@@ -7,7 +7,7 @@ import { resourceOf, visibleNav } from './nav';
 import { NoPermissionPage } from './pages/PlaceholderPage';
 import { ForgotPasswordPage, LoginPage } from './pages/LoginPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
-import { BrandsPage, ProductsPage } from './pages/CatalogPages';
+import { BrandsPage, PlansPage, ProductsPage } from './pages/CatalogPages';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { DealersPage } from './pages/DealersPage';
@@ -80,6 +80,7 @@ function Protected() {
             <Route path="/work-orders/:id/edit" element={<WorkOrderFormPage key="edit" />} />
             <Route path="/brands" element={<BrandsPage />} />
             <Route path="/catalog" element={<ProductsPage />} />
+            <Route path="/plans" element={<PlansPage />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
             <Route path="/products/gcp" element={<GcpIndex />} />
             <Route path="/products/gcp/usage" element={<GcpUsagePage />} />

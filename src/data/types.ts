@@ -75,6 +75,9 @@ export interface Subscription {
   /** GWS 才有席次 */
   seats: number | null;
   status: SubscriptionStatus;
+  /** 目前合約起日 */
+  startsAt: string;
+  /** 目前合約迄日（到期日） */
   expiresAt: string;
   lastSyncedAt: string;
 }
@@ -435,7 +438,7 @@ export interface RoleListItem extends Role {
 }
 
 // ── 操作紀錄 ───────────────────────────
-export type LogCategory = 'customer' | 'workOrder' | 'gws' | 'billing' | 'permission' | 'login' | 'sync';
+export type LogCategory = 'customer' | 'workOrder' | 'gws' | 'billing' | 'catalog' | 'permission' | 'login' | 'sync';
 export type LogResult = 'success' | 'failure' | 'warning';
 export interface AuditLog {
   id: string;
@@ -473,6 +476,21 @@ export interface Product {
   code: string;
   status: 'active' | 'draft';
   createdAt: string;
+}
+/** 方案：等級數字越大版本越高，用來判斷升版、降版 */
+export interface Plan {
+  id: string;
+  productId: string;
+  name: string;
+  tier: number;
+  status: 'active' | 'draft';
+  createdAt: string;
+}
+export interface PlanListItem extends Plan {
+  productName: string;
+  brandName: string;
+  /** 使用中（未取消）的訂閱數 */
+  subscriptionCount: number;
 }
 export interface BrandListItem extends Brand {
   productCount: number;

@@ -4,7 +4,7 @@
  * 所有寫入只改記憶體，重新整理頁面就會回到初始資料。
  * 真正的權限與資料範圍檢查必須在後端做，這裡不模擬。
  */
-import { brands as seedBrands, products as seedProducts } from './mock/brands';
+import { brands as seedBrands, plans as seedPlans, products as seedProducts } from './mock/brands';
 import { customers as seedCustomers } from './mock/customers';
 import { dealers as seedDealers } from './mock/dealers';
 import { BILL_MONTHS, PAYMENT_DAYS, gcpBills as seedBills, googleInvoices as seedInvoices } from './mock/billing';
@@ -12,7 +12,7 @@ import { GCP_DAYS, GCP_PERIOD_END, gcpAccounts, gcpDates } from './mock/gcp';
 import { auditLogs as seedLogs, roleOfActor } from './mock/logs';
 import { roles as seedRoles } from './mock/roles';
 import { schedules as seedSchedules } from './mock/schedules';
-import { gwsPlans, subscriptions as seedSubscriptions } from './mock/subscriptions';
+import { subscriptions as seedSubscriptions } from './mock/subscriptions';
 import { users as seedUsers } from './mock/users';
 import { operations as seedOperations } from './mock/operations';
 import { workOrders as seedWorkOrders } from './mock/workOrders';
@@ -54,6 +54,8 @@ import type {
   WorkOrderStep,
   WorkOrderStepState,
   OrgType,
+  Plan,
+  PlanListItem,
   Product,
   ProductListItem,
   Role,
@@ -95,6 +97,7 @@ const db = {
   logs: structuredClone(seedLogs),
   brands: structuredClone(seedBrands),
   products: structuredClone(seedProducts),
+  plans: structuredClone(seedPlans),
   bills: structuredClone(seedBills),
   invoices: structuredClone(seedInvoices),
 };
@@ -458,9 +461,13 @@ export function getSubscriptions(query: SubscriptionQuery = {}): Promise<Subscri
   return delay(rows);
 }
 
+/** 上架中的 GWS 方案名稱，依等級由低到高 */
 export function getPlans(): Promise<string[]> {
-  return delay(gwsPlans);
+  return delay(activeGwsPlans().map((p) => p.name));
 }
+const activeGwsPlans = () => db.plans.filter((p) => p.productId === 'P01' && p.status === 'active').sort((a, b) => a.tier - b.tier);
+/** 方案等級；找不到回傳 0 */
+export const planTier = (name?: string) => db.plans.find((p) => p.name === name)?.tier ?? 0;
 
 // ═════════ GWS 操作（後勤直接送 Google） ═════════
 
@@ -623,6 +630,7 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
         plan: op.payload.plan ?? 'Business Starter',
         seats: op.payload.seats ?? 1,
         status: 'active',
+        startsAt: TODAY,
         expiresAt: addMonths(TODAY, 12),
         lastSyncedAt: at,
       });
@@ -1282,7 +1290,7 @@ export function createBrand(name: string): Promise<Brand> {
   if (db.brands.some((b) => b.name === n)) return fail('已有同名品牌');
   const brand: Brand = { id: `B${String(db.brands.length + 1).padStart(2, '0')}`, name: n, status: 'draft', createdAt: TODAY };
   db.brands.push(brand);
-  log('customer', n, '新增品牌');
+  log('catalog', n, '新增品牌');
   return delay(brand);
 }
 export function getProducts(): Promise<ProductListItem[]> {
@@ -1295,8 +1303,46 @@ export function createProduct(input: { brandId: string; name: string; code: stri
   if (db.products.some((p) => p.code === code)) return fail('產品代碼已存在');
   const product: Product = { id: `P${String(db.products.length + 1).padStart(2, '0')}`, brandId: input.brandId, name, code, status: 'draft', createdAt: TODAY };
   db.products.push(product);
-  log('customer', name, '新增產品');
+  log('catalog', name, '新增產品');
   return delay(product);
+}
+
+// ═════════ 方案 ═════════
+
+export function getPlanList(): Promise<PlanListItem[]> {
+  return delay(
+    db.plans
+      .map((p) => {
+        const product = db.products.find((x) => x.id === p.productId);
+        return {
+          ...p,
+          productName: product?.name ?? '—',
+          brandName: db.brands.find((b) => b.id === product?.brandId)?.name ?? '—',
+          subscriptionCount: db.subscriptions.filter((s) => s.plan === p.name && s.status !== 'cancelled').length,
+        };
+      })
+      .sort((a, b) => a.productId.localeCompare(b.productId) || a.tier - b.tier),
+  );
+}
+
+export function savePlan(input: { id?: string; productId: string; name: string; tier: number; status: Plan['status'] }): Promise<Plan> {
+  const name = input.name.trim();
+  if (!name) return fail('請輸入方案名稱');
+  if (!Number.isInteger(input.tier) || input.tier < 1) return fail('等級請填 1 以上的整數');
+  if (db.plans.some((p) => p.name === name && p.productId === input.productId && p.id !== input.id)) return fail('同一個產品已有同名方案');
+  const clash = db.plans.find((p) => p.productId === input.productId && p.tier === input.tier && p.id !== input.id);
+  if (clash) return fail(`等級 ${input.tier} 已經是「${clash.name}」，同一個產品的等級不能重複`);
+  const existing = db.plans.find((p) => p.id === input.id);
+  if (existing) {
+    if (existing.name !== name && db.subscriptions.some((s) => s.plan === existing.name)) return fail('已有訂閱使用這個方案，不能改名');
+    Object.assign(existing, { name, tier: input.tier, status: input.status });
+    log('catalog', name, `修改方案：等級 ${input.tier}、${input.status === 'active' ? '上架' : '草稿'}`);
+    return delay(existing);
+  }
+  const plan: Plan = { id: `PL${String(db.plans.length + 1).padStart(2, '0')}`, productId: input.productId, name, tier: input.tier, status: input.status, createdAt: TODAY };
+  db.plans.push(plan);
+  log('catalog', name, `新增方案（等級 ${plan.tier}）`);
+  return delay(plan);
 }
 
 // ═════════ 首頁 ═════════
