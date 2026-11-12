@@ -266,8 +266,8 @@ export function GwsSubscriptionsPage() {
           <label className="radio-row">
             <input type="radio" name="pickType" checked={pickType === 'transfer'} onChange={() => setPickType('transfer')} />
             <span>
-              <strong>移轉進來</strong>
-              <span className="muted">：客戶自己刷卡或從其他經銷商移轉，人工執行</span>
+              <strong>客戶轉入</strong>
+              <span className="muted">：客戶自己刷卡或從其他經銷商轉進來，人工執行</span>
             </span>
           </label>
         </fieldset>

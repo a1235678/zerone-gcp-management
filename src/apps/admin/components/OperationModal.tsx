@@ -126,6 +126,10 @@ export function OperationModal({
       const n = Number(seats);
       if (!Number.isInteger(n) || n < 1) e.seats = '人數需為大於 0 的整數';
     }
+    if (type === 'upgrade' && addSeats !== '') {
+      const n = Number(addSeats);
+      if (!Number.isInteger(n) || n < 0) e.addSeats = '加購人數需為 0 以上的整數（升版不能減人）';
+    }
     if (type === 'addSeats') {
       const n = Number(addSeats);
       if (!Number.isInteger(n) || n < 1) e.addSeats = '加購人數需為大於 0 的整數（加購不能減人）';
@@ -135,7 +139,7 @@ export function OperationModal({
       else if (maxDate && date > maxDate) e.scheduledAt = `啟用日不能晚於合約結束日 ${formatDate(maxDate)}`;
     }
     if (type === 'transfer') {
-      if (!source) e.source = '請選擇移轉來源';
+      if (!source) e.source = '請選擇轉入來源';
     }
     return e;
   }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution]);
@@ -151,7 +155,7 @@ export function OperationModal({
     if (type === 'new') Object.assign(p, { plan, seats: Number(seats) });
     if (type === 'renewal') Object.assign(p, { plan, seats: Number(seats), renewMonths: Number(renewMonths) });
     if (type === 'addSeats') p.addSeats = Number(addSeats);
-    if (type === 'upgrade') p.plan = plan;
+    if (type === 'upgrade') Object.assign(p, { plan }, Number(addSeats) > 0 ? { addSeats: Number(addSeats) } : {});
     if (type === 'transfer') p.transferSource = source || undefined;
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
     setSaving(true);
@@ -310,7 +314,15 @@ export function OperationModal({
         {type === 'upgrade' && (
           <div className="form-grid">
             {planSelect('升級後的方案')}
-            <FormField label="期間" help="升版後仍沿用目前合約，到期日不變。">
+            <FormField
+              label="同時加購人數"
+              message={show('addSeats') ?? (Number(addSeats) > 0 ? `升版後 ${(target.seats ?? 0) + Number(addSeats)} 席` : undefined)}
+              state={st('addSeats')}
+              help={`選填。目前 ${target.seats} 席，只能加人，不能減人。`}
+            >
+              {(p) => <input {...p} className="input tnum" type="number" min={0} placeholder="0" value={addSeats} onChange={(e) => setAddSeats(e.target.value)} />}
+            </FormField>
+            <FormField label="期間" help="升版後仍沿用目前合約，到期日不變。" className="is-full">
               {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
             </FormField>
           </div>
@@ -321,7 +333,7 @@ export function OperationModal({
           <>
             <fieldset className="plain-fieldset">
               <legend className="form-field__label">
-                移轉來源 <span className="form-field__req">必填</span>
+                轉入來源 <span className="form-field__req">必填</span>
               </legend>
               {(['selfPaid', 'otherDealer'] as TransferSource[]).map((s) => (
                 <label key={s} className="radio-row">
@@ -334,7 +346,7 @@ export function OperationModal({
               ))}
               {show('source') && <div className="form-field__msg form-field__msg--error">{show('source')}</div>}
             </fieldset>
-            <Callout tone="neutral">客戶已經在 Google 申請完移轉。建立後狀態為「待人工執行」，後勤到 Google 後台接受移轉後，回來標記完成。</Callout>
+            <Callout tone="neutral">客戶已經在 Google 申請完轉移。建立後狀態為「待人工執行」，後勤到 Google 後台接受轉入後，回來標記完成。</Callout>
           </>
         )}
 

@@ -122,10 +122,10 @@ export function WorkOrderDetailPage() {
     ...(sub ? [{ label: '訂閱', value: `${sub.plan} · 目前 ${sub.seats} 席 · 合約 ${sub.startsAt.replace(/-/g, '/')} – ${sub.expiresAt.replace(/-/g, '/')}` }] : []),
     ...(p.plan ? [{ label: w.type === 'upgrade' ? '升級後方案' : w.type === 'renewal' ? '續約方案' : '方案', value: <span className="inline">{p.plan} <PendingTag id={3} /></span> }] : []),
     ...(p.seats !== undefined ? [{ label: w.type === 'renewal' ? '續約人數' : '人數', value: `${p.seats} 席` }] : []),
-    ...(p.addSeats !== undefined ? [{ label: '加購人數', value: `${p.addSeats} 席${sub ? `（${sub.seats} → ${(sub.seats ?? 0) + p.addSeats}）` : ''}` }] : []),
+    ...(p.addSeats !== undefined ? [{ label: w.type === 'upgrade' ? '同時加購人數' : '加購人數', value: `${p.addSeats} 席${sub ? `（${sub.seats} → ${(sub.seats ?? 0) + p.addSeats}）` : ''}` }] : []),
     ...(w.type === 'renewal' ? [{ label: '續約期間', value: `${p.renewMonths} 個月` }] : []),
     ...(w.type === 'renewal' && sub ? [{ label: '變動', value: <ChangeTags planChange={analysis.planChange} seatChange={analysis.seatChange} /> }] : []),
-    ...(p.transferSource ? [{ label: '移轉來源', value: transferSourceLabel[p.transferSource] }] : []),
+    ...(p.transferSource ? [{ label: '轉入來源', value: transferSourceLabel[p.transferSource] }] : []),
     {
       label: '執行方式',
       value: (

@@ -529,7 +529,7 @@ export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan'
     case 'transfer':
       return {
         execution: 'manual',
-        reasons: [payload.transferSource === 'selfPaid' ? '客戶自己刷卡、要移轉進來，由後勤人工執行' : '從其他經銷商移轉，由後勤人工執行'],
+        reasons: [payload.transferSource === 'selfPaid' ? '客戶自己刷卡、要轉進來，由後勤人工執行' : '從其他經銷商轉入，由後勤人工執行'],
       };
     case 'renewal': {
       const planChange = planChangeOf(sub?.plan, payload.plan ?? sub?.plan);
@@ -583,7 +583,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
     case 'addSeats':
       return `加購 ${p.addSeats} 席（${fromSeats} → ${fromSeats + (p.addSeats ?? 0)}）`;
     case 'upgrade':
-      return `${fromPlan} → ${p.plan}`;
+      return `${fromPlan} → ${p.plan}${p.addSeats ? `，加購 ${p.addSeats} 席（${fromSeats} → ${fromSeats + p.addSeats}）` : ''}`;
   }
 }
 
@@ -643,12 +643,13 @@ export function validateOperation(input: NewOperationInput): string | undefined 
     if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) return '人數需為大於 0 的整數';
   }
   if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) return '加購人數需為大於 0 的整數，加購不能減人';
+  if (input.type === 'upgrade' && p.addSeats !== undefined && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 0)) return '加購人數需為 0 以上的整數，升版不能減人';
   if (input.type === 'upgrade' && planChangeOf(sub?.plan, p.plan) !== 'up') return '中途升版只能選比目前高的方案';
   if (p.scheduledAt && p.scheduledAt < TODAY) return '啟用日不能早於今天';
   if (input.type === 'transfer') {
-    if (!p.transferSource) return '請選擇移轉來源';
+    if (!p.transferSource) return '請選擇轉入來源';
     const open = db.operations.find((o) => o.customerId === input.customerId && o.type === 'transfer' && isOpen(o));
-    if (open) return `這個客戶已有處理中的移轉 ${open.id}`;
+    if (open) return `這個客戶已有處理中的客戶轉入 ${open.id}`;
   }
   return undefined;
 }
@@ -788,6 +789,7 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
       break;
     case 'upgrade':
       if (sub && p.plan) sub.plan = p.plan;
+      if (sub && p.addSeats) sub.seats = (sub.seats ?? 0) + p.addSeats;
       break;
     case 'new': {
       const id = `S${String(db.subscriptions.length + 1).padStart(3, '0')}`;
@@ -807,7 +809,7 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
       break;
     }
     case 'transfer':
-      log('customer', c.name, `客戶移轉完成（${op.id}），訂閱將於下次同步時出現在 GWS 訂閱清單`, 'success', c.id, '系統');
+      log('customer', c.name, `客戶轉入完成（${op.id}），訂閱將於下次同步時出現在 GWS 訂閱清單`, 'success', c.id, '系統');
       break;
   }
   if (sub) sub.lastSyncedAt = at;
@@ -822,7 +824,7 @@ function workOrderCustomer(wo: WorkOrder) {
 
 function describeWorkOrder(wo: WorkOrder): string {
   const text = describeOperation({ type: wo.type, subscriptionId: wo.subscriptionId, payload: wo.payload });
-  return wo.type === 'transfer' ? `${workOrderCustomer(wo).name} 移轉進來` : text;
+  return wo.type === 'transfer' ? `${workOrderCustomer(wo).name} 從其他經銷商轉入` : text;
 }
 
 const processable = (wo: WorkOrder) => wo.status === 'approved' || wo.status === 'processing' || wo.status === 'completed';
@@ -914,7 +916,7 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
   const e: Record<string, string> = {};
   const needsSubscription = input.type === 'renewal' || input.type === 'addSeats' || input.type === 'upgrade';
   if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、加購、中途升版只適用現有客戶';
-  if (!needsSubscription && input.customerMode === 'existing') e.customerMode = '新訂、移轉一定是新客戶';
+  if (input.type === 'transfer' && input.customerMode === 'existing') e.customerMode = '客戶轉入一定是新客戶';
   if (input.customerMode === 'existing' && !input.customerId) e.customerId = '請選擇客戶';
   if (needsSubscription && input.customerId && !input.subscriptionId) e.subscriptionId = '請選擇訂閱';
   if (input.customerMode === 'new') {
@@ -943,6 +945,7 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
   }
   if (input.type === 'renewal' && !p.renewMonths) e.renewMonths = '請選擇續約期間';
   if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) e.addSeats = '加購人數需為大於 0 的整數';
+  if (input.type === 'upgrade' && p.addSeats !== undefined && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 0)) e.addSeats = '加購人數需為 0 以上的整數';
   if (input.type === 'upgrade' && p.plan && sub && planChangeOf(sub.plan, p.plan) !== 'up') e.plan = '中途升版只能選比目前高的方案';
   return e;
 }
@@ -963,7 +966,7 @@ function applyInput(wo: WorkOrder, input: WorkOrderInput) {
     transfer: { transferSource: p.transferSource, memo },
     renewal: { plan: p.plan, seats: p.seats, renewMonths: p.renewMonths, memo },
     addSeats: { addSeats: p.addSeats, memo },
-    upgrade: { plan: p.plan, memo },
+    upgrade: { plan: p.plan, addSeats: p.addSeats || undefined, memo },
   };
   wo.payload = pick[input.type];
 }

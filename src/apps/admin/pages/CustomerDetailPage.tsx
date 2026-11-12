@@ -131,8 +131,8 @@ export function CustomerDetailPage() {
               </button>
             )}
             {can('subscriptions', 'write') && (
-              <button className="btn btn--primary" onClick={() => setTransferOpen(true)} disabled={Boolean(openTransfer)} title={openTransfer ? `已有處理中的轉移 ${openTransfer.id}` : undefined}>
-                客戶轉移
+              <button className="btn btn--primary" onClick={() => setTransferOpen(true)} disabled={Boolean(openTransfer)} title={openTransfer ? `已有處理中的客戶轉入 ${openTransfer.id}` : undefined}>
+                客戶轉入
               </button>
             )}
           </>
@@ -232,7 +232,7 @@ export function CustomerDetailPage() {
               </div>
             </Card>
 
-            <Card title={<span className="inline">客戶轉移 <PendingTag id={4} /></span>} bodyless>
+            <Card title={<span className="inline">客戶轉入 <PendingTag id={4} /></span>} bodyless>
               {transfers.data && transfers.data.length > 0 ? (
                 <ul className="list-plain">
                   {transfers.data.map((o) => (
@@ -259,14 +259,14 @@ export function CustomerDetailPage() {
               ) : (
                 <div className="card__body">
                   <p className="muted">
-                    這個客戶沒有移轉紀錄。新客戶要移轉進來時，請用客戶管理的「轉入客戶」；已在系統裡的客戶才從這裡建立移轉。
+                    這個客戶沒有轉入紀錄。新客戶要轉進來時，請用客戶管理的「轉入客戶」；已在系統裡的客戶才從這裡建立客戶轉入。
                   </p>
                 </div>
               )}
               {openTransfer && (
                 <div className="card__body" style={{ borderTop: '1px solid var(--color-border)' }}>
                   <Callout tone="neutral">
-                    已有處理中的移轉 {openTransfer.id}，處理完才能再建立。
+                    已有處理中的客戶轉入 {openTransfer.id}，處理完才能再建立。
                   </Callout>
                 </div>
               )}

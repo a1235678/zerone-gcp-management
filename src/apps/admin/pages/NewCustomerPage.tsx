@@ -116,7 +116,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     try {
       if (isTransfer) {
         const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, memo: form.transferMemo, workOrderId: fromWo ?? undefined });
-        toast(`已建立「${customer.name}」，移轉（${operation.id}）待後勤人工執行`);
+        toast(`已建立「${customer.name}」，客戶轉入（${operation.id}）待後勤人工執行`);
         navigate(fromWo ? `/work-orders/${fromWo}` : `/customers/${customer.id}`);
       } else {
         const c = await createCustomer({ ...form, ...admin });
@@ -158,7 +158,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           {r.existingCustomer &&
             (isTransfer ? (
               <>
-                客戶已在系統裡，請到<Link to={`/customers/${r.existingCustomer}`}>該客戶詳情</Link>開立客戶轉移。
+                客戶已在系統裡，請到<Link to={`/customers/${r.existingCustomer}`}>該客戶詳情</Link>建立客戶轉入。
               </>
             ) : (
               <Link to={`/customers/${r.existingCustomer}`}>查看該客戶</Link>
@@ -196,7 +196,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         }
         description={
           isTransfer
-            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，並建立一筆移轉，由後勤在 Google 後台人工執行。'
+            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，並建立一筆客戶轉入，由後勤在 Google 後台人工執行。'
             : '建立客戶主檔，同時建立該客戶的第一個「組織管理員」帳號。'
         }
       />
@@ -204,7 +204,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
       {fromWo && (
         <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
           <Callout tone="info" title={`依執行單 ${fromWo} ${isTransfer ? '轉入客戶' : '建立客戶'}`}>
-            {isTransfer ? '客戶資料與轉移備註已從執行單帶入，請確認後建立。建立後會產生一筆移轉（待人工執行），並回到執行單。' : '客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。'}
+            {isTransfer ? '客戶資料與轉移備註已從執行單帶入，請確認後建立。建立後會產生一筆客戶轉入（待人工執行），並回到執行單。' : '客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。'}
           </Callout>
         </div>
       )}
@@ -219,7 +219,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         <div className="card__body">
           {isTransfer && (
             <div style={{ marginBottom: 'var(--space-6)' }}>
-              <Callout tone="neutral">客戶從其他經銷商轉進來。如果客戶已經在系統裡，請改到該客戶詳情建立移轉。</Callout>
+              <Callout tone="neutral">客戶從其他經銷商轉進來。如果客戶已經在系統裡，請改到該客戶詳情建立客戶轉入。</Callout>
             </div>
           )}
 
@@ -296,7 +296,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           </FormSection>
 
           {isTransfer && (
-            <FormSection title="轉移資訊" description="客戶已經在 Google 申請完移轉。建立客戶後狀態為「待人工執行」，後勤在 Google 後台接受移轉後回來標記。">
+            <FormSection title="轉移資訊" description="客戶已經在 Google 申請完轉移。建立客戶後狀態為「待人工執行」，後勤在 Google 後台接受轉入後回來標記。">
               <FormField label="轉移備註" className="is-full">
                 {(p) => <textarea {...p} className="textarea" value={form.transferMemo} onChange={set('transferMemo')} />}
               </FormField>
@@ -334,7 +334,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             取消
           </Link>
           <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
-            {saving ? '處理中…' : isTransfer ? '建立客戶並建立移轉' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
+            {saving ? '處理中…' : isTransfer ? '建立客戶並建立客戶轉入' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
           </button>
         </div>
       </form>

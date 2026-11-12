@@ -61,15 +61,18 @@ export function WorkOrderFormPage() {
   const show = (k: string) => (tried || (k === 'primaryDomain' && nc.primaryDomain) ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
-  // 新訂、移轉一定是新客戶；續約、加購、中途升版一定是現有客戶
+  // 客戶轉入一定是新客戶；續約、加購、中途升版一定是現有客戶；新訂可以選新客戶或現有客戶（其他產品的客戶）
   const setType = (t: WorkOrderType) =>
-    setInput((x) => ({
-      ...x,
-      type: t,
-      customerMode: needsSubscription(t) ? 'existing' : 'new',
-      customerId: needsSubscription(t) ? x.customerId : undefined,
-      subscriptionId: needsSubscription(t) ? x.subscriptionId : undefined,
-    }));
+    setInput((x) => {
+      const mode = needsSubscription(t) ? 'existing' : t === 'transfer' ? 'new' : x.customerMode;
+      return {
+        ...x,
+        type: t,
+        customerMode: mode,
+        customerId: mode === 'existing' ? x.customerId : undefined,
+        subscriptionId: needsSubscription(t) ? x.subscriptionId : undefined,
+      };
+    });
   const setPayload = (k: keyof WorkOrderInput['payload'], v: string | number | undefined) => setInput((x) => ({ ...x, payload: { ...x.payload, [k]: v } }));
   const setNcField = (k: keyof NewCustomerDraft) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setNc((x) => ({ ...x, [k]: e.target.value }));
 
@@ -140,6 +143,20 @@ export function WorkOrderFormPage() {
           </FormSection>
 
           <FormSection title="客戶">
+            {input.type === 'new' && (
+              <FormField label="客戶" required className="is-full" message={show('customerMode')} state={st('customerMode')} help="現有客戶：已經是我們平台其他產品的客戶。">
+                {(p) => (
+                  <div className="segmented" role="group" aria-labelledby={p.id}>
+                    <button type="button" aria-pressed={input.customerMode === 'new'} onClick={() => setInput((x) => ({ ...x, customerMode: 'new', customerId: undefined }))}>
+                      新客戶
+                    </button>
+                    <button type="button" aria-pressed={input.customerMode === 'existing'} onClick={() => setInput((x) => ({ ...x, customerMode: 'existing' }))}>
+                      現有客戶
+                    </button>
+                  </div>
+                )}
+              </FormField>
+            )}
             {input.customerMode === 'existing' ? (
               <>
                 <FormField label="選擇客戶" required message={show('customerId')} state={st('customerId')}>
@@ -195,8 +212,8 @@ export function WorkOrderFormPage() {
                 <div className="is-full">
                   <Callout tone="neutral">
                     {input.type === 'transfer'
-                      ? '移轉的客戶一定是新客戶，請填客戶主檔「轉入客戶」的欄位。核准後由後勤在「轉入客戶」建檔並建立移轉，這裡填的內容會自動帶入。'
-                      : '新訂一定是新客戶。核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。'}
+                      ? '客戶轉入：客戶從其他經銷商轉進來，一定是新客戶，請填客戶主檔「轉入客戶」的欄位。核准後由後勤在「轉入客戶」建檔並建立轉入，這裡填的內容會自動帶入。'
+                      : '新客戶的資料會在核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。'}
                     主網域現在就會檢查格式與是否重複。
                   </Callout>
                 </div>
@@ -322,12 +339,16 @@ export function WorkOrderFormPage() {
                     </select>
                   )}
                 </FormField>
-                <div />
+                <FormField label="同時加購人數" message={show('addSeats')} state={st('addSeats')} help={sub ? `選填。目前 ${sub.seats} 席，只能加人。` : '選填'}>
+                  {(p) => (
+                    <input {...p} className="input tnum" type="number" min={0} placeholder="0" value={input.payload.addSeats ?? ''} onChange={(e) => setPayload('addSeats', e.target.value ? Number(e.target.value) : undefined)} />
+                  )}
+                </FormField>
               </>
             )}
             {input.type === 'transfer' && (
               <div className="is-full">
-                <Callout tone="neutral">客戶已經在 Google 申請完移轉，不需要轉移碼。客戶的訂閱會全部轉入，不能只轉一部分。</Callout>
+                <Callout tone="neutral">客戶已經在 Google 申請完轉移，不需要轉移碼。客戶的訂閱會全部轉入，不能只轉一部分。</Callout>
               </div>
             )}
             {(input.type === 'new' || input.type === 'transfer' || sub) && (

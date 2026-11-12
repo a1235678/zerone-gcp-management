@@ -31,7 +31,7 @@ export const subscriptionStatusLabel: Record<SubscriptionStatus, string> = { act
 
 export const workOrderTypeLabel: Record<WorkOrderType, string> = {
   new: '新訂',
-  transfer: '移轉',
+  transfer: '客戶轉入',
   renewal: '續約',
   addSeats: '加購',
   upgrade: '中途升版',
@@ -60,7 +60,7 @@ export const operationStatusLabel: Record<OperationStatus, string> = {
   cancelled: '已取消',
 };
 export const executionModeLabel: Record<ExecutionMode, string> = { schedule: '排程執行', manual: '人工執行' };
-export const transferSourceLabel: Record<TransferSource, string> = { selfPaid: '客戶自己刷卡，要移轉進來', otherDealer: '從其他經銷商移轉' };
+export const transferSourceLabel: Record<TransferSource, string> = { selfPaid: '客戶自己刷卡，要轉進來', otherDealer: '從其他經銷商轉入' };
 
 export const scheduleKindLabel: Record<ScheduleKind, string> = { once: '單次', monthly: '每月', yearly: '每年' };
 export const scheduleActionLabel: Record<ScheduleAction, string> = {
