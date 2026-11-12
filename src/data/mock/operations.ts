@@ -69,11 +69,11 @@ export const operations: GwsOperation[] = [
     scheduleId: 'J007',
     failureReason: '經銷商帳戶付款方式驗證失敗',
   }),
-  op('OP-1103-002', 'transfer', 'manual', 'C0023', undefined, { transferSource: 'otherDealer', agentCode: 'ZR-0001', dealerCode: 'RS-2048' }, 'completed', '2026-10-29 10:05', '2026-11-03 10:30', {
+  op('OP-1103-002', 'transfer', 'manual', 'C0023', undefined, { transferSource: 'otherDealer' }, 'completed', '2026-10-29 10:05', '2026-11-03 10:30', {
     workOrderId: 'WO-1027-002',
     manualNote: '已在 Google 經銷商後台接受移轉',
   }),
-  op('OP-1104-003', 'transfer', 'manual', 'C0027', undefined, { transferSource: 'otherDealer', agentCode: 'ZR-0001', dealerCode: 'RS-3072' }, 'pendingManual', '2026-11-04 14:00', undefined, {
+  op('OP-1104-003', 'transfer', 'manual', 'C0027', undefined, { transferSource: 'otherDealer' }, 'pendingManual', '2026-11-04 14:00', undefined, {
     workOrderId: 'WO-1017-001',
   }),
   op('OP-1028-001', 'addSeats', 'schedule', 'C0011', 'S012', { fromPlan: 'Enterprise Standard', fromSeats: 200, addSeats: 10, scheduledAt: '2026-10-28' }, 'completed', '2026-10-28 14:30', '2026-10-28 14:41', {

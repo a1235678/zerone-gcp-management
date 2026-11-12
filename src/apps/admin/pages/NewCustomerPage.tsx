@@ -16,7 +16,6 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
-import { TransferCodes } from '../components/TransferCodes';
 import { usePermission } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,7 +39,7 @@ type Key = keyof typeof empty;
 
 /**
  * 新增客戶，或「轉入客戶」：從其他經銷商轉進來的客戶。
- * 轉入時同一張表單多了轉移資訊（顯示客戶要填的代理商代碼、經銷商代碼，不需要轉移碼），送出後建立客戶主檔，並建立一筆「新訂（移轉）」由後勤人工執行。
+ * 轉入時同一張表單多了轉移資訊（客戶已在 Google 申請完移轉，不需要轉移碼），送出後建立客戶主檔，並建立一筆「新訂（移轉）」由後勤人工執行。
  * 網址帶 ?fromWo=單號 時，從執行單帶入新客戶資料，建立後接回執行單。
  */
 export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
@@ -296,10 +295,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           </FormSection>
 
           {isTransfer && (
-            <FormSection title="轉移資訊" description="從其他經銷商移轉由後勤人工執行：建立客戶後狀態為「待人工執行」，後勤在 Google 後台接受移轉後回來標記。">
-              <div className="is-full">
-                <TransferCodes dealerId={form.dealerId || undefined} />
-              </div>
+            <FormSection title="轉移資訊" description="客戶已經在 Google 申請完移轉。建立客戶後狀態為「待人工執行」，後勤在 Google 後台接受移轉後回來標記。">
               <FormField label="轉移備註" className="is-full">
                 {(p) => <textarea {...p} className="textarea" value={form.transferMemo} onChange={set('transferMemo')} />}
               </FormField>

@@ -21,7 +21,6 @@ export const pendingItems = {
   21: { question: '能否取得系統設定的用量上限數字', owner: 'Ray' },
   22: { question: 'Gemini Enterprise 能否取得用量和 token 數', owner: 'Ray' },
   23: { question: '建立使用者帳號時，是否會連動到 GCP', owner: 'Ray' },
-  24: { question: '代理商代碼、經銷商代碼的格式與來源', owner: '待指定' },
 } as const;
 
 export type PendingId = keyof typeof pendingItems;

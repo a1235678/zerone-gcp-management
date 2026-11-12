@@ -271,7 +271,7 @@ export function createDealer(input: { name: string; adminName: string; adminEmai
   const email = input.adminEmail.trim().toLowerCase();
   if (db.users.some((u) => u.email === email)) return fail('這個 Email 已經有帳號');
   const id = `D${String(db.dealers.length).padStart(3, '0')}`;
-  const dealer: Dealer = { id, name, code: `RS-${1024 * (db.dealers.length + 1)}`, isDirect: false, status: 'active', createdAt: TODAY };
+  const dealer: Dealer = { id, name, isDirect: false, status: 'active', createdAt: TODAY };
   db.dealers.push(dealer);
   db.users.push({
     id: nextUserId(),
@@ -410,15 +410,7 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
   return delay(withDealer(customer));
 }
 
-/** 零壹的代理商代碼：客戶在 Google 申請轉移時要填（格式待確認，目前是假資料） */
-export const AGENT_CODE = 'ZR-0001';
-/** 客戶申請轉移時要填的兩個代碼：代理商（零壹）與經銷商（客戶透過誰購買） */
-export function transferCodesFor(dealerId: string) {
-  const d = db.dealers.find((x) => x.id === dealerId);
-  return { agentCode: AGENT_CODE, dealerCode: d?.code ?? '', dealerName: d?.name ?? '' };
-}
-
-/** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後建立一筆移轉，由後勤人工執行（不需要轉移碼） */
+/** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後建立一筆移轉，由後勤人工執行（客戶已在 Google 申請完移轉，不需要轉移碼） */
 export async function createTransferInCustomer(input: NewCustomerInput & { memo: string }): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
   const customer = await createCustomer({ ...input, note: input.note || '由其他經銷商轉入' });
   const operation = await createOperation({
@@ -576,7 +568,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
     case 'new':
       return `${p.plan} ${p.seats} 席`;
     case 'transfer':
-      return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.dealerCode ? `，經銷商代碼 ${p.dealerCode}` : ''}`;
+      return transferSourceLabel[p.transferSource ?? 'otherDealer'];
     case 'renewal': {
       const plan = p.plan ?? fromPlan;
       const seats = p.seats ?? fromSeats;
@@ -676,10 +668,6 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
   const payload: OperationPayload = { ...input.payload };
   if (sub) Object.assign(payload, { fromPlan: sub.plan, fromSeats: sub.seats ?? 0 });
   if (input.type === 'renewal') Object.assign(payload, { newStartsAt: analysis.newStartsAt, newExpiresAt: analysis.newExpiresAt });
-  if (input.type === 'transfer') {
-    const codes = transferCodesFor(c.dealerId);
-    Object.assign(payload, { agentCode: codes.agentCode, dealerCode: codes.dealerCode });
-  }
   if (analysis.execution === 'schedule') payload.scheduledAt = payload.scheduledAt ?? analysis.defaultDate ?? TODAY;
   else delete payload.scheduledAt;
   const op: GwsOperation = {

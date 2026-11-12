@@ -15,7 +15,6 @@ import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
 import { StatusTag } from '@shared/components/StatusTag';
 import { useToast } from '@shared/components/Toast';
-import { TransferCodes } from './TransferCodes';
 import { formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 
@@ -335,7 +334,7 @@ export function OperationModal({
               ))}
               {show('source') && <div className="form-field__msg form-field__msg--error">{show('source')}</div>}
             </fieldset>
-            <TransferCodes dealerId={target.dealerId} />
+            <Callout tone="neutral">客戶已經在 Google 申請完移轉。建立後狀態為「待人工執行」，後勤到 Google 後台接受移轉後，回來標記完成。</Callout>
           </>
         )}
 
