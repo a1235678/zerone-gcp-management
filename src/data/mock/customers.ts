@@ -1,5 +1,6 @@
 import type { Address, Customer } from '../types';
 import { TW_DISTRICTS } from './twAddress';
+import { subscriptions } from './subscriptions';
 
 // 名稱、統編、聯絡人皆為虛構；網域一律 .example
 const base: Customer[] = [
@@ -65,6 +66,7 @@ function c(
     contactAddress: addressOf(contactPhone, Number(id.slice(1))),
     contactSameAsRegistered: true,
     otherDomains: [],
+    gwsDomains: [],
     salesAssignments: [],
     contacts: [{ name: contactName, title: '主要聯絡人', email: `admin@${primaryDomain}`, phone: contactPhone }],
   };
@@ -102,5 +104,7 @@ export const customers: Customer[] = base.map((c, i) => {
   if (gcpCustomers.has(c.id)) assignments.push({ brand: 'Google', product: 'GCP', term: 'new', salesName: '黃柏翰' });
   // 示意一個客戶對多位業務：和光醫療器材的 GWS 續約由兩位業務一起負責
   if (c.id === 'C0011') assignments.push({ brand: 'Google', product: 'GWS', term: 'renewal', salesName: '蔡明峰' });
-  return { ...c, otherDomains: otherDomains[c.id] ?? [], salesAssignments: assignments };
+  // 有 GWS 訂閱的客戶，主網域就是已開通 GWS 的網域；其他網域先當作尚未開通
+  const hasGws = subscriptions.some((s) => s.customerId === c.id && s.product === 'GWS');
+  return { ...c, otherDomains: otherDomains[c.id] ?? [], gwsDomains: hasGws ? [c.primaryDomain] : [], salesAssignments: assignments };
 });

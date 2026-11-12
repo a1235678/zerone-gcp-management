@@ -254,7 +254,7 @@ export function OperationModal({
                   <input type="radio" name="domainPick" checked={domainPick === d} onChange={() => setDomainPick(d)} />
                   <span>
                     <span className="mono">{d}</span>
-                    <span className="muted">：客戶已有的網域</span>
+                    <span className="muted">：客戶已有的網域{cust.data?.gwsDomains.includes(d) ? '（已開通 GWS）' : '（尚未開通 GWS）'}</span>
                   </span>
                 </label>
               ))}

@@ -77,6 +77,8 @@ export interface Customer {
   primaryDomain: string;
   /** 主網域以外的其他網域（一個客戶可以有多個網域） */
   otherDomains: string[];
+  /** 已開通 GWS 的網域（其餘是客戶有、但還沒開通 GWS 的網域） */
+  gwsDomains: string[];
   salesAssignments: SalesAssignment[];
   /** 一般聯絡人（不一定有系統帳號） */
   contacts: CustomerContact[];

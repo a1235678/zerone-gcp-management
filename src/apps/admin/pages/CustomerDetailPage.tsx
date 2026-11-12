@@ -23,6 +23,9 @@ import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag, UserStatu
 import { usePermission } from '../auth';
 import { AddressFields, TagInput } from '../components/CustomerFields';
 
+/** 網域的 GWS 狀態 */
+const GwsDomainTag = ({ on }: { on: boolean }) => (on ? <StatusTag tone="success">已開通 GWS</StatusTag> : <StatusTag tone="neutral">尚未開通 GWS</StatusTag>);
+
 type DetailTab = 'org' | 'users' | 'contacts' | 'workOrders' | 'logs';
 
 export function CustomerDetailPage() {
@@ -48,6 +51,7 @@ export function CustomerDetailPage() {
 
   const [domainOpen, setDomainOpen] = useState(false);
   const [domainInput, setDomainInput] = useState('');
+  const [domainHasGws, setDomainHasGws] = useState(true);
   const [salesOpen, setSalesOpen] = useState(false);
   const [salesForm, setSalesForm] = useState<SalesAssignment[]>([]);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -83,7 +87,7 @@ export function CustomerDetailPage() {
   const domainCheck = domainInput ? checkDomain(domainInput) : undefined;
   const addDomain = async () => {
     try {
-      await addCustomerDomain(c.id, domainInput);
+      await addCustomerDomain(c.id, domainInput, domainHasGws);
       toast(`已新增網域 ${domainInput.trim()}`);
       setDomainOpen(false);
       reload();
@@ -226,12 +230,15 @@ export function CustomerDetailPage() {
               </p>
             </Card>
 
-            <Card title="網域" actions={canEdit ? <button className="btn btn--sm" onClick={() => { setDomainInput(''); setDomainOpen(true); }}>新增網域</button> : undefined} bodyless>
-              <ul className="list-plain">
+            <Card title="網域" actions={canEdit ? <button className="btn btn--sm" onClick={() => { setDomainInput(''); setDomainHasGws(true); setDomainOpen(true); }}>新增網域</button> : undefined} bodyless>
+              <ul className="list-plain domain-list">
                 {c.primaryDomain ? (
                   <li>
                     <span className="mono">{c.primaryDomain}</span>
-                    <StatusTag tone="info">主網域</StatusTag>
+                    <span className="op-chips">
+                      <StatusTag tone="info">主網域</StatusTag>
+                      <GwsDomainTag on={c.gwsDomains.includes(c.primaryDomain)} />
+                    </span>
                   </li>
                 ) : (
                   <li>
@@ -241,11 +248,14 @@ export function CustomerDetailPage() {
                 {c.otherDomains.map((d) => (
                   <li key={d}>
                     <span className="mono">{d}</span>
-                    {canEdit && (
-                      <button className="btn btn--sm btn--ghost" onClick={() => removeDomain(d)}>
-                        移除
-                      </button>
-                    )}
+                    <span className="op-chips">
+                      <GwsDomainTag on={c.gwsDomains.includes(d)} />
+                      {canEdit && (
+                        <button className="btn btn--sm btn--ghost" onClick={() => removeDomain(d)}>
+                          移除
+                        </button>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -487,18 +497,42 @@ export function CustomerDetailPage() {
         open={domainOpen}
         onClose={() => setDomainOpen(false)}
         title="新增網域"
-        width={440}
+        width={520}
         footer={
           <>
             <button className="btn" onClick={() => setDomainOpen(false)}>
               取消
             </button>
             <button className="btn btn--primary" disabled={!domainCheck?.ok} onClick={addDomain}>
-              新增
+              {domainHasGws ? '綁定網域' : '新增網域'}
             </button>
           </>
         }
       >
+        <fieldset className="plain-fieldset" style={{ marginBottom: 'var(--space-4)' }}>
+          <legend className="form-field__label">這個網域的 GWS 狀態</legend>
+          <label className="radio-row">
+            <input type="radio" name="domainGws" checked={domainHasGws} onChange={() => setDomainHasGws(true)} />
+            <span>
+              <strong>綁定已開通 GWS 的網域</strong>
+              <br />
+              <span className="muted">這個網域已經在使用 Google Workspace（例如客戶先前自己向 Google 購買）。綁定後，下次同步時會把它的 GWS 訂閱帶進系統。</span>
+            </span>
+          </label>
+          <label className="radio-row">
+            <input type="radio" name="domainGws" checked={!domainHasGws} onChange={() => setDomainHasGws(false)} />
+            <span>
+              <strong>新增尚未開通 GWS 的網域</strong>
+              <br />
+              <span className="muted">客戶有這個網域，但還沒開通 Google Workspace。先登記到客戶主檔，之後新訂 GWS 時可以直接選用。</span>
+            </span>
+          </label>
+          {domainHasGws && (
+            <div className="inline">
+              <PendingTag id={3} hint="能否從 API 抓到已購買的方案" />
+            </div>
+          )}
+        </fieldset>
         <FormField
           label="網域"
           required

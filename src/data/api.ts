@@ -414,22 +414,24 @@ export function lookupTaxId(taxId: string): Promise<{ name: string; address: Add
 }
 
 /** 新增客戶的其他網域（一個客戶可以有多個網域） */
-export function addCustomerDomain(customerId: string, domain: string): Promise<CustomerListItem> {
+export function addCustomerDomain(customerId: string, domain: string, hasGws: boolean): Promise<CustomerListItem> {
   const c = customerOf(customerId);
   if (!c) return fail('找不到客戶');
   const check = checkDomain(domain);
   if (!check.ok) return fail(check.message);
-  attachDomain(c, domain.trim());
-  log('customer', c.name, `新增網域 ${domain.trim()}`, 'success', c.id);
+  attachDomain(c, domain.trim(), hasGws);
+  log('customer', c.name, hasGws ? `綁定已開通 GWS 的網域 ${domain.trim()}，下次同步時帶入訂閱` : `新增尚未開通 GWS 的網域 ${domain.trim()}`, 'success', c.id);
   return delay(withDealer(c));
 }
 
 /** 把網域掛到客戶：還沒有主網域就當主網域，否則加到其他網域 */
-function attachDomain(c: Customer, domain: string) {
-  if (!domain || c.primaryDomain === domain || c.otherDomains.includes(domain)) return;
+function attachDomain(c: Customer, domain: string, hasGws = false) {
+  if (!domain) return;
+  if (hasGws && !c.gwsDomains.includes(domain)) c.gwsDomains.push(domain);
+  if (c.primaryDomain === domain || c.otherDomains.includes(domain)) return;
   if (!c.primaryDomain) {
     c.primaryDomain = domain;
-    c.domainVerification = 'pending';
+    c.domainVerification = hasGws ? 'verified' : 'pending';
   } else c.otherDomains.push(domain);
 }
 
@@ -437,6 +439,7 @@ export function removeCustomerDomain(customerId: string, domain: string): Promis
   const c = customerOf(customerId);
   if (!c) return fail('找不到客戶');
   c.otherDomains = c.otherDomains.filter((d) => d !== domain);
+  c.gwsDomains = c.gwsDomains.filter((d) => d !== domain);
   log('customer', c.name, `移除網域 ${domain}`, 'success', c.id);
   return delay(withDealer(c));
 }
@@ -559,6 +562,7 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
     contactAddress: input.contactSameAsRegistered !== false ? { ...(input.registeredAddress ?? emptyAddress()) } : (input.contactAddress ?? emptyAddress()),
     contactSameAsRegistered: input.contactSameAsRegistered !== false,
     otherDomains: [],
+    gwsDomains: [],
     contacts: [{ name: input.contactName.trim(), title: '主要聯絡人', email: input.contactEmail.trim(), phone: input.contactPhone.trim() }],
     salesAssignments: cleanSalesAssignments(input.salesAssignments ?? []),
   };
@@ -995,12 +999,13 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
       });
       op.subscriptionId = id;
       // 訂閱成功後，把網域寫回客戶主檔（2026/11/12 會議）
-      if (p.domain) attachDomain(c, p.domain);
+      if (p.domain) attachDomain(c, p.domain, true);
       break;
     }
     case 'transfer':
       // 現有客戶轉入時帶的網域，完成後寫回客戶主檔
-      if (p.domain) attachDomain(c, p.domain);
+      if (p.domain) attachDomain(c, p.domain, true);
+      else if (c.primaryDomain) attachDomain(c, c.primaryDomain, true);
       log('customer', c.name, `客戶轉入完成（${op.id}），訂閱將於下次同步時出現在 GWS 訂閱清單`, 'success', c.id, '系統');
       break;
   }

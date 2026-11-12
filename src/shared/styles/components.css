@@ -2024,3 +2024,14 @@ button.topbar__user:hover {
     border-bottom: 1px solid var(--color-border);
   }
 }
+.domain-list > li {
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
+}
+.domain-list > li > .mono {
+  white-space: nowrap;
+}
+.domain-list .op-chips {
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
