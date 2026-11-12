@@ -4,6 +4,8 @@ import {
   checkDomain,
   createCustomer,
   createTransferInCustomer,
+  createTransferForExisting,
+  getCustomers,
   getDealers,
   emptyAddress,
   lookupTaxId,
@@ -17,6 +19,7 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { Combobox } from '@shared/components/Combobox';
 import type { Address, SalesAssignment } from '@data/types';
 import { SalesAssignmentEditor } from '../components/SalesAssignments';
 import { addressComplete } from '@data/api';
@@ -47,6 +50,7 @@ type Key = keyof typeof empty;
  */
 export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
   const isTransfer = mode === 'transfer';
+  const [who, setWho] = useState<'new' | 'existing'>('new');
   const { can } = usePermission();
   const navigate = useNavigate();
   const toast = useToast();
@@ -224,10 +228,30 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         }
         description={
           isTransfer
-            ? '客戶從其他經銷商轉到我們底下。建立客戶主檔與第一個組織管理員帳號，並建立一筆客戶轉入，由後勤在 Google 後台人工執行。'
+            ? '客戶從其他經銷商轉到我們底下，客戶已經在 Google 申請完轉移。建立後產生一筆客戶轉入，由後勤在 Google 後台人工執行。'
             : '建立客戶主檔，同時建立該客戶的第一個「組織管理員」帳號。'
         }
       />
+
+      {isTransfer && !fromWo && (
+        <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
+          <div className="segmented" role="group" aria-label="轉入的客戶">
+            <button type="button" aria-pressed={who === 'new'} onClick={() => setWho('new')}>
+              新客戶
+            </button>
+            <button type="button" aria-pressed={who === 'existing'} onClick={() => setWho('existing')}>
+              現有客戶
+            </button>
+          </div>
+          <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
+            {who === 'new' ? '客戶還不在系統裡：建立客戶主檔與第一個組織管理員帳號。' : '客戶已經在系統裡（例如已經是其他產品的客戶）：不用重填主檔，直接建立客戶轉入。'}
+          </p>
+        </div>
+      )}
+      {isTransfer && who === 'existing' && !fromWo ? (
+        <ExistingTransferForm />
+      ) : (
+      <>
 
       {fromWo && (
         <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
@@ -412,6 +436,109 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           </button>
         </div>
       </form>
+      </>
+      )}
     </>
+  );
+}
+
+/** 現有客戶的客戶轉入：選客戶、確認網域、填轉移備註 */
+function ExistingTransferForm() {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const customers = useAsync(() => getCustomers({ status: 'active' }));
+  const [customerId, setCustomerId] = useState('');
+  const [domainPick, setDomainPick] = useState('');
+  const [newDomain, setNewDomain] = useState('');
+  const [memo, setMemo] = useState('');
+  const [tried, setTried] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const c = customers.data?.find((x) => x.id === customerId);
+  const owned = c ? [c.primaryDomain, ...c.otherDomains].filter(Boolean) : [];
+  const domain = domainPick || newDomain.trim();
+  const check = !domainPick && newDomain ? checkDomain(newDomain) : undefined;
+  const errors = { customer: !customerId ? '請選擇客戶' : undefined, domain: !domain ? '請選擇或輸入網域' : check && !check.ok ? check.message : undefined };
+
+  const submit = async () => {
+    setTried(true);
+    if (errors.customer || errors.domain) return;
+    setSaving(true);
+    try {
+      const op = await createTransferForExisting({ customerId, domain, memo });
+      toast(`已建立客戶轉入（${op.id}），待後勤人工執行`);
+      navigate(`/customers/${customerId}`);
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="card form-card" onSubmit={(e) => e.preventDefault()} noValidate>
+      <div className="card__body">
+        <FormSection title="客戶">
+          <FormField label="選擇客戶" required className="is-full" message={tried ? errors.customer : undefined} state={tried && errors.customer ? 'error' : undefined}>
+            {(p) => (
+              <Combobox
+                {...p}
+                value={customerId}
+                onChange={(v) => {
+                  setCustomerId(v);
+                  setDomainPick('');
+                }}
+                placeholder="輸入客戶名稱、網域或統編搜尋"
+                emptyText="找不到符合的客戶"
+                options={(customers.data ?? []).map((x) => ({
+                  value: x.id,
+                  label: x.name,
+                  hint: [x.primaryDomain, `統編 ${x.taxId}`, x.dealerName].filter(Boolean).join(' · '),
+                  keywords: [...x.shortNames, x.taxId, ...x.otherDomains],
+                }))}
+              />
+            )}
+          </FormField>
+        </FormSection>
+        <FormSection title="轉入資訊" description="客戶已經在 Google 申請完轉移，不需要轉移碼。建立後狀態為「待人工執行」，後勤在 Google 後台接受轉入後回來標記，完成後網域會寫回客戶主檔。">
+          <fieldset className="plain-fieldset is-full">
+            <legend className="form-field__label">
+              GWS 網域 <span className="form-field__req">必填</span>
+            </legend>
+            {owned.map((d) => (
+              <label key={d} className="radio-row">
+                <input type="radio" name="tdomain" checked={domainPick === d} onChange={() => setDomainPick(d)} />
+                <span>
+                  <span className="mono">{d}</span>
+                  <span className="muted">：客戶已有的網域</span>
+                </span>
+              </label>
+            ))}
+            <label className="radio-row">
+              <input type="radio" name="tdomain" checked={domainPick === ''} onChange={() => setDomainPick('')} />
+              <span>輸入要轉入的網域</span>
+            </label>
+            {domainPick === '' && (
+              <FormField
+                label="網域"
+                message={tried && errors.domain ? errors.domain : check?.ok ? '可以使用' : undefined}
+                state={tried && errors.domain ? 'error' : check?.ok ? 'success' : undefined}
+              >
+                {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" placeholder="company.example" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} />}
+              </FormField>
+            )}
+          </fieldset>
+          <FormField label="轉移備註" className="is-full">
+            {(p) => <textarea {...p} className="textarea" value={memo} onChange={(e) => setMemo(e.target.value)} />}
+          </FormField>
+        </FormSection>
+      </div>
+      <div className="form-actions">
+        <Link to="/customers" className="btn">
+          取消
+        </Link>
+        <button type="button" className="btn btn--primary" disabled={saving} onClick={submit}>
+          建立客戶轉入
+        </button>
+      </div>
+    </form>
   );
 }

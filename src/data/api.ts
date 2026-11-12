@@ -597,6 +597,19 @@ export async function createTransferInCustomer(
   return { customer, operation };
 }
 
+/** 現有客戶的客戶轉入：客戶已經在系統裡（例如其他產品的客戶），GWS 從其他經銷商轉進來 */
+export async function createTransferForExisting(input: { customerId: string; domain: string; memo: string }): Promise<OperationListItem> {
+  const c = customerOf(input.customerId);
+  if (!c) return fail('請選擇客戶');
+  const domain = input.domain.trim();
+  const owned = c.primaryDomain === domain || c.otherDomains.includes(domain);
+  if (!owned) {
+    const d = checkDomain(domain);
+    if (!d.ok) return fail(`網域：${d.message}`);
+  }
+  return createOperation({ type: 'transfer', customerId: c.id, payload: { transferSource: 'otherDealer', domain, memo: input.memo.trim() || undefined } });
+}
+
 /** 模擬向 Google 檢查網域驗證：第一次查會是「尚未驗證」，第二次起通過 */
 const verifyAttempts: Record<string, number> = {};
 export function recheckDomainVerification(customerId: string): Promise<CustomerListItem> {
@@ -743,7 +756,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
     case 'new':
       return `${p.plan} ${p.seats} 席${p.domain ? `，${p.domain}${p.domainMode ? `（${domainModeLabel[p.domainMode]}）` : ''}` : ''}`;
     case 'transfer':
-      return transferSourceLabel[p.transferSource ?? 'otherDealer'];
+      return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.domain ? `，${p.domain}` : ''}`;
     case 'renewal': {
       const plan = p.plan ?? fromPlan;
       const seats = p.seats ?? fromSeats;
@@ -987,6 +1000,8 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
       break;
     }
     case 'transfer':
+      // 現有客戶轉入時帶的網域，完成後寫回客戶主檔
+      if (p.domain) attachDomain(c, p.domain);
       log('customer', c.name, `客戶轉入完成（${op.id}），訂閱將於下次同步時出現在 GWS 訂閱清單`, 'success', c.id, '系統');
       break;
   }
