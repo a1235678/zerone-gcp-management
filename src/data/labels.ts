@@ -31,7 +31,7 @@ export const subscriptionStatusLabel: Record<SubscriptionStatus, string> = { act
 
 export const workOrderTypeLabel: Record<WorkOrderType, string> = {
   new: '新訂',
-  transfer: '新訂（移轉）',
+  transfer: '移轉',
   renewal: '續約',
   addSeats: '加購',
   upgrade: '中途升版',

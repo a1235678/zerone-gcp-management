@@ -411,11 +411,16 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
 }
 
 /** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後建立一筆移轉，由後勤人工執行（客戶已在 Google 申請完移轉，不需要轉移碼） */
-export async function createTransferInCustomer(input: NewCustomerInput & { memo: string }): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
+export async function createTransferInCustomer(
+  input: NewCustomerInput & { memo: string; workOrderId?: string },
+): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
   const customer = await createCustomer({ ...input, note: input.note || '由其他經銷商轉入' });
+  // 依執行單轉入時，先把客戶接回執行單，再建立移轉（記錄來源單號）
+  if (input.workOrderId) await linkCustomerToWorkOrder(input.workOrderId, customer.id);
   const operation = await createOperation({
     type: 'transfer',
     customerId: customer.id,
+    workOrderId: input.workOrderId,
     payload: { transferSource: 'otherDealer', memo: input.memo.trim() || undefined },
   });
   return { customer, operation };
@@ -817,7 +822,7 @@ function workOrderCustomer(wo: WorkOrder) {
 
 function describeWorkOrder(wo: WorkOrder): string {
   const text = describeOperation({ type: wo.type, subscriptionId: wo.subscriptionId, payload: wo.payload });
-  return wo.type === 'transfer' && wo.customerMode === 'new' ? `新客戶：${text}` : text;
+  return wo.type === 'transfer' ? `${workOrderCustomer(wo).name} 移轉進來` : text;
 }
 
 const processable = (wo: WorkOrder) => wo.status === 'approved' || wo.status === 'processing' || wo.status === 'completed';
@@ -829,7 +834,7 @@ function workOrderSteps(wo: WorkOrder): WorkOrderStep[] {
   if (wo.customerMode === 'new') {
     steps.push({
       key: 'createCustomer',
-      label: '建立客戶',
+      label: wo.type === 'transfer' ? '轉入客戶（建檔）' : '建立客戶',
       state: wo.customerId ? 'done' : canWork ? 'todo' : 'blocked',
       detail: wo.customerId ? `已建立 ${wo.customerId}` : undefined,
     });
@@ -909,6 +914,7 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
   const e: Record<string, string> = {};
   const needsSubscription = input.type === 'renewal' || input.type === 'addSeats' || input.type === 'upgrade';
   if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、加購、中途升版只適用現有客戶';
+  if (!needsSubscription && input.customerMode === 'existing') e.customerMode = '新訂、移轉一定是新客戶';
   if (input.customerMode === 'existing' && !input.customerId) e.customerId = '請選擇客戶';
   if (needsSubscription && input.customerId && !input.subscriptionId) e.subscriptionId = '請選擇訂閱';
   if (input.customerMode === 'new') {
@@ -938,7 +944,6 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
   if (input.type === 'renewal' && !p.renewMonths) e.renewMonths = '請選擇續約期間';
   if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) e.addSeats = '加購人數需為大於 0 的整數';
   if (input.type === 'upgrade' && p.plan && sub && planChangeOf(sub.plan, p.plan) !== 'up') e.plan = '中途升版只能選比目前高的方案';
-  if (input.type === 'transfer' && !p.transferSource) e.transferSource = '請選擇移轉來源';
   return e;
 }
 

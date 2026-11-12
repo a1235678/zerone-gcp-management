@@ -67,6 +67,16 @@ const newClinic: NewCustomerDraft = {
   note: '診所新開幕，需在 11 月中前開通',
 };
 
+const newFarm: NewCustomerDraft = {
+  name: '霧峰農創',
+  taxId: '90010032',
+  primaryDomain: 'wufeng-agri.example',
+  contactName: '林郁婷',
+  contactEmail: 'admin@wufeng-agri.example',
+  contactPhone: '04-2330-1032',
+  note: '',
+};
+
 export const workOrders: WorkOrder[] = [
   wo('WO-1105-002', 'renewal', { customerId: 'C0019' }, 'D001', 'S020', { plan: 'Business Plus', seats: 16, renewMonths: 12, memo: '客戶要升級到 Business Plus' }, '李冠霖', '2026-11-05 09:40', [['2026-11-05 09:44', 'salesReview']]),
   wo('WO-1105-001', 'addSeats', { customerId: 'C0016' }, 'D002', 'S017', { addSeats: 6, memo: '新進人員 6 名' }, '黃柏翰', '2026-11-05 09:12', []),
@@ -81,7 +91,7 @@ export const workOrders: WorkOrder[] = [
     ['2026-11-05 09:00', 'approved'],
     ['2026-11-05 10:15', 'processing'],
   ], { operationId: 'OP-1105-001' }),
-  wo('WO-1103-003', 'new', { customerId: 'C0026' }, 'D003', undefined, { plan: 'Business Standard', seats: 12 }, '李冠霖', '2026-11-03 16:20', [
+  wo('WO-1103-003', 'new', { newCustomer: newFarm }, 'D003', undefined, { plan: 'Business Standard', seats: 12 }, '李冠霖', '2026-11-03 16:20', [
     ['2026-11-03 16:31', 'salesReview'],
     ['2026-11-04 11:00', 'techReview'],
   ]),
@@ -113,7 +123,7 @@ export const workOrders: WorkOrder[] = [
     },
     'D002',
     undefined,
-    { transferSource: 'otherDealer', memo: '客戶從其他經銷商轉入' },
+    { transferSource: 'otherDealer', memo: '客戶已在 Google 申請移轉' },
     '黃柏翰',
     '2026-10-27 09:20',
     [
@@ -142,7 +152,7 @@ export const workOrders: WorkOrder[] = [
     },
     'D003',
     undefined,
-    { transferSource: 'otherDealer', memo: '客戶從其他經銷商轉入' },
+    { transferSource: 'otherDealer', memo: '客戶已在 Google 申請移轉' },
     '黃柏翰',
     '2026-10-17 13:30',
     [

@@ -50,7 +50,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
   const dealers = useAsync(getDealers);
   const salesPeople = useAsync(getSalesPeople);
   const [params] = useSearchParams();
-  const fromWo = isTransfer ? null : params.get('fromWo');
+  const fromWo = params.get('fromWo');
   const wo = useAsync(() => (fromWo ? getWorkOrder(fromWo) : Promise.resolve(undefined)), [fromWo]);
   const [form, setForm] = useState(empty);
   const [prefilled, setPrefilled] = useState(false);
@@ -69,6 +69,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
       contactEmail: n.contactEmail,
       contactPhone: n.contactPhone,
       note: n.note,
+      transferMemo: wo.data!.payload.memo ?? '',
     }));
     setPrefilled(true);
   }, [wo.data, prefilled]);
@@ -114,9 +115,9 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     setSaving(true);
     try {
       if (isTransfer) {
-        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, memo: form.transferMemo });
+        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, memo: form.transferMemo, workOrderId: fromWo ?? undefined });
         toast(`已建立「${customer.name}」，移轉（${operation.id}）待後勤人工執行`);
-        navigate(`/customers/${customer.id}`);
+        navigate(fromWo ? `/work-orders/${fromWo}` : `/customers/${customer.id}`);
       } else {
         const c = await createCustomer({ ...form, ...admin });
         if (fromWo) {
@@ -202,8 +203,8 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
 
       {fromWo && (
         <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
-          <Callout tone="info" title={`依執行單 ${fromWo} 建立客戶`}>
-            客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。
+          <Callout tone="info" title={`依執行單 ${fromWo} ${isTransfer ? '轉入客戶' : '建立客戶'}`}>
+            {isTransfer ? '客戶資料與轉移備註已從執行單帶入，請確認後建立。建立後會產生一筆移轉（待人工執行），並回到執行單。' : '客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。'}
           </Callout>
         </div>
       )}

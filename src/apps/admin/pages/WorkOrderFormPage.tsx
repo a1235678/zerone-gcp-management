@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { analyzeOrder, getCustomers, getDealers, getPlanList, getSubscriptions, getWorkOrder, saveWorkOrder, validateWorkOrder } from '@data/api';
-import { executionModeLabel, transferSourceLabel, workOrderTypeLabel } from '@data/labels';
-import type { NewCustomerDraft, TransferSource, WorkOrderInput, WorkOrderType } from '@data/types';
+import { executionModeLabel, workOrderTypeLabel } from '@data/labels';
+import type { NewCustomerDraft, WorkOrderInput, WorkOrderType } from '@data/types';
 import { StatusTag } from '@shared/components/StatusTag';
 import { ChangeTags } from '../components/OperationModal';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
@@ -28,7 +28,7 @@ export function WorkOrderFormPage() {
   const dealers = useAsync(getDealers);
   const plans = useAsync(getPlanList);
 
-  const [input, setInput] = useState<WorkOrderInput>({ type: 'new', customerMode: 'existing', payload: { renewMonths: 12 } });
+  const [input, setInput] = useState<WorkOrderInput>({ type: 'new', customerMode: 'new', payload: { renewMonths: 12 } });
   const [nc, setNc] = useState<NewCustomerDraft>(emptyCustomer);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,8 +61,15 @@ export function WorkOrderFormPage() {
   const show = (k: string) => (tried || (k === 'primaryDomain' && nc.primaryDomain) ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
+  // 新訂、移轉一定是新客戶；續約、加購、中途升版一定是現有客戶
   const setType = (t: WorkOrderType) =>
-    setInput((x) => ({ ...x, type: t, customerMode: needsSubscription(t) ? 'existing' : x.customerMode, subscriptionId: needsSubscription(t) ? x.subscriptionId : undefined }));
+    setInput((x) => ({
+      ...x,
+      type: t,
+      customerMode: needsSubscription(t) ? 'existing' : 'new',
+      customerId: needsSubscription(t) ? x.customerId : undefined,
+      subscriptionId: needsSubscription(t) ? x.subscriptionId : undefined,
+    }));
   const setPayload = (k: keyof WorkOrderInput['payload'], v: string | number | undefined) => setInput((x) => ({ ...x, payload: { ...x.payload, [k]: v } }));
   const setNcField = (k: keyof NewCustomerDraft) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setNc((x) => ({ ...x, [k]: e.target.value }));
 
@@ -133,25 +140,6 @@ export function WorkOrderFormPage() {
           </FormSection>
 
           <FormSection title="客戶">
-            <FormField label="客戶" required className="is-full" message={show('customerMode')} state={st('customerMode')}>
-              {(p) => (
-                <div className="segmented" role="group" aria-labelledby={p.id}>
-                  <button type="button" aria-pressed={input.customerMode === 'existing'} onClick={() => setInput((x) => ({ ...x, customerMode: 'existing' }))}>
-                    現有客戶
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={input.customerMode === 'new'}
-                    disabled={needsSubscription(input.type)}
-                    title={needsSubscription(input.type) ? '續約、加購、中途升版只適用現有客戶' : undefined}
-                    onClick={() => setInput((x) => ({ ...x, customerMode: 'new', customerId: undefined, subscriptionId: undefined }))}
-                  >
-                    新客戶
-                  </button>
-                </div>
-              )}
-            </FormField>
-
             {input.customerMode === 'existing' ? (
               <>
                 <FormField label="選擇客戶" required message={show('customerId')} state={st('customerId')}>
@@ -204,7 +192,14 @@ export function WorkOrderFormPage() {
               </>
             ) : (
               <>
-                <Callout tone="neutral">客戶資料會在核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。主網域現在就會檢查格式與是否重複。</Callout>
+                <div className="is-full">
+                  <Callout tone="neutral">
+                    {input.type === 'transfer'
+                      ? '移轉的客戶一定是新客戶，請填客戶主檔「轉入客戶」的欄位。核准後由後勤在「轉入客戶」建檔並建立移轉，這裡填的內容會自動帶入。'
+                      : '新訂一定是新客戶。核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。'}
+                    主網域現在就會檢查格式與是否重複。
+                  </Callout>
+                </div>
                 <FormField label="客戶名稱" required message={show('name')} state={st('name')}>
                   {(p) => <input {...p} className="input" value={nc.name} onChange={setNcField('name')} />}
                 </FormField>
@@ -214,7 +209,7 @@ export function WorkOrderFormPage() {
                 <FormField label="主網域" required message={show('primaryDomain')} state={st('primaryDomain')} help="例如 company.example">
                   {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={nc.primaryDomain} onChange={setNcField('primaryDomain')} />}
                 </FormField>
-                <FormField label="經銷商" required message={show('dealerId')} state={st('dealerId')}>
+                <FormField label={input.type === 'transfer' ? '轉入後的經銷商' : '經銷商'} required message={show('dealerId')} state={st('dealerId')}>
                   {(p) => (
                     <select {...p} className="select" value={input.dealerId ?? ''} onChange={(e) => setInput((x) => ({ ...x, dealerId: e.target.value || undefined }))}>
                       <option value="">請選擇</option>
@@ -331,22 +326,9 @@ export function WorkOrderFormPage() {
               </>
             )}
             {input.type === 'transfer' && (
-              <>
-                <FormField label="移轉來源" required className="is-full" message={show('transferSource')} state={st('transferSource')}>
-                  {(p) => (
-                    <div className="segmented segmented--wrap" role="group" aria-labelledby={p.id}>
-                      {(['selfPaid', 'otherDealer'] as TransferSource[]).map((t) => (
-                        <button key={t} type="button" aria-pressed={input.payload.transferSource === t} onClick={() => setPayload('transferSource', t)}>
-                          {transferSourceLabel[t]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </FormField>
-                {input.payload.transferSource === 'otherDealer' && (
-                  <Callout tone="info">移轉 ID 由客戶的 Google 管理員產生，14 天內有效。為避免簽核期間過期，移轉 ID 由後勤處理時再填，開單時不用填。</Callout>
-                )}
-              </>
+              <div className="is-full">
+                <Callout tone="neutral">客戶已經在 Google 申請完移轉，不需要轉移碼。客戶的訂閱會全部轉入，不能只轉一部分。</Callout>
+              </div>
             )}
             {(input.type === 'new' || input.type === 'transfer' || sub) && (
               <div className="is-full exec-box" style={{ gridColumn: '1 / -1' }}>
@@ -363,7 +345,7 @@ export function WorkOrderFormPage() {
                 </ul>
               </div>
             )}
-            <FormField label="備註" className="is-full">
+            <FormField label={input.type === 'transfer' ? '轉移備註' : '備註'} className="is-full">
               {(p) => <textarea {...p} className="textarea" value={input.payload.memo ?? ''} onChange={(e) => setPayload('memo', e.target.value)} />}
             </FormField>
           </FormSection>
