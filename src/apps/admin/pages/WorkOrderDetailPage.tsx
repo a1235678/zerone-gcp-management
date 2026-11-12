@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { actOnWorkOrder, analyzeOrder, getCustomer, getSubscriptions, getWorkOrder } from '@data/api';
-import { domainModeLabel, executionModeLabel, transferSourceLabel, workOrderFlow, workOrderStatusLabel, workOrderTypeLabel } from '@data/labels';
+import { executionModeLabel, transferSourceLabel, workOrderFlow, workOrderStatusLabel, workOrderTypeLabel } from '@data/labels';
 import type { WorkOrderAction, WorkOrderStep } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
@@ -122,7 +122,7 @@ export function WorkOrderDetailPage() {
     },
     { label: '經銷商', value: w.dealerName },
     ...(sub ? [{ label: '訂閱', value: `${sub.plan} · 目前 ${sub.seats} 席 · 合約 ${sub.startsAt.replace(/-/g, '/')} – ${sub.expiresAt.replace(/-/g, '/')}` }] : []),
-    ...(p.domain ? [{ label: '網域', value: <span className="inline"><span className="mono">{p.domain}</span>{p.domainMode && <span className="muted">（{domainModeLabel[p.domainMode]}）</span>}</span> }] : []),
+    ...(p.domain ? [{ label: '網域', value: <span className="mono">{p.domain}</span> }] : []),
     ...(p.plan ? [{ label: w.type === 'upgrade' ? '升級後方案' : w.type === 'renewal' ? '續約方案' : '方案', value: <span className="inline">{p.plan} <PendingTag id={3} /></span> }] : []),
     ...(p.seats !== undefined ? [{ label: w.type === 'renewal' ? '續約人數' : '人數', value: `${p.seats} 席` }] : []),
     ...(p.addSeats !== undefined ? [{ label: w.type === 'upgrade' ? '同時加購人數' : '加購人數', value: `${p.addSeats} 席${sub ? `（${sub.seats} → ${(sub.seats ?? 0) + p.addSeats}）` : ''}` }] : []),
@@ -290,7 +290,7 @@ export function WorkOrderDetailPage() {
           type={w.type}
           target={target}
           workOrderId={w.id}
-          initial={{ domain: p.domain, domainMode: p.domainMode, plan: p.plan, seats: p.seats, addSeats: p.addSeats, renewMonths: p.renewMonths, transferSource: p.transferSource, memo: p.memo }}
+          initial={{ domain: p.domain, plan: p.plan, seats: p.seats, addSeats: p.addSeats, renewMonths: p.renewMonths, transferSource: p.transferSource, memo: p.memo }}
           onClose={() => setOpOpen(false)}
           onSubmitted={() => {
             setOpOpen(false);

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { analyzeOrder, getCustomers, getDealers, getPlanList, getSubscriptions, getWorkOrder, saveWorkOrder, validateWorkOrder } from '@data/api';
-import { domainModeLabel, executionModeLabel, workOrderTypeLabel } from '@data/labels';
-import type { DomainMode, NewCustomerDraft, WorkOrderInput, WorkOrderType } from '@data/types';
+import { executionModeLabel, workOrderTypeLabel } from '@data/labels';
+import type { NewCustomerDraft, WorkOrderInput, WorkOrderType } from '@data/types';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Combobox } from '@shared/components/Combobox';
 import { ChangeTags } from '../components/OperationModal';
@@ -262,23 +262,12 @@ export function WorkOrderFormPage() {
           <FormSection title="需求內容">
             {input.type === 'new' && (
               <>
-                <FormField label="網域取得方式" required message={show('domainMode')} state={st('domainMode')}>
-                  {(p) => (
-                    <div className="segmented" role="group" aria-labelledby={p.id}>
-                      {(['purchase', 'bind'] as DomainMode[]).map((m) => (
-                        <button key={m} type="button" aria-pressed={input.payload.domainMode === m} onClick={() => setPayload('domainMode', m)}>
-                          {domainModeLabel[m]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </FormField>
                 <FormField
                   label="網域"
                   required
                   message={show('domain')}
                   state={st('domain')}
-                  help={ownedDomains.length ? `客戶已有：${ownedDomains.join('、')}（綁定既有時可以直接填）` : '例如 company.example。訂閱成功後會寫回客戶主檔。'}
+                  help={ownedDomains.length ? `客戶已有：${ownedDomains.join('、')}（可以直接填）` : '例如 company.example。訂閱成功後會寫回客戶主檔。'}
                 >
                   {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={input.payload.domain ?? ''} onChange={(e) => setPayload('domain', e.target.value)} />}
                 </FormField>

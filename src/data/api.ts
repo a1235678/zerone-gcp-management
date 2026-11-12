@@ -16,14 +16,13 @@ import { subscriptions as seedSubscriptions } from './mock/subscriptions';
 import { users as seedUsers } from './mock/users';
 import { operations as seedOperations } from './mock/operations';
 import { workOrders as seedWorkOrders } from './mock/workOrders';
-import { domainModeLabel, executionModeLabel, operationStatusLabel, operationTypeLabel, orgTypeLabel, transferSourceLabel, workOrderTypeLabel } from './labels';
+import { executionModeLabel, operationStatusLabel, operationTypeLabel, orgTypeLabel, transferSourceLabel, workOrderTypeLabel } from './labels';
 import type {
   AuditLog,
   AuditLogQuery,
   Brand,
   BrandListItem,
   Customer,
-  DomainMode,
   SalesAssignment,
   ProductCode,
   Address,
@@ -415,13 +414,13 @@ export function lookupTaxId(taxId: string): Promise<{ name: string; address: Add
 }
 
 /** 新增客戶的其他網域（一個客戶可以有多個網域） */
-export function addCustomerDomain(customerId: string, domain: string, mode: DomainMode = 'bind'): Promise<CustomerListItem> {
+export function addCustomerDomain(customerId: string, domain: string): Promise<CustomerListItem> {
   const c = customerOf(customerId);
   if (!c) return fail('找不到客戶');
   const check = checkDomain(domain);
   if (!check.ok) return fail(check.message);
   attachDomain(c, domain.trim());
-  log('customer', c.name, `新增網域 ${domain.trim()}（${domainModeLabel[mode]}）`, 'success', c.id);
+  log('customer', c.name, `新增網域 ${domain.trim()}`, 'success', c.id);
   return delay(withDealer(c));
 }
 
@@ -754,7 +753,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
   const fromSeats = p.fromSeats ?? sub?.seats ?? 0;
   switch (op.type) {
     case 'new':
-      return `${p.plan} ${p.seats} 席${p.domain ? `，${p.domain}${p.domainMode ? `（${domainModeLabel[p.domainMode]}）` : ''}` : ''}`;
+      return `${p.plan} ${p.seats} 席${p.domain ? `，${p.domain}` : ''}`;
     case 'transfer':
       return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.domain ? `，${p.domain}` : ''}`;
     case 'renewal': {
@@ -1137,7 +1136,6 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
     if (!p.plan) e.plan = '請選擇方案';
   }
   if (input.type === 'new') {
-    if (!p.domainMode) e.domainMode = '請選擇網域取得方式';
     const owned = input.customerId ? customerOf(input.customerId) : undefined;
     const isOwned = owned && (owned.primaryDomain === p.domain || owned.otherDomains.includes(p.domain ?? ''));
     if (!isOwned) {
@@ -1167,7 +1165,7 @@ function applyInput(wo: WorkOrder, input: WorkOrderInput) {
   const memo = p.memo?.trim() || undefined;
   // 只保留這個類型用得到的欄位
   const pick: Record<WorkOrderType, WorkOrderPayload> = {
-    new: { domain: p.domain?.trim(), domainMode: p.domainMode, plan: p.plan, seats: p.seats, memo },
+    new: { domain: p.domain?.trim(), plan: p.plan, seats: p.seats, memo },
     transfer: { transferSource: p.transferSource, memo },
     renewal: { plan: p.plan, seats: p.seats, renewMonths: p.renewMonths, memo },
     addSeats: { addSeats: p.addSeats, memo },

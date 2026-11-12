@@ -343,7 +343,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             )}
             {!isTransfer && (
               <p className="muted is-full" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-                建立客戶時不用填網域。有 GWS 產品時，在新訂時填寫網域（新買或綁定既有網域），訂閱成功後會自動寫回客戶主檔；之後也可以在客戶詳情新增網域。
+                建立客戶時不用填網域。有 GWS 產品時，在新訂時填寫網域，訂閱成功後會自動寫回客戶主檔；之後也可以在客戶詳情新增網域。
               </p>
             )}
           </FormSection>

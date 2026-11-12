@@ -73,7 +73,7 @@ export interface Customer {
   contactSameAsRegistered: boolean;
   /** 統一編號（8 碼） */
   taxId: string;
-  /** 主網域：建立客戶時不填，GWS 新訂時填寫（新買或綁定既有），訂閱成功後寫回（2026/11/12） */
+  /** 主網域：建立客戶時不填，GWS 新訂時填寫，訂閱成功後寫回（2026/11/12） */
   primaryDomain: string;
   /** 主網域以外的其他網域（一個客戶可以有多個網域） */
   otherDomains: string[];
@@ -179,9 +179,8 @@ export type TransferSource = 'selfPaid' | 'otherDealer';
  */
 export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'completed' | 'failed' | 'manual' | 'cancelled';
 export interface OperationPayload {
-  /** 新訂的網域與取得方式；訂閱成功後寫回客戶主檔 */
+  /** 新訂的網域；訂閱成功後寫回客戶主檔 */
   domain?: string;
-  domainMode?: DomainMode;
   /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
   /** 新訂的席次，或續約後的席次 */
@@ -270,11 +269,8 @@ export interface NewCustomerDraft {
   contactPhone: string;
   note: string;
 }
-/** 新訂時的網域：新買，或綁定客戶已有的網域 */
-export type DomainMode = 'purchase' | 'bind';
 export interface WorkOrderPayload {
   domain?: string;
-  domainMode?: DomainMode;
   plan?: string;
   seats?: number;
   addSeats?: number;

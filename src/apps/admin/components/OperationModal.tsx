@@ -10,8 +10,8 @@ import {
   getPendingSchedules,
   getPlanList,
 } from '@data/api';
-import { domainModeLabel, executionModeLabel, operationTypeLabel, scheduleActionLabel, transferSourceLabel } from '@data/labels';
-import type { DomainMode, OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
+import { executionModeLabel, operationTypeLabel, scheduleActionLabel, transferSourceLabel } from '@data/labels';
+import type { OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
 import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
@@ -81,11 +81,10 @@ export function OperationModal({
     .filter((o) => o.subscriptionId === target.subscriptionId && ['scheduled', 'submitted', 'manual'].includes(o.status))
     .reduce((n, o) => n + (o.payload.addSeats ?? 0), 0);
   const [plan, setPlan] = useState('');
-  // 新訂的網域：選客戶已有的網域，或新增（新買／綁定既有）
+  // 新訂的網域：選客戶已有的網域，或輸入網域
   const cust = useAsync(() => (type === 'new' ? getCustomer(target.customerId) : Promise.resolve(undefined)), [type, target.customerId]);
   const ownedDomains = cust.data ? [cust.data.primaryDomain, ...cust.data.otherDomains].filter(Boolean) : [];
   const [domainPick, setDomainPick] = useState('');
-  const [domainMode, setDomainMode] = useState<DomainMode>('purchase');
   const [newDomain, setNewDomain] = useState('');
   const [seats, setSeats] = useState('');
   const [addSeats, setAddSeats] = useState('');
@@ -100,7 +99,6 @@ export function OperationModal({
     if (!open) return;
     setPlan(initial?.plan ?? (type === 'renewal' ? target.plan ?? '' : ''));
     setDomainPick('');
-    setDomainMode(initial?.domainMode ?? 'purchase');
     setNewDomain(initial?.domain ?? '');
     setSeats(initial?.seats ? String(initial.seats) : type === 'renewal' && target.seats ? String(target.seats + pendingAdd) : '');
     setAddSeats(initial?.addSeats ? String(initial.addSeats) : '');
@@ -167,7 +165,7 @@ export function OperationModal({
     setTried(true);
     if (Object.keys(errors).length) return;
     const p: OperationPayload = { memo: memo.trim() || undefined };
-    if (type === 'new') Object.assign(p, { plan, seats: Number(seats), domain: chosenDomain, domainMode: usingOwned ? 'bind' : domainMode });
+    if (type === 'new') Object.assign(p, { plan, seats: Number(seats), domain: chosenDomain });
     if (type === 'renewal') Object.assign(p, { plan, seats: Number(seats), renewMonths: Number(renewMonths) });
     if (type === 'addSeats') p.addSeats = Number(addSeats);
     if (type === 'upgrade') Object.assign(p, { plan }, Number(addSeats) > 0 ? { addSeats: Number(addSeats) } : {});
@@ -260,15 +258,13 @@ export function OperationModal({
                   </span>
                 </label>
               ))}
-              {(['purchase', 'bind'] as DomainMode[]).map((m) => (
-                <label key={m} className="radio-row">
-                  <input type="radio" name="domainPick" checked={domainPick === '' && domainMode === m} onChange={() => { setDomainPick(''); setDomainMode(m); }} />
-                  <span>
-                    <strong>{domainModeLabel[m]}</strong>
-                    <span className="muted">{m === 'purchase' ? '：幫客戶買一個新的網域' : '：客戶已經有網域，直接綁定'}</span>
-                  </span>
-                </label>
-              ))}
+              <label className="radio-row">
+                <input type="radio" name="domainPick" checked={domainPick === ''} onChange={() => setDomainPick('')} />
+                <span>
+                  <strong>輸入網域</strong>
+                  <span className="muted">：客戶要用在 GWS 的網域</span>
+                </span>
+              </label>
             </fieldset>
             {domainPick === '' && (
               <FormField

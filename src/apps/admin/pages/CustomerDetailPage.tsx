@@ -5,8 +5,8 @@ import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { Tabs } from '@shared/components/Tabs';
-import { domainModeLabel, workOrderTypeLabel } from '@data/labels';
-import type { CustomerContact, DomainMode, SalesAssignment } from '@data/types';
+import { workOrderTypeLabel } from '@data/labels';
+import type { CustomerContact, SalesAssignment } from '@data/types';
 import { SalesAssignmentEditor, SalesAssignmentTable } from '../components/SalesAssignments';
 import { FormField } from '@shared/components/Form';
 import { StatusTag } from '@shared/components/StatusTag';
@@ -48,7 +48,6 @@ export function CustomerDetailPage() {
 
   const [domainOpen, setDomainOpen] = useState(false);
   const [domainInput, setDomainInput] = useState('');
-  const [domainMode, setDomainMode] = useState<DomainMode>('bind');
   const [salesOpen, setSalesOpen] = useState(false);
   const [salesForm, setSalesForm] = useState<SalesAssignment[]>([]);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -84,7 +83,7 @@ export function CustomerDetailPage() {
   const domainCheck = domainInput ? checkDomain(domainInput) : undefined;
   const addDomain = async () => {
     try {
-      await addCustomerDomain(c.id, domainInput, domainMode);
+      await addCustomerDomain(c.id, domainInput);
       toast(`已新增網域 ${domainInput.trim()}`);
       setDomainOpen(false);
       reload();
@@ -500,18 +499,6 @@ export function CustomerDetailPage() {
           </>
         }
       >
-        <fieldset className="plain-fieldset" style={{ marginBottom: 'var(--space-4)' }}>
-          <legend className="form-field__label">網域取得方式</legend>
-          {(['purchase', 'bind'] as DomainMode[]).map((m) => (
-            <label key={m} className="radio-row">
-              <input type="radio" name="domainMode" checked={domainMode === m} onChange={() => setDomainMode(m)} />
-              <span>
-                <strong>{domainModeLabel[m]}</strong>
-                <span className="muted">{m === 'purchase' ? '：幫客戶買一個新的網域。' : '：客戶已經有網域，直接綁定。'}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
         <FormField
           label="網域"
           required
