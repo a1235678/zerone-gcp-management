@@ -136,7 +136,11 @@ const addMonths = (date: string, months: number) => {
 export const daysUntil = (date: string) =>
   Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${TODAY}T00:00:00Z`)) / 86_400_000);
 
-const dealerName = (id: string) => db.dealers.find((d) => d.id === id)?.name ?? '（未知經銷商）';
+/** 清單上顯示經銷商簡稱（沒有簡稱就用全名） */
+const dealerName = (id: string) => {
+  const d = db.dealers.find((x) => x.id === id);
+  return d ? d.shortNames[0] ?? d.name : '（未知經銷商）';
+};
 const customerOf = (id: string) => db.customers.find((c) => c.id === id);
 const includesKw = (kw: string, ...fields: (string | undefined)[]) =>
   !kw || fields.some((f) => f?.toLowerCase().includes(kw));
@@ -263,18 +267,59 @@ export function getDealerList(query: { keyword?: string; status?: string } = {})
   return delay(
     db.dealers
       .filter((d) => !query.status || d.status === query.status)
-      .filter((d) => includesKw(kw, d.name))
+      .filter((d) => includesKw(kw, d.name, d.id, d.taxId, ...d.shortNames))
       .map(dealerListItem),
   );
 }
 
-export function createDealer(input: { name: string; adminName: string; adminEmail: string }): Promise<DealerListItem> {
+export interface DealerInput {
+  name: string;
+  shortNames: string[];
+  taxId: string;
+  registeredAddress: Address;
+  contactAddress: Address;
+  contactSameAsRegistered: boolean;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  note: string;
+}
+
+function validateDealer(input: DealerInput, selfId?: string): string | undefined {
   const name = input.name.trim();
-  if (db.dealers.some((d) => d.name === name)) return fail('已有同名的經銷商');
+  if (!name) return '請輸入經銷商名稱';
+  if (db.dealers.some((d) => d.name === name && d.id !== selfId)) return '已有同名的經銷商';
+  if (!/^\d{8}$/.test(input.taxId)) return '統一編號為 8 位數字';
+  if (db.dealers.some((d) => d.taxId === input.taxId && d.id !== selfId)) return '這個統一編號已是其他經銷商';
+  if (!addressComplete(input.contactSameAsRegistered ? input.registeredAddress : input.contactAddress)) return '請填寫完整的聯絡地址';
+  if (!input.contactName.trim()) return '請輸入聯絡人姓名';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.contactEmail.trim())) return '聯絡人信箱格式不正確';
+  if (input.note.length > 2000) return '備註最多 2000 字';
+  return undefined;
+}
+
+const cleanDealer = (input: DealerInput) => ({
+  ...input,
+  name: input.name.trim(),
+  contactName: input.contactName.trim(),
+  contactPhone: input.contactPhone.trim(),
+  contactEmail: input.contactEmail.trim(),
+  contactAddress: input.contactSameAsRegistered ? { ...input.registeredAddress } : input.contactAddress,
+});
+
+/** 下一個經銷商 ID（建立時自動產生） */
+export const nextDealerId = () => `D${String(Math.max(0, ...db.dealers.map((d) => Number(d.id.slice(1)))) + 1).padStart(3, '0')}`;
+
+export function createDealer(input: DealerInput & { adminName: string; adminEmail: string }): Promise<DealerListItem> {
+  const error = validateDealer(input);
+  if (error) return fail(error);
   const email = input.adminEmail.trim().toLowerCase();
-  if (db.users.some((u) => u.email === email)) return fail('這個 Email 已經有帳號');
-  const id = `D${String(db.dealers.length).padStart(3, '0')}`;
-  const dealer: Dealer = { id, name, isDirect: false, status: 'active', createdAt: TODAY };
+  if (!input.adminName.trim()) return fail('請輸入組織管理員姓名');
+  if (db.users.some((u) => u.email === email)) return fail('組織管理員的 Email 已經有帳號');
+  const id = nextDealerId();
+  const dealer: Dealer = { id, ...cleanDealer(input), isDirect: false, status: 'active', createdAt: TODAY };
+  delete (dealer as Partial<typeof input>).adminName;
+  delete (dealer as Partial<typeof input>).adminEmail;
   db.dealers.push(dealer);
   db.users.push({
     id: nextUserId(),
@@ -288,9 +333,26 @@ export function createDealer(input: { name: string; adminName: string; adminEmai
     lastLoginAt: null,
     createdAt: TODAY,
   });
-  log('customer', name, '新增經銷商');
-  log('permission', email, `建立第一個組織管理員帳號（${name}），已寄出邀請`);
+  log('customer', dealer.name, `新增經銷商（${id}）`);
+  log('permission', email, `建立第一個組織管理員帳號（${dealer.name}），已寄出邀請`);
   return delay(dealerListItem(dealer));
+}
+
+export function getDealer(id: string): Promise<DealerListItem | undefined> {
+  const d = db.dealers.find((x) => x.id === id);
+  return delay(d ? dealerListItem(d) : undefined);
+}
+
+export function updateDealer(id: string, input: DealerInput): Promise<DealerListItem> {
+  const d = db.dealers.find((x) => x.id === id);
+  if (!d) return fail('找不到經銷商');
+  if (d.isDirect) return fail('直銷（零壹）不能修改');
+  const error = validateDealer(input, id);
+  if (error) return fail(error);
+  const before = d.name;
+  Object.assign(d, cleanDealer(input));
+  log('customer', before, before !== d.name ? `修改經銷商資料：名稱 ${before} → ${d.name}` : '修改經銷商資料');
+  return delay(dealerListItem(d));
 }
 
 // ═════════ 客戶 ═════════

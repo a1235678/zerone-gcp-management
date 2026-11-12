@@ -5,12 +5,24 @@ export type OrgType = 'internal' | 'dealer' | 'customer';
 
 // ── 經銷商 ─────────────────────────────
 export type DealerStatus = 'active' | 'suspended';
+/** 經銷商主檔（2026/11/12 第一版，欄位待 Connie 確認 #29） */
 export interface Dealer {
+  /** 經銷商 ID：建立時自動產生，客戶主檔選經銷商後會帶出 */
   id: string;
+  /** 經銷商名稱（公司全名） */
   name: string;
+  shortNames: string[];
+  taxId: string;
   /** 「直銷（零壹）」也當作一個經銷商 */
   isDirect: boolean;
   status: DealerStatus;
+  registeredAddress: Address;
+  contactAddress: Address;
+  contactSameAsRegistered: boolean;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  note: string;
   createdAt: string;
 }
 export interface DealerListItem extends Dealer {
