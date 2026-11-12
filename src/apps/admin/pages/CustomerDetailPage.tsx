@@ -100,6 +100,7 @@ export function CustomerDetailPage() {
       toast((e as Error).message, 'danger');
     }
   };
+  const dealerLocked = c.isDealer && c.downstreamCount > 0;
   const openEdit = () =>
     setEditForm({
       attribute: c.attribute,
@@ -224,7 +225,7 @@ export function CustomerDetailPage() {
                 { label: '聯絡地址', value: c.contactSameAsRegistered ? <>同登記地址</> : formatAddress(c.contactAddress), full: true },
                 { label: '聯絡電話', value: <span className="mono">{c.contactPhone}</span> },
                 { label: 'Email', value: <span className="mono">{c.contactEmail}</span> },
-                { label: '是否為經銷商', value: c.isDealer ? '是' : '否' },
+                { label: '是否為經銷商', value: c.isDealer ? `是${c.downstreamCount ? `（名下 ${c.downstreamCount} 個客戶）` : ''}` : '否' },
                 { label: '所屬經銷商', value: c.dealerName },
                 { label: '主網域', value: <span className="mono">{c.primaryDomain}</span> },
                 { label: '其他網域', value: c.otherDomains.length ? <span className="mono">{c.otherDomains.join('、')}</span> : '' },
@@ -488,10 +489,13 @@ export function CustomerDetailPage() {
               <FormField label="聯絡電話">{(p) => <input {...p} className="input" type="tel" value={editForm.contactPhone} onChange={(e) => ef('contactPhone', e.target.value)} />}</FormField>
               <FormField label="Email" required>{(p) => <input {...p} className="input" type="email" value={editForm.contactEmail} onChange={(e) => ef('contactEmail', e.target.value)} />}</FormField>
               <FormField label="聯絡人" required>{(p) => <input {...p} className="input" value={editForm.contactName} onChange={(e) => ef('contactName', e.target.value)} />}</FormField>
-              <label className="inline checkbox-row">
-                <input type="checkbox" checked={editForm.isDealer} onChange={(e) => ef('isDealer', e.target.checked)} />
-                是否為經銷商
-              </label>
+              <div className="checkbox-row">
+                <label className="inline" title={dealerLocked ? '名下已有客戶，不能取消' : undefined}>
+                  <input type="checkbox" checked={editForm.isDealer} disabled={dealerLocked} onChange={(e) => ef('isDealer', e.target.checked)} />
+                  是否為經銷商
+                </label>
+                {dealerLocked && <div className="form-field__help">名下已有 {c.downstreamCount} 個客戶，不能取消。</div>}
+              </div>
             </div>
             <div>
               <h3 className="form-section__title" style={{ marginBottom: 'var(--space-3)' }}>登記地址</h3>

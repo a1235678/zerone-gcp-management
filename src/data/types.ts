@@ -58,6 +58,8 @@ export interface Customer {
   shortNames: string[];
   /** 這個客戶本身也是經銷商 */
   isDealer: boolean;
+  /** 是經銷商時，對應「經銷商管理」裡的經銷商；名下有客戶就不能取消「是否為經銷商」 */
+  dealerOrgId?: string;
   /** 登記地址（公司法定登記地） */
   registeredAddress: Address;
   contactAddress: Address;
@@ -82,6 +84,8 @@ export interface Customer {
 }
 export interface CustomerListItem extends Customer {
   dealerName: string;
+  /** 是經銷商時，名下的客戶數 */
+  downstreamCount: number;
 }
 export interface CustomerQuery {
   keyword?: string;

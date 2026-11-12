@@ -294,7 +294,11 @@ export function createDealer(input: { name: string; adminName: string; adminEmai
 
 // ═════════ 客戶 ═════════
 
-const withDealer = (c: Customer): CustomerListItem => ({ ...c, dealerName: dealerName(c.dealerId) });
+const withDealer = (c: Customer): CustomerListItem => ({
+  ...c,
+  dealerName: dealerName(c.dealerId),
+  downstreamCount: c.isDealer && c.dealerOrgId ? db.customers.filter((x) => x.dealerId === c.dealerOrgId).length : 0,
+});
 
 export function getCustomers(query: CustomerQuery = {}): Promise<CustomerListItem[]> {
   const kw = normKw(query.keyword);
@@ -381,6 +385,8 @@ export function updateCustomer(customerId: string, input: CustomerEdit): Promise
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.contactEmail.trim())) return fail('Email 格式不正確');
   if (!input.contactName.trim()) return fail('請輸入聯絡人');
   if (input.note.length > 2000) return fail('備註最多 2000 字');
+  const downstream = withDealer(c).downstreamCount;
+  if (c.isDealer && !input.isDealer && downstream > 0) return fail(`這個客戶名下已有 ${downstream} 個客戶，不能取消「是否為經銷商」`);
   const labels: Partial<Record<keyof CustomerEdit, string>> = {
     attribute: '客戶屬性',
     name: '公司全名',
