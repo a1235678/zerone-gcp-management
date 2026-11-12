@@ -39,7 +39,6 @@ export function GwsSubscriptionsPage() {
   const [panelId, setPanelId] = useState<string | null>(null);
   const [pickOpen, setPickOpen] = useState(false);
   const [pickId, setPickId] = useState('');
-  const [pickType, setPickType] = useState<'new' | 'transfer'>('new');
   const customers = useAsync(() => getCustomers({ status: 'active' }));
   const toTarget = (s: SubscriptionListItem): OperationTarget => ({
     customerId: s.customerId,
@@ -261,7 +260,7 @@ export function GwsSubscriptionsPage() {
                 if (!c) return;
                 setPickOpen(false);
                 setPickId('');
-                setAction({ type: pickType, target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId } });
+                setAction({ type: 'new', target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId } });
               }}
             >
               下一步
@@ -269,30 +268,13 @@ export function GwsSubscriptionsPage() {
           </>
         }
       >
-        <fieldset className="plain-fieldset" style={{ marginBottom: 'var(--space-4)' }}>
-          <legend className="form-field__label">新訂類型</legend>
-          <label className="radio-row">
-            <input type="radio" name="pickType" checked={pickType === 'new'} onChange={() => setPickType('new')} />
-            <span>
-              <strong>全新客戶</strong>
-              <span className="muted">：排程執行</span>
-            </span>
-          </label>
-          <label className="radio-row">
-            <input type="radio" name="pickType" checked={pickType === 'transfer'} onChange={() => setPickType('transfer')} />
-            <span>
-              <strong>客戶轉入</strong>
-              <span className="muted">：客戶自己刷卡或從其他經銷商轉進來，人工執行</span>
-            </span>
-          </label>
-        </fieldset>
-        <FormField label="客戶" required help="還沒建檔的客戶，請先到「客戶管理」新增；從其他經銷商轉入的新客戶也可以用「轉入客戶」一次建好。">
+        <FormField label="客戶" required help="還沒建檔的客戶，請先到「客戶管理」新增。從其他經銷商轉入的客戶，請到客戶管理用「轉入客戶」。">
           {(p) => (
             <select {...p} className="select" value={pickId} onChange={(e) => setPickId(e.target.value)}>
               <option value="">請選擇</option>
               {(customers.data ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}（{c.primaryDomain}）
+                  {c.name}{c.primaryDomain ? `（${c.primaryDomain}）` : ''}
                 </option>
               ))}
             </select>
