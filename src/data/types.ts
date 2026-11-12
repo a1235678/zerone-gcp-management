@@ -132,6 +132,8 @@ export interface Subscription {
   startsAt: string;
   /** 目前合約迄日（到期日） */
   expiresAt: string;
+  /** 已取消續約：客戶合約到期後不再續約（不寄到期通知） */
+  renewalCancelled?: { at: string; by: string; note: string };
   lastSyncedAt: string;
 }
 export interface SubscriptionListItem extends Subscription {

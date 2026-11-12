@@ -1452,12 +1452,20 @@ export function cancelSchedule(id: string): Promise<void> {
 }
 
 // ═════════ 到期通知 ═════════
-// GWS 到期前 N 天寄信給負責續約的業務和後勤（2026/11/10 會議；天數待定 #18、是否第一階段待定 #7）
+// GWS 到期前 30 天、3 天寄信給負責續約的業務和後勤（2026/11/12 會議；是否第一階段待定 #7）。
+// 已取消續約的訂閱不寄任何到期通知。
 
 const OPS_NOTICE = { name: '何佩真', email: 'peichen.ho@zerone.example' };
-const noticeSettings = { enabled: true, daysBefore: 30 };
+/** 固定在到期前幾天寄出 */
+export const NOTICE_DAYS = [30, 3];
 const manualNotices: Record<string, string> = {};
 
+export interface NoticeStage {
+  daysBefore: number;
+  date: string;
+  /** 已寄出的時間；還沒寄是 undefined */
+  sentAt?: string;
+}
 export interface ExpiryNoticeRow {
   subscriptionId: string;
   customerId: string;
@@ -1466,10 +1474,9 @@ export interface ExpiryNoticeRow {
   plan: string;
   seats: number | null;
   expiresAt: string;
-  noticeDate: string;
+  renewalCancelled: boolean;
+  stages: NoticeStage[];
   recipients: { name: string; email: string; role: string }[];
-  /** 已寄出的時間；還沒寄是 undefined */
-  sentAt?: string;
 }
 
 function noticeRows(): ExpiryNoticeRow[] {
@@ -1479,12 +1486,13 @@ function noticeRows(): ExpiryNoticeRow[] {
       const c = customerOf(s.customerId)!;
       const salesName = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'renewal')?.salesName;
       const sales = db.users.find((u) => u.name === salesName);
-      const noticeDate = addDays(s.expiresAt, -noticeSettings.daysBefore);
-      const recipients = [
-        ...(sales ? [{ name: sales.name, email: sales.email, role: '續約業務' }] : []),
-        { ...OPS_NOTICE, role: '後勤' },
-      ];
-      const autoSent = noticeSettings.enabled && noticeDate <= TODAY && noticeDate >= addDays(TODAY, -45) ? `${noticeDate} 08:00` : undefined;
+      const cancelled = Boolean(s.renewalCancelled);
+      const stages = NOTICE_DAYS.map((d) => {
+        const date = addDays(s.expiresAt, -d);
+        const key = `${s.id}-${d}`;
+        const autoSent = !cancelled && date <= TODAY && date >= addDays(TODAY, -45) ? `${date} 08:00` : undefined;
+        return { daysBefore: d, date, sentAt: manualNotices[key] ?? autoSent };
+      });
       return {
         subscriptionId: s.id,
         customerId: c.id,
@@ -1493,35 +1501,45 @@ function noticeRows(): ExpiryNoticeRow[] {
         plan: s.plan,
         seats: s.seats,
         expiresAt: s.expiresAt,
-        noticeDate,
-        recipients,
-        sentAt: manualNotices[s.id] ?? autoSent,
+        renewalCancelled: cancelled,
+        stages,
+        recipients: [...(sales ? [{ name: sales.name, email: sales.email, role: '續約業務' }] : []), { ...OPS_NOTICE, role: '後勤' }],
       };
     })
     .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
 }
 
-/** 一筆訂閱的到期通知（通知日、收件人、是否已寄出） */
+/** 一筆訂閱的到期通知（兩次通知日、收件人、是否已寄出） */
 export function getExpiryNoticeFor(subscriptionId: string): Promise<ExpiryNoticeRow | undefined> {
   return delay(noticeRows().find((r) => r.subscriptionId === subscriptionId));
 }
 
-export function getExpiryNotices(): Promise<{ settings: typeof noticeSettings; rows: ExpiryNoticeRow[] }> {
-  return delay({ settings: noticeSettings, rows: noticeRows().filter((r) => r.expiresAt >= TODAY && r.expiresAt <= addDays(TODAY, 120)) });
+export function getExpiryNotices(): Promise<ExpiryNoticeRow[]> {
+  return delay(noticeRows().filter((r) => r.expiresAt >= TODAY && r.expiresAt <= addDays(TODAY, 120)));
 }
 
-export function saveExpiryNoticeSettings(input: { enabled: boolean; daysBefore: number }): Promise<void> {
-  if (!Number.isInteger(input.daysBefore) || input.daysBefore < 1 || input.daysBefore > 180) return fail('天數請填 1 到 180 的整數');
-  Object.assign(noticeSettings, input);
-  log('sync', '到期通知', `${input.enabled ? '啟用' : '停用'}到期通知，到期前 ${input.daysBefore} 天寄出`);
+export function sendExpiryNoticeNow(subscriptionId: string, daysBefore: number): Promise<void> {
+  const r = noticeRows().find((x) => x.subscriptionId === subscriptionId);
+  if (!r) return fail('找不到訂閱');
+  if (r.renewalCancelled) return fail('這筆訂閱已取消續約，不寄到期通知');
+  manualNotices[`${subscriptionId}-${daysBefore}`] = now();
+  log('sync', r.primaryDomain || r.customerName, `手動寄出到期前 ${daysBefore} 天通知給 ${r.recipients.map((x) => x.name).join('、')}`, 'success', r.customerId);
   return delay(undefined);
 }
 
-export function sendExpiryNoticeNow(subscriptionId: string): Promise<void> {
-  const r = noticeRows().find((x) => x.subscriptionId === subscriptionId);
-  if (!r) return fail('找不到訂閱');
-  manualNotices[subscriptionId] = now();
-  log('sync', r.primaryDomain, `手動寄出到期通知給 ${r.recipients.map((x) => x.name).join('、')}`, 'success', r.customerId);
+/** 取消續約：客戶合約到期後不再續約。系統不執行任何動作，只標記並停止寄到期通知 */
+export function setRenewalCancelled(subscriptionId: string, cancelled: boolean, note = ''): Promise<void> {
+  const s = db.subscriptions.find((x) => x.id === subscriptionId);
+  if (!s) return fail('找不到訂閱');
+  if (s.status === 'cancelled') return fail('這筆訂閱已取消');
+  const c = customerOf(s.customerId)!;
+  if (cancelled) {
+    if (!note.trim()) return fail('請填寫原因');
+    const open = db.operations.find((o) => o.subscriptionId === s.id && o.type === 'renewal' && ['scheduled', 'pendingManual', 'submitted', 'manual'].includes(o.status));
+    if (open) return fail(`已有進行中的續約 ${open.id}，請先取消續約排程`);
+    s.renewalCancelled = { at: now(), by: currentUser.name, note: note.trim() };
+  } else s.renewalCancelled = undefined;
+  log('gws', `${c.name} ${s.plan}`, cancelled ? `取消續約：${note.trim()}` : '恢復續約', cancelled ? 'warning' : 'success', c.id);
   return delay(undefined);
 }
 

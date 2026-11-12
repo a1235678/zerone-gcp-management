@@ -19,6 +19,7 @@ import { FormField } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { OperationStatusTag } from '../tags';
 import { SubscriptionStatusTag } from '../tags';
+import { StatusTag } from '@shared/components/StatusTag';
 import { usePermission } from '../auth';
 
 const PAGE_SIZE = 15;
@@ -88,7 +89,16 @@ export function GwsSubscriptionsPage() {
     { key: 'dealer', header: '經銷商', render: (s) => s.dealerName },
     { key: 'plan', header: '方案', render: (s) => s.plan },
     { key: 'seats', header: '席次', align: 'right', render: (s) => <span className="tnum">{s.seats}</span> },
-    { key: 'status', header: '狀態', render: (s) => <SubscriptionStatusTag value={s.status} /> },
+    {
+      key: 'status',
+      header: '狀態',
+      render: (s) => (
+        <div className="op-chips">
+          <SubscriptionStatusTag value={s.status} />
+          {s.renewalCancelled && <StatusTag tone="warning">已取消續約</StatusTag>}
+        </div>
+      ),
+    },
     {
       key: 'contract',
       header: '合約期間',
@@ -130,7 +140,12 @@ export function GwsSubscriptionsPage() {
       render: (s) =>
         s.status === 'cancelled' || !canOperate ? null : (
           <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-            <button className="btn btn--sm" onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}>
+            <button
+              className="btn btn--sm"
+              disabled={Boolean(s.renewalCancelled)}
+              title={s.renewalCancelled ? '已取消續約，要續約請到訂閱詳情恢復續約' : undefined}
+              onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}
+            >
               續約
             </button>
             <button className="btn btn--sm" onClick={() => setAction({ type: 'addSeats', target: toTarget(s) })}>
