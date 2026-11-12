@@ -1,4 +1,4 @@
-import { transferCodesFor } from '@data/api';
+import { AGENT_CODE, transferCodesFor } from '@data/api';
 import { Callout } from '@shared/components/Form';
 import { PendingTag } from '@shared/components/PendingTag';
 
@@ -9,11 +9,11 @@ import { PendingTag } from '@shared/components/PendingTag';
 export function TransferCodes({ dealerId }: { dealerId?: string }) {
   const codes = dealerId ? transferCodesFor(dealerId) : undefined;
   return (
-    <Callout tone="info" title={<span className="inline">請客戶申請轉移時填寫這兩個代碼 <PendingTag hint="代碼格式待確認" /></span>}>
+    <Callout tone="info" title={<span className="inline">請客戶申請轉移時填寫這兩個代碼 <PendingTag id={24} /></span>}>
       <dl className="code-pair">
         <div>
           <dt>代理商代碼（零壹）</dt>
-          <dd className="mono">{codes?.agentCode ?? '—'}</dd>
+          <dd className="mono">{AGENT_CODE}</dd>
         </div>
         <div>
           <dt>經銷商代碼{codes?.dealerName ? `（${codes.dealerName}）` : ''}</dt>

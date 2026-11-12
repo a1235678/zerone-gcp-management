@@ -17,6 +17,11 @@ export const pendingItems = {
   16: { question: '合約未到期前的中途升版，能否做自動排程', owner: 'Terry' },
   17: { question: '續約降版能否排程執行（目前先人工執行）', owner: 'Terry' },
   18: { question: '到期通知要提前幾天寄', owner: '待指定' },
+  20: { question: '「客戶都要掛在羽昇底下」是否也適用 GWS；直銷要不要調整', owner: '後勤' },
+  21: { question: '能否取得系統設定的用量上限數字', owner: 'Ray' },
+  22: { question: 'Gemini Enterprise 能否取得用量和 token 數', owner: 'Ray' },
+  23: { question: '建立使用者帳號時，是否會連動到 GCP', owner: 'Ray' },
+  24: { question: '代理商代碼、經銷商代碼的格式與來源', owner: '待指定' },
 } as const;
 
 export type PendingId = keyof typeof pendingItems;

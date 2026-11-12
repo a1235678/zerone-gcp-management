@@ -1850,3 +1850,24 @@ button.topbar__user:hover {
   font-weight: var(--weight-semibold);
   color: var(--color-text);
 }
+.project-table__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.project-table__toggle svg {
+  color: var(--color-text-tertiary);
+}
+.project-table__service td {
+  background: var(--color-surface-muted);
+  font-size: var(--text-sm);
+}
+.project-table__service td:first-child {
+  padding-left: 44px;
+}

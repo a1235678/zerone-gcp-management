@@ -296,6 +296,13 @@ export interface GcpUsageRow {
   egressGb: number;
   /** 較前 30 天的變化（%） */
   changePct: number;
+  /** 依專案彙總，可以往下看各服務的明細（2026/11/11 與 Ray 的會議） */
+  byProject: ProjectCost[];
+}
+export interface ProjectCost {
+  project: string;
+  costCents: number;
+  services: { service: string; costCents: number }[];
 }
 export interface GcpUsage {
   periodStart: string;

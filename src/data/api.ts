@@ -30,6 +30,7 @@ import type {
   DealerListItem,
   DomainCheck,
   GcpUsage,
+  ProjectCost,
   BillDisplayStatus,
   BillMonth,
   BillQuery,
@@ -1088,6 +1089,7 @@ export function getGcpUsage(): Promise<GcpUsage> {
         costCents,
         egressGb: a.egressGb,
         changePct: Math.round(((costCents - a.prevPeriodCents) / a.prevPeriodCents) * 1000) / 10,
+        byProject: projectBreakdown(c.id, costCents),
       };
     })
     .sort((a, b) => b.costCents - a.costCents);
@@ -1104,6 +1106,40 @@ export function getGcpUsage(): Promise<GcpUsage> {
   });
 }
 export const GCP_PERIOD_DAYS = GCP_DAYS;
+
+/** 把金額依「專案 × 服務」拆開，比例沿用最近一期帳單的費用明細，加總保證等於總額 */
+function projectBreakdown(customerId: string, totalCents: number): ProjectCost[] {
+  const bill = db.bills.filter((b) => b.customerId === customerId).sort((a, b) => b.month.localeCompare(a.month))[0];
+  if (!bill) return [];
+  const billTotal = bill.lines.reduce((s, l) => s + l.costCents, 0);
+  const projects = groupByProject(bill.lines);
+  let left = totalCents;
+  return projects.map((p, i) => {
+    const pc = i === projects.length - 1 ? left : Math.round((totalCents * p.costCents) / billTotal);
+    left -= pc;
+    let sLeft = pc;
+    const services = p.services.map((sv, j) => {
+      const c = j === p.services.length - 1 ? sLeft : Math.round((pc * sv.costCents) / p.costCents);
+      sLeft -= c;
+      return { service: sv.service, costCents: c };
+    });
+    return { project: p.project, costCents: pc, services };
+  });
+}
+
+/** 費用明細依專案彙總，專案、服務都依金額由大到小 */
+export function groupByProject(lines: { service: string; project: string; costCents: number }[]): ProjectCost[] {
+  const map = new Map<string, ProjectCost>();
+  for (const l of lines) {
+    const p = map.get(l.project) ?? { project: l.project, costCents: 0, services: [] };
+    p.costCents += l.costCents;
+    const sv = p.services.find((x) => x.service === l.service);
+    if (sv) sv.costCents += l.costCents;
+    else p.services.push({ service: l.service, costCents: l.costCents });
+    map.set(l.project, p);
+  }
+  return [...map.values()].map((p) => ({ ...p, services: p.services.sort((a, b) => b.costCents - a.costCents) })).sort((a, b) => b.costCents - a.costCents);
+}
 
 // ═════════ GCP 帳單 ═════════
 // 流程：系統匯入 Billing 費用並計算 → 後勤上傳 Google 帳單對帳 → 確認並出帳 → 標記已收款。
