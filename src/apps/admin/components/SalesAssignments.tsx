@@ -4,21 +4,31 @@ import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { Icon } from '@shared/components/Icon';
 import { useAsync } from '@shared/hooks/useAsync';
 
-const termLabel = { new: '新約', renewal: '續約' } as const;
+/** 依「品牌 + 產品」整理成一列：新約、續約各自列出業務，多位用頓號隔開；沒設定的產品不顯示 */
+export function groupSalesAssignments(rows: SalesAssignment[]) {
+  const map = new Map<string, { brand: string; product: ProductCode; newSales: string[]; renewalSales: string[] }>();
+  for (const a of rows) {
+    const k = `${a.brand}-${a.product}`;
+    const g = map.get(k) ?? { brand: a.brand, product: a.product, newSales: [], renewalSales: [] };
+    const list = a.term === 'new' ? g.newSales : g.renewalSales;
+    if (!list.includes(a.salesName)) list.push(a.salesName);
+    map.set(k, g);
+  }
+  return [...map.values()].sort((a, b) => a.brand.localeCompare(b.brand) || a.product.localeCompare(b.product));
+}
 
-/** 負責業務（條列）：只列有設定的，依品牌、產品、新約／續約排序 */
+/** 負責業務顯示：品牌、產品、新約、續約 */
 export function SalesAssignmentTable({ rows, empty = '尚未指定負責業務' }: { rows: SalesAssignment[]; empty?: string }) {
-  const sorted = [...rows].sort((a, b) => a.brand.localeCompare(b.brand) || a.product.localeCompare(b.product) || (a.term === b.term ? 0 : a.term === 'new' ? -1 : 1));
   return (
     <DataTable
       caption="負責業務"
-      rows={sorted}
-      rowKey={(a) => `${a.brand}-${a.product}-${a.term}-${a.salesName}`}
+      rows={groupSalesAssignments(rows)}
+      rowKey={(g) => `${g.brand}-${g.product}`}
       columns={[
-        { key: 'brand', header: '品牌', render: (a) => a.brand },
-        { key: 'product', header: '產品', render: (a) => a.product },
-        { key: 'term', header: '新約／續約', render: (a) => termLabel[a.term] },
-        { key: 'sales', header: '業務', render: (a) => <span className="table__primary">{a.salesName}</span> },
+        { key: 'brand', header: '品牌', render: (g) => g.brand },
+        { key: 'product', header: '產品', render: (g) => g.product },
+        { key: 'new', header: '新約', render: (g) => (g.newSales.length ? g.newSales.join('、') : <span className="muted">—</span>) },
+        { key: 'renewal', header: '續約', render: (g) => (g.renewalSales.length ? g.renewalSales.join('、') : <span className="muted">—</span>) },
       ]}
       empty={<EmptyState title={empty} />}
     />

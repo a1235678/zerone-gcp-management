@@ -185,7 +185,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           {r.existingCustomer &&
             (isTransfer ? (
               <>
-                客戶已在系統裡，請到<Link to={`/customers/${r.existingCustomer}`}>該客戶詳情</Link>建立客戶轉入。
+                這個網域已經是系統裡的客戶，請確認是否重複建立：<Link to={`/customers/${r.existingCustomer}`}>查看該客戶</Link>。
               </>
             ) : (
               <Link to={`/customers/${r.existingCustomer}`}>查看該客戶</Link>
@@ -247,7 +247,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         <div className="card__body">
           {isTransfer && (
             <div style={{ marginBottom: 'var(--space-6)' }}>
-              <Callout tone="neutral">客戶從其他經銷商轉進來。如果客戶已經在系統裡，請改到該客戶詳情建立客戶轉入。</Callout>
+              <Callout tone="neutral">客戶從其他經銷商轉進來，客戶已經在 Google 申請完轉移。</Callout>
             </div>
           )}
 

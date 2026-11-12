@@ -13,6 +13,7 @@ import { CustomerStatusTag } from "../tags";
 import { formatDate } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
+import { groupSalesAssignments } from '../components/SalesAssignments';
 
 const PAGE_SIZE = 12;
 
@@ -54,18 +55,20 @@ const columns: Column<CustomerListItem>[] = [
   {
     key: 'sales',
     header: '負責業務',
-    render: (c) =>
-      c.salesAssignments.length ? (
+    render: (c) => {
+      const groups = groupSalesAssignments(c.salesAssignments);
+      return groups.length ? (
         <div>
-          {c.salesAssignments.map((a) => (
-            <div key={`${a.product}-${a.term}-${a.salesName}`}>
-              {a.salesName} <span className="table__secondary">{a.product} {a.term === 'new' ? '新約' : '續約'}</span>
+          {groups.map((g) => (
+            <div key={`${g.brand}-${g.product}`}>
+              <span className="table__secondary">{g.product}</span> 新約 {g.newSales.join('、') || '—'}・續約 {g.renewalSales.join('、') || '—'}
             </div>
           ))}
         </div>
       ) : (
         <span className="muted">—</span>
-      ),
+      );
+    },
   },
   { key: 'createdAt', header: '建立日期', render: (c) => <span className="mono">{formatDate(c.createdAt)}</span> },
   {

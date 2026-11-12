@@ -8,7 +8,7 @@ import { Tabs } from '@shared/components/Tabs';
 import { domainModeLabel, workOrderTypeLabel } from '@data/labels';
 import type { CustomerContact, DomainMode, SalesAssignment } from '@data/types';
 import { SalesAssignmentEditor, SalesAssignmentTable } from '../components/SalesAssignments';
-import { Callout, FormField } from '@shared/components/Form';
+import { FormField } from '@shared/components/Form';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Icon } from '@shared/components/Icon';
 import { Modal } from '@shared/components/Modal';
@@ -18,7 +18,6 @@ import { useToast } from '@shared/components/Toast';
 import { formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { AuditLogTable } from '../components/AuditLogTable';
-import { OperationModal } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
 import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag, UserStatusTag, WorkOrderStatusTag } from '../tags';
 import { usePermission } from '../auth';
@@ -47,7 +46,6 @@ export function CustomerDetailPage() {
   const [panelId, setPanelId] = useState<string | null>(null);
   const logs = useAsync(() => getAuditLogs({ customerId: id }), [id, version]);
 
-  const [transferOpen, setTransferOpen] = useState(false);
   const [domainOpen, setDomainOpen] = useState(false);
   const [domainInput, setDomainInput] = useState('');
   const [domainMode, setDomainMode] = useState<DomainMode>('bind');
@@ -136,7 +134,6 @@ export function CustomerDetailPage() {
     toast(`已移除網域 ${d}`);
     reload();
   };
-  const openTransfer = transfers.data?.find((o) => ['scheduled', 'pendingManual', 'submitted', 'manual'].includes(o.status));
 
   const recheck = async () => {
     setChecking(true);
@@ -175,11 +172,6 @@ export function CustomerDetailPage() {
             {can('customers', 'write') && (
               <button className={`btn ${c.status === 'active' ? 'btn--danger' : ''}`} onClick={() => setStatusOpen(true)}>
                 {c.status === 'active' ? '停用客戶' : '啟用客戶'}
-              </button>
-            )}
-            {can('subscriptions', 'write') && (
-              <button className="btn btn--primary" onClick={() => setTransferOpen(true)} disabled={Boolean(openTransfer)} title={openTransfer ? `已有處理中的客戶轉入 ${openTransfer.id}` : undefined}>
-                客戶轉入
               </button>
             )}
           </>
@@ -284,7 +276,8 @@ export function CustomerDetailPage() {
             </Card>
             )}
 
-            <Card title={<span className="inline">客戶轉入 <PendingTag id={4} /></span>} bodyless>
+            {transfers.data && transfers.data.length > 0 && (
+            <Card title="客戶轉入紀錄" bodyless>
               {transfers.data && transfers.data.length > 0 ? (
                 <ul className="list-plain">
                   {transfers.data.map((o) => (
@@ -308,21 +301,12 @@ export function CustomerDetailPage() {
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <div className="card__body">
-                  <p className="muted">
-                    這個客戶沒有轉入紀錄。新客戶要轉進來時，請用客戶管理的「轉入客戶」；已在系統裡的客戶才從這裡建立客戶轉入。
-                  </p>
-                </div>
-              )}
-              {openTransfer && (
-                <div className="card__body" style={{ borderTop: '1px solid var(--color-border)' }}>
-                  <Callout tone="neutral">
-                    已有處理中的客戶轉入 {openTransfer.id}，處理完才能再建立。
-                  </Callout>
-                </div>
-              )}
+              ) : null}
+              <p className="muted card__body" style={{ fontSize: 'var(--text-sm)', margin: 0, paddingTop: 'var(--space-3)' }}>
+                點編號可以查看處理狀態，或標記人工處理完成。
+              </p>
             </Card>
+            )}
           </div>
         </div>
 
@@ -403,17 +387,6 @@ export function CustomerDetailPage() {
         </Card>
       )}
 
-      <OperationModal
-        open={transferOpen}
-        type="transfer"
-        target={{ customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId }}
-        onClose={() => setTransferOpen(false)}
-        onSubmitted={(op) => {
-          setTransferOpen(false);
-          reload();
-          setPanelId(op.id);
-        }}
-      />
       <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={reload} />
       <Modal
         open={Boolean(editForm)}
