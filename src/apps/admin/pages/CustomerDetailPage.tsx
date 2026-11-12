@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addressComplete, addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
+import { checkNewDomain, addressComplete, addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, getAuditLogs, getCustomer, getOperations, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
@@ -84,7 +84,7 @@ export function CustomerDetailPage() {
       toast((e as Error).message, 'danger');
     }
   };
-  const domainCheck = domainInput ? checkDomain(domainInput) : undefined;
+  const domainCheck = domainInput ? checkNewDomain(domainInput, domainHasGws) : undefined;
   const addDomain = async () => {
     try {
       await addCustomerDomain(c.id, domainInput, domainHasGws);
@@ -516,7 +516,7 @@ export function CustomerDetailPage() {
             <span>
               <strong>綁定已開通 GWS 的網域</strong>
               <br />
-              <span className="muted">這個網域已經在使用 Google Workspace（例如客戶先前自己向 Google 購買）。綁定後，下次同步時會把它的 GWS 訂閱帶進系統。</span>
+              <span className="muted">這個網域已經在使用 Google Workspace（例如客戶先前自己向 Google 購買）。網域必須在 GWS 訂閱主檔裡；綁定後，它的 GWS 訂閱會掛到這個客戶。</span>
             </span>
           </label>
           <label className="radio-row">
@@ -524,7 +524,7 @@ export function CustomerDetailPage() {
             <span>
               <strong>新增尚未開通 GWS 的網域</strong>
               <br />
-              <span className="muted">客戶有這個網域，但還沒開通 Google Workspace。先登記到客戶主檔，之後新訂 GWS 時可以直接選用。</span>
+              <span className="muted">客戶有這個網域，但還沒開通 Google Workspace。網域不可以在 GWS 訂閱主檔裡；先登記到客戶主檔，之後新訂 GWS 時可以直接選用。</span>
             </span>
           </label>
           {domainHasGws && (
@@ -536,8 +536,8 @@ export function CustomerDetailPage() {
         <FormField
           label="網域"
           required
-          help={c.primaryDomain ? '例如 company-shop.example，會加到其他網域。' : '這個客戶還沒有網域，新增的網域會成為主網域。'}
-          message={domainCheck && !domainCheck.ok ? domainCheck.message : domainCheck?.ok ? '可以使用' : undefined}
+          help={`${c.primaryDomain ? '會加到其他網域。' : '這個客戶還沒有網域，新增的網域會成為主網域。'}${domainHasGws ? 'Prototype 測試用：hefeng-shop.example、galaxy-esports.example、oneleaf-cafe.example 在 GWS 訂閱主檔裡。' : ''}`}
+          message={domainCheck && !domainCheck.ok ? domainCheck.message : domainCheck?.ok ? (domainHasGws ? '在 GWS 訂閱主檔裡找到這個網域，可以綁定' : 'GWS 訂閱主檔裡沒有這個網域，可以新增') : undefined}
           state={domainCheck ? (domainCheck.ok ? 'success' : 'error') : undefined}
         >
           {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={domainInput} onChange={(e) => setDomainInput(e.target.value)} />}

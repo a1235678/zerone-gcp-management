@@ -12,7 +12,7 @@ import { GCP_DAYS, GCP_PERIOD_END, gcpAccounts, gcpDates } from './mock/gcp';
 import { auditLogs as seedLogs, roleOfActor } from './mock/logs';
 import { roles as seedRoles } from './mock/roles';
 import { schedules as seedSchedules } from './mock/schedules';
-import { subscriptions as seedSubscriptions } from './mock/subscriptions';
+import { subscriptions as seedSubscriptions, unlinkedGwsDomains } from './mock/subscriptions';
 import { users as seedUsers } from './mock/users';
 import { operations as seedOperations } from './mock/operations';
 import { workOrders as seedWorkOrders } from './mock/workOrders';
@@ -414,10 +414,32 @@ export function lookupTaxId(taxId: string): Promise<{ name: string; address: Add
 }
 
 /** 新增客戶的其他網域（一個客戶可以有多個網域） */
+/** 網域是否在 GWS 訂閱主檔裡（已開通 GWS） */
+export function inGwsMaster(domain: string): boolean {
+  const d = domain.trim();
+  if (unlinkedGwsDomains.includes(d)) return true;
+  return db.customers.some((c) => c.gwsDomains.includes(d));
+}
+
+/**
+ * 新增網域的檢核：
+ * - 綁定已開通 GWS 的網域：必須在 GWS 訂閱主檔裡
+ * - 新增尚未開通 GWS 的網域：不可以在 GWS 訂閱主檔裡
+ * 兩者都要格式正確、不能已經是系統裡的客戶網域
+ */
+export function checkNewDomain(domain: string, hasGws: boolean): DomainCheck {
+  const base = checkDomain(domain);
+  if (!base.ok) return base;
+  const inMaster = inGwsMaster(domain);
+  if (hasGws && !inMaster) return { ok: false, reason: 'format', message: 'GWS 訂閱主檔裡找不到這個網域。請確認網域是否正確，或改選「新增尚未開通 GWS 的網域」' };
+  if (!hasGws && inMaster) return { ok: false, reason: 'duplicate', message: '這個網域已在 GWS 訂閱主檔裡（已開通 GWS），請改選「綁定已開通 GWS 的網域」' };
+  return { ok: true };
+}
+
 export function addCustomerDomain(customerId: string, domain: string, hasGws: boolean): Promise<CustomerListItem> {
   const c = customerOf(customerId);
   if (!c) return fail('找不到客戶');
-  const check = checkDomain(domain);
+  const check = checkNewDomain(domain, hasGws);
   if (!check.ok) return fail(check.message);
   attachDomain(c, domain.trim(), hasGws);
   log('customer', c.name, hasGws ? `綁定已開通 GWS 的網域 ${domain.trim()}，下次同步時帶入訂閱` : `新增尚未開通 GWS 的網域 ${domain.trim()}`, 'success', c.id);
