@@ -44,6 +44,7 @@ export function GwsSubscriptionsPage() {
     customerId: s.customerId,
     customerName: s.customerName,
     primaryDomain: s.primaryDomain,
+    dealerId: s.dealerId,
     subscriptionId: s.id,
     plan: s.plan,
     seats: s.seats,
@@ -245,7 +246,7 @@ export function GwsSubscriptionsPage() {
                 if (!c) return;
                 setPickOpen(false);
                 setPickId('');
-                setAction({ type: pickType, target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain } });
+                setAction({ type: pickType, target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId } });
               }}
             >
               下一步

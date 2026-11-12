@@ -10,6 +10,8 @@ export interface Dealer {
   name: string;
   /** 「直銷（零壹）」也當作一個經銷商 */
   isDirect: boolean;
+  /** 經銷商代碼：客戶在 Google 申請轉移時要填（格式待確認，目前是假資料） */
+  code: string;
   status: DealerStatus;
   createdAt: string;
 }
@@ -148,8 +150,9 @@ export interface OperationPayload {
   /** 排程執行的啟用日 */
   scheduledAt?: string;
   transferSource?: TransferSource;
-  transferToken?: string;
-  tokenExpiresAt?: string;
+  /** 移轉：客戶申請轉移時填的代理商代碼（零壹）與經銷商代碼（客戶透過哪個經銷商購買） */
+  agentCode?: string;
+  dealerCode?: string;
   memo?: string;
 }
 export interface HistoryEvent<S extends string> {

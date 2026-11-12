@@ -90,6 +90,7 @@ export function WorkOrderDetailPage() {
         customerId: customer.data.id,
         customerName: customer.data.name,
         primaryDomain: customer.data.primaryDomain,
+        dealerId: customer.data.dealerId,
         subscriptionId: sub?.id,
         plan: sub?.plan,
         seats: sub?.seats,

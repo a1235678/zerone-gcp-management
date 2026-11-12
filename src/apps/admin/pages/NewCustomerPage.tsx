@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  TODAY,
-  TRANSFER_TOKEN_VALID_DAYS,
-  addDays,
   checkDomain,
-  checkTransferToken,
   createCustomer,
   createTransferInCustomer,
   getDealers,
@@ -20,6 +16,7 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { TransferCodes } from '../components/TransferCodes';
 import { usePermission } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,8 +32,6 @@ const empty = {
   note: '',
   adminName: '',
   adminEmail: '',
-  transferToken: '',
-  tokenExpiresAt: '',
   transferMemo: '',
   salesNew: '',
   salesRenewal: '',
@@ -45,7 +40,7 @@ type Key = keyof typeof empty;
 
 /**
  * 新增客戶，或「轉入客戶」：從其他經銷商轉進來的客戶。
- * 轉入時同一張表單多了轉移碼欄位，送出後建立客戶主檔，並建立一筆「新訂（移轉）」由後勤人工執行。
+ * 轉入時同一張表單多了轉移資訊（顯示客戶要填的代理商代碼、經銷商代碼，不需要轉移碼），送出後建立客戶主檔，並建立一筆「新訂（移轉）」由後勤人工執行。
  * 網址帶 ?fromWo=單號 時，從執行單帶入新客戶資料，建立後接回執行單。
  */
 export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
@@ -108,11 +103,6 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
   if (!EMAIL.test(form.contactEmail)) errors.contactEmail = 'Email 格式不正確';
   if (!admin.adminName.trim()) errors.adminName = '請輸入姓名';
   if (!EMAIL.test(admin.adminEmail)) errors.adminEmail = 'Email 格式不正確';
-  if (isTransfer) {
-    const t = checkTransferToken(form.transferToken, form.tokenExpiresAt);
-    if (t.token) errors.transferToken = t.token;
-    if (t.tokenExpiresAt) errors.tokenExpiresAt = t.tokenExpiresAt;
-  }
   const domainOk = !domain.checking && domain.result?.ok === true;
   const canSubmit = domainOk && Object.keys(errors).length === 0 && !saving;
 
@@ -229,9 +219,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         <div className="card__body">
           {isTransfer && (
             <div style={{ marginBottom: 'var(--space-6)' }}>
-              <Callout tone="info" title="開始前請客戶先取得轉移碼">
-                客戶的 Google 管理員產生轉移碼時，需要我方的經銷商識別碼。轉移碼 {TRANSFER_TOKEN_VALID_DAYS} 天內有效。如果客戶已經在系統裡，請改到該客戶詳情開立客戶轉移。
-              </Callout>
+              <Callout tone="neutral">客戶從其他經銷商轉進來。如果客戶已經在系統裡，請改到該客戶詳情建立移轉。</Callout>
             </div>
           )}
 
@@ -309,33 +297,9 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
 
           {isTransfer && (
             <FormSection title="轉移資訊" description="從其他經銷商移轉由後勤人工執行：建立客戶後狀態為「待人工執行」，後勤在 Google 後台接受移轉後回來標記。">
-              <FormField label="轉移碼" required message={err('transferToken')} state={errState('transferToken')}>
-                {(p) => (
-                  <input
-                    {...p}
-                    className="input mono"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    value={form.transferToken}
-                    onChange={set('transferToken')}
-                    onBlur={touch('transferToken')}
-                  />
-                )}
-              </FormField>
-              <FormField label="轉移碼到期日" required message={err('tokenExpiresAt')} state={errState('tokenExpiresAt')}>
-                {(p) => (
-                  <input
-                    {...p}
-                    className="input"
-                    type="date"
-                    min={TODAY}
-                    max={addDays(TODAY, TRANSFER_TOKEN_VALID_DAYS)}
-                    value={form.tokenExpiresAt}
-                    onChange={set('tokenExpiresAt')}
-                    onBlur={touch('tokenExpiresAt')}
-                  />
-                )}
-              </FormField>
+              <div className="is-full">
+                <TransferCodes dealerId={form.dealerId || undefined} />
+              </div>
               <FormField label="轉移備註" className="is-full">
                 {(p) => <textarea {...p} className="textarea" value={form.transferMemo} onChange={set('transferMemo')} />}
               </FormField>

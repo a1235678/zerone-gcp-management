@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   TODAY,
-  TRANSFER_TOKEN_VALID_DAYS,
-  addDays,
   analyzeOrder,
   cancelSchedule,
-  checkTransferToken,
   createOperation,
   getOperations,
   getPendingSchedules,
@@ -18,6 +15,7 @@ import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
 import { StatusTag } from '@shared/components/StatusTag';
 import { useToast } from '@shared/components/Toast';
+import { TransferCodes } from './TransferCodes';
 import { formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 
@@ -26,6 +24,8 @@ export interface OperationTarget {
   customerName: string;
   primaryDomain: string;
   subscriptionId?: string;
+  /** 客戶所屬經銷商，移轉時用來帶出經銷商代碼 */
+  dealerId?: string;
   plan?: string;
   seats?: number | null;
   startsAt?: string;
@@ -85,8 +85,6 @@ export function OperationModal({
   const [renewMonths, setRenewMonths] = useState('12');
   const [scheduledAt, setScheduledAt] = useState('');
   const [source, setSource] = useState<TransferSource | ''>('');
-  const [token, setToken] = useState('');
-  const [tokenExpiresAt, setTokenExpiresAt] = useState('');
   const [memo, setMemo] = useState('');
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -99,8 +97,6 @@ export function OperationModal({
     setRenewMonths(String(initial?.renewMonths ?? 12));
     setScheduledAt('');
     setSource(initial?.transferSource ?? '');
-    setToken('');
-    setTokenExpiresAt('');
     setMemo(initial?.memo ?? '');
     setTried(false);
     setSaving(false);
@@ -141,10 +137,9 @@ export function OperationModal({
     }
     if (type === 'transfer') {
       if (!source) e.source = '請選擇移轉來源';
-      if (source === 'otherDealer') Object.assign(e, checkTransferToken(token, tokenExpiresAt));
     }
     return e;
-  }, [type, plan, seats, addSeats, memo, source, token, tokenExpiresAt, date, maxDate, analysis.execution]);
+  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution]);
   const show = (k: string) => (tried ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
@@ -158,7 +153,7 @@ export function OperationModal({
     if (type === 'renewal') Object.assign(p, { plan, seats: Number(seats), renewMonths: Number(renewMonths) });
     if (type === 'addSeats') p.addSeats = Number(addSeats);
     if (type === 'upgrade') p.plan = plan;
-    if (type === 'transfer') Object.assign(p, { transferSource: source }, source === 'otherDealer' ? { transferToken: token.trim(), tokenExpiresAt } : {});
+    if (type === 'transfer') p.transferSource = source || undefined;
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
     setSaving(true);
     try {
@@ -334,37 +329,13 @@ export function OperationModal({
                   <input type="radio" name="source" checked={source === s} onChange={() => setSource(s)} />
                   <span>
                     <strong>{transferSourceLabel[s]}</strong>
-                    <span className="muted">{s === 'selfPaid' ? '：客戶原本直接向 Google 付款。' : '：需要客戶提供移轉 ID。'}</span>
+                    <span className="muted">{s === 'selfPaid' ? '：客戶原本直接向 Google 付款。' : '：客戶原本向其他經銷商購買。'}</span>
                   </span>
                 </label>
               ))}
               {show('source') && <div className="form-field__msg form-field__msg--error">{show('source')}</div>}
             </fieldset>
-            {source === 'otherDealer' && (
-              <>
-                <div className="inline">
-                  <PendingTag id={4} hint="是否使用 Cloud Channel API" />
-                </div>
-                <div className="form-grid">
-                  <FormField label="移轉 ID（轉移碼）" required message={show('token')} state={st('token')} help={`由客戶的 Google 管理員產生，${TRANSFER_TOKEN_VALID_DAYS} 天內有效`}>
-                    {(p) => <input {...p} className="input mono" autoCapitalize="characters" spellCheck={false} value={token} onChange={(e) => setToken(e.target.value)} />}
-                  </FormField>
-                  <FormField label="移轉 ID 到期日" required message={show('tokenExpiresAt')} state={st('tokenExpiresAt')}>
-                    {(p) => (
-                      <input
-                        {...p}
-                        className="input"
-                        type="date"
-                        min={TODAY}
-                        max={addDays(TODAY, TRANSFER_TOKEN_VALID_DAYS)}
-                        value={tokenExpiresAt}
-                        onChange={(e) => setTokenExpiresAt(e.target.value)}
-                      />
-                    )}
-                  </FormField>
-                </div>
-              </>
-            )}
+            <TransferCodes dealerId={target.dealerId} />
           </>
         )}
 

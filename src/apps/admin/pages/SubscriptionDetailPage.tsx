@@ -57,6 +57,7 @@ export function SubscriptionDetailPage() {
     customerId: s.customerId,
     customerName: s.customerName,
     primaryDomain: s.primaryDomain,
+    dealerId: s.dealerId,
     subscriptionId: s.id,
     plan: s.plan,
     seats: s.seats,

@@ -282,7 +282,7 @@ export function CustomerDetailPage() {
       <OperationModal
         open={transferOpen}
         type="transfer"
-        target={{ customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain }}
+        target={{ customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId }}
         onClose={() => setTransferOpen(false)}
         onSubmitted={(op) => {
           setTransferOpen(false);

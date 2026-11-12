@@ -50,6 +50,7 @@ export function DealersPage() {
         </div>
       ),
     },
+    { key: 'code', header: '經銷商代碼', render: (d) => <span className="mono">{d.code}</span> },
     {
       key: 'customers',
       header: '名下客戶',

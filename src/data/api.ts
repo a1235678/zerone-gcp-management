@@ -270,7 +270,7 @@ export function createDealer(input: { name: string; adminName: string; adminEmai
   const email = input.adminEmail.trim().toLowerCase();
   if (db.users.some((u) => u.email === email)) return fail('這個 Email 已經有帳號');
   const id = `D${String(db.dealers.length).padStart(3, '0')}`;
-  const dealer: Dealer = { id, name, isDirect: false, status: 'active', createdAt: TODAY };
+  const dealer: Dealer = { id, name, code: `RS-${1024 * (db.dealers.length + 1)}`, isDirect: false, status: 'active', createdAt: TODAY };
   db.dealers.push(dealer);
   db.users.push({
     id: nextUserId(),
@@ -409,32 +409,21 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
   return delay(withDealer(customer));
 }
 
-/** 轉移碼有效天數（依 Google Cloud Channel 文件，待 Ray 確認） */
-export const TRANSFER_TOKEN_VALID_DAYS = 14;
-
-/** 檢查轉移碼欄位，回傳各欄位的錯誤訊息 */
-export function checkTransferToken(token: string, expiresAt: string): { token?: string; tokenExpiresAt?: string } {
-  const e: { token?: string; tokenExpiresAt?: string } = {};
-  const max = addDays(TODAY, TRANSFER_TOKEN_VALID_DAYS);
-  if (!token.trim()) e.token = '請輸入客戶提供的轉移碼';
-  if (!expiresAt) e.tokenExpiresAt = '請輸入轉移碼到期日';
-  else if (expiresAt < TODAY) e.tokenExpiresAt = '轉移碼已過期，請客戶重新產生';
-  else if (expiresAt > max) e.tokenExpiresAt = `轉移碼最長 ${TRANSFER_TOKEN_VALID_DAYS} 天有效，到期日不會晚於 ${max}`;
-  return e;
+/** 零壹的代理商代碼：客戶在 Google 申請轉移時要填（格式待確認，目前是假資料） */
+export const AGENT_CODE = 'ZR-0001';
+/** 客戶申請轉移時要填的兩個代碼：代理商（零壹）與經銷商（客戶透過誰購買） */
+export function transferCodesFor(dealerId: string) {
+  const d = db.dealers.find((x) => x.id === dealerId);
+  return { agentCode: AGENT_CODE, dealerCode: d?.code ?? '', dealerName: d?.name ?? '' };
 }
 
-/** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後直接送出 Google 轉移 */
-export async function createTransferInCustomer(
-  input: NewCustomerInput & { transferToken: string; tokenExpiresAt: string; memo: string },
-): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
-  const tokenErrors = checkTransferToken(input.transferToken, input.tokenExpiresAt);
-  const firstError = tokenErrors.token ?? tokenErrors.tokenExpiresAt;
-  if (firstError) return fail(firstError);
+/** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後建立一筆移轉，由後勤人工執行（不需要轉移碼） */
+export async function createTransferInCustomer(input: NewCustomerInput & { memo: string }): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
   const customer = await createCustomer({ ...input, note: input.note || '由其他經銷商轉入' });
   const operation = await createOperation({
     type: 'transfer',
     customerId: customer.id,
-    payload: { transferSource: 'otherDealer', transferToken: input.transferToken.trim(), tokenExpiresAt: input.tokenExpiresAt, memo: input.memo.trim() || undefined },
+    payload: { transferSource: 'otherDealer', memo: input.memo.trim() || undefined },
   });
   return { customer, operation };
 }
@@ -586,7 +575,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
     case 'new':
       return `${p.plan} ${p.seats} 席`;
     case 'transfer':
-      return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.transferToken ? `，移轉 ID ${p.transferToken}` : ''}`;
+      return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.dealerCode ? `，經銷商代碼 ${p.dealerCode}` : ''}`;
     case 'renewal': {
       const plan = p.plan ?? fromPlan;
       const seats = p.seats ?? fromSeats;
@@ -660,10 +649,6 @@ export function validateOperation(input: NewOperationInput): string | undefined 
   if (p.scheduledAt && p.scheduledAt < TODAY) return '啟用日不能早於今天';
   if (input.type === 'transfer') {
     if (!p.transferSource) return '請選擇移轉來源';
-    if (p.transferSource === 'otherDealer') {
-      const e = checkTransferToken(p.transferToken ?? '', p.tokenExpiresAt ?? '');
-      if (e.token || e.tokenExpiresAt) return e.token ?? e.tokenExpiresAt;
-    }
     const open = db.operations.find((o) => o.customerId === input.customerId && o.type === 'transfer' && isOpen(o));
     if (open) return `這個客戶已有處理中的移轉 ${open.id}`;
   }
@@ -690,6 +675,10 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
   const payload: OperationPayload = { ...input.payload };
   if (sub) Object.assign(payload, { fromPlan: sub.plan, fromSeats: sub.seats ?? 0 });
   if (input.type === 'renewal') Object.assign(payload, { newStartsAt: analysis.newStartsAt, newExpiresAt: analysis.newExpiresAt });
+  if (input.type === 'transfer') {
+    const codes = transferCodesFor(c.dealerId);
+    Object.assign(payload, { agentCode: codes.agentCode, dealerCode: codes.dealerCode });
+  }
   if (analysis.execution === 'schedule') payload.scheduledAt = payload.scheduledAt ?? analysis.defaultDate ?? TODAY;
   else delete payload.scheduledAt;
   const op: GwsOperation = {
