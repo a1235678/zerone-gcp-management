@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addCustomerContact, formatAddress, getSubscriptions, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
+import { addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getSubscriptions, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
@@ -21,6 +21,7 @@ import { OperationModal } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
 import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag, SubscriptionStatusTag, UserStatusTag, WorkOrderStatusTag } from '../tags';
 import { usePermission } from '../auth';
+import { AddressFields, TagInput } from '../components/CustomerFields';
 
 type DetailTab = 'org' | 'users' | 'contacts' | 'subscriptions' | 'workOrders' | 'logs';
 
@@ -38,6 +39,8 @@ export function CustomerDetailPage() {
   const users = useAsync(() => getUsers({ orgType: 'customer', orgId: id }), [id, version]);
   const subs = useAsync(() => (can('subscriptions') ? getSubscriptions({ customerId: id }) : Promise.resolve([])), [id, version]);
   const orders = useAsync(() => (can('workOrders') ? getWorkOrders({ customerId: id }) : Promise.resolve([])), [id, version]);
+  const [editForm, setEditForm] = useState<CustomerEdit | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [contact, setContact] = useState<CustomerContact>({ name: '', title: '', email: '', phone: '' });
   const transfers = useAsync(() => getOperations({ customerId: id, type: 'transfer' }), [id, version]);
@@ -97,6 +100,35 @@ export function CustomerDetailPage() {
       toast((e as Error).message, 'danger');
     }
   };
+  const openEdit = () =>
+    setEditForm({
+      attribute: c.attribute,
+      name: c.name,
+      shortNames: [...c.shortNames],
+      contactPhone: c.contactPhone,
+      contactEmail: c.contactEmail,
+      contactName: c.contactName,
+      isDealer: c.isDealer,
+      registeredAddress: { ...c.registeredAddress },
+      contactAddress: { ...c.contactAddress },
+      contactSameAsRegistered: c.contactSameAsRegistered,
+      note: c.note,
+    });
+  const saveEdit = async () => {
+    if (!editForm) return;
+    setSavingEdit(true);
+    try {
+      await updateCustomer(c.id, editForm);
+      toast('已更新客戶資料');
+      setEditForm(null);
+      reload();
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+  const ef = <K extends keyof CustomerEdit>(k: K, v: CustomerEdit[K]) => setEditForm((f) => (f ? { ...f, [k]: v } : f));
   const saveContact = async () => {
     try {
       await addCustomerContact(c.id, contact);
@@ -181,7 +213,7 @@ export function CustomerDetailPage() {
       {tab === 'org' && (
         <div className="stack">
         <div className="split">
-          <Card title="基本資訊">
+          <Card title="基本資訊" actions={canEdit ? <button className="btn btn--sm" onClick={openEdit}>編輯</button> : undefined}>
             <DescriptionList
               items={[
                 { label: '客戶屬性', value: <StatusTag tone="neutral">{customerAttributeLabel[c.attribute]}</StatusTag> },
@@ -414,6 +446,81 @@ export function CustomerDetailPage() {
         }}
       />
       <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={reload} />
+      <Modal
+        open={Boolean(editForm)}
+        onClose={() => setEditForm(null)}
+        title="編輯客戶資料"
+        width={760}
+        footer={
+          <>
+            <button className="btn" onClick={() => setEditForm(null)}>
+              取消
+            </button>
+            <button className="btn btn--primary" disabled={savingEdit || !editForm?.name.trim()} onClick={saveEdit}>
+              儲存
+            </button>
+          </>
+        }
+      >
+        {editForm && (
+          <div className="stack">
+            <div className="form-grid">
+              <FormField label="客戶屬性" required>
+                {(p) => (
+                  <select {...p} className="select" value={editForm.attribute} onChange={(e) => ef('attribute', e.target.value as CustomerEdit['attribute'])}>
+                    {Object.entries(customerAttributeLabel).map(([v, l]) => (
+                      <option key={v} value={v}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
+              <FormField label="統一編號" help="統一編號不能修改。">
+                {(p) => <input {...p} className="input mono" value={c.taxId} readOnly disabled />}
+              </FormField>
+              <FormField label="公司全名" required message={!editForm.name.trim() ? '請輸入公司全名' : undefined} state={!editForm.name.trim() ? 'error' : undefined}>
+                {(p) => <input {...p} className="input" value={editForm.name} onChange={(e) => ef('name', e.target.value)} />}
+              </FormField>
+              <FormField label="公司簡稱" help="可輸入多個別名，按 Enter 確認。">
+                {(p) => <TagInput id={p.id} values={editForm.shortNames} onChange={(v) => ef('shortNames', v)} />}
+              </FormField>
+              <FormField label="聯絡電話">{(p) => <input {...p} className="input" type="tel" value={editForm.contactPhone} onChange={(e) => ef('contactPhone', e.target.value)} />}</FormField>
+              <FormField label="Email" required>{(p) => <input {...p} className="input" type="email" value={editForm.contactEmail} onChange={(e) => ef('contactEmail', e.target.value)} />}</FormField>
+              <FormField label="聯絡人" required>{(p) => <input {...p} className="input" value={editForm.contactName} onChange={(e) => ef('contactName', e.target.value)} />}</FormField>
+              <label className="inline checkbox-row">
+                <input type="checkbox" checked={editForm.isDealer} onChange={(e) => ef('isDealer', e.target.checked)} />
+                是否為經銷商
+              </label>
+            </div>
+            <div>
+              <h3 className="form-section__title" style={{ marginBottom: 'var(--space-3)' }}>登記地址</h3>
+              <AddressFields label="登記地址" value={editForm.registeredAddress} onChange={(a) => ef('registeredAddress', a)} />
+            </div>
+            <div>
+              <div className="inline" style={{ justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+                <h3 className="form-section__title" style={{ margin: 0 }}>聯絡地址</h3>
+                <label className="inline checkbox-row">
+                  <input type="checkbox" checked={editForm.contactSameAsRegistered} onChange={(e) => ef('contactSameAsRegistered', e.target.checked)} />
+                  同登記地址
+                </label>
+              </div>
+              <AddressFields
+                label="聯絡地址"
+                value={editForm.contactSameAsRegistered ? editForm.registeredAddress : editForm.contactAddress}
+                onChange={(a) => ef('contactAddress', a)}
+                disabled={editForm.contactSameAsRegistered}
+              />
+            </div>
+            <FormField label="備註" help={`${editForm.note.length} / 2000`}>
+              {(p) => <textarea {...p} className="textarea" maxLength={2000} value={editForm.note} onChange={(e) => ef('note', e.target.value)} />}
+            </FormField>
+            <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+              主網域、其他網域請在「網域」卡片管理；所屬經銷商不在這裡修改。
+            </p>
+          </div>
+        )}
+      </Modal>
       <Modal
         open={contactOpen}
         onClose={() => setContactOpen(false)}

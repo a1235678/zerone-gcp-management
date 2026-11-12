@@ -367,6 +367,48 @@ export function removeCustomerDomain(customerId: string, domain: string): Promis
   return delay(withDealer(c));
 }
 
+export type CustomerEdit = Pick<
+  Customer,
+  'attribute' | 'name' | 'shortNames' | 'contactPhone' | 'contactEmail' | 'contactName' | 'isDealer' | 'registeredAddress' | 'contactAddress' | 'contactSameAsRegistered' | 'note'
+>;
+
+/** 修改客戶基本資訊（統一編號、主網域、所屬經銷商不在這裡改） */
+export function updateCustomer(customerId: string, input: CustomerEdit): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  const name = input.name.trim();
+  if (!name) return fail('請輸入公司全名');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.contactEmail.trim())) return fail('Email 格式不正確');
+  if (!input.contactName.trim()) return fail('請輸入聯絡人');
+  if (input.note.length > 2000) return fail('備註最多 2000 字');
+  const labels: Partial<Record<keyof CustomerEdit, string>> = {
+    attribute: '客戶屬性',
+    name: '公司全名',
+    shortNames: '公司簡稱',
+    contactPhone: '聯絡電話',
+    contactEmail: 'Email',
+    contactName: '聯絡人',
+    isDealer: '是否為經銷商',
+    registeredAddress: '登記地址',
+    contactAddress: '聯絡地址',
+    note: '備註',
+  };
+  const next: CustomerEdit = {
+    ...input,
+    name,
+    contactPhone: input.contactPhone.trim(),
+    contactEmail: input.contactEmail.trim(),
+    contactName: input.contactName.trim(),
+    contactAddress: input.contactSameAsRegistered ? { ...input.registeredAddress } : input.contactAddress,
+  };
+  const changed = (Object.keys(labels) as (keyof CustomerEdit)[]).filter((k) => JSON.stringify(c[k]) !== JSON.stringify(next[k]));
+  if (!changed.length) return delay(withDealer(c));
+  const before = c.name;
+  Object.assign(c, next);
+  log('customer', before, `修改客戶資料：${changed.map((k) => (k === 'name' ? `公司全名 ${before} → ${name}` : labels[k])).join('、')}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
 /** 新增一般聯絡人 */
 export function addCustomerContact(customerId: string, contact: CustomerContact): Promise<CustomerListItem> {
   const c = customerOf(customerId);
