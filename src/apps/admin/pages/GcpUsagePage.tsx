@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getGcpUsage } from '@data/api';
 import type { GcpUsageRow } from '@data/types';
@@ -9,6 +10,7 @@ import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
 import { formatDate, formatNumber, formatPct, formatUsd } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
+import { ProjectCostTable } from '../components/ProjectCostTable';
 
 const Change = ({ pct }: { pct: number }) => (
   <span className={`tnum ${pct > 10 ? 'text-warning' : ''}`} title="較前 30 天">
@@ -19,11 +21,13 @@ const Change = ({ pct }: { pct: number }) => (
 export function GcpUsagePage() {
   const usage = useAsync(getGcpUsage);
   const u = usage.data;
+  const [selected, setSelected] = useState('');
 
   if (!u) return <p className="muted">載入中…</p>;
 
   const totalChange = Math.round(((u.totalCostCents - u.prevTotalCostCents) / u.prevTotalCostCents) * 1000) / 10;
   const max = Math.max(...u.rows.map((r) => r.costCents));
+  const sel = u.rows.find((r) => r.customerId === (selected || u.rows[0]?.customerId));
 
   const columns: Column<GcpUsageRow>[] = [
     {
@@ -31,7 +35,7 @@ export function GcpUsagePage() {
       header: '客戶',
       render: (r) => (
         <div>
-          <Link to={`/customers/${r.customerId}`} className="table__primary">
+          <Link to={`/customers/${r.customerId}`} className="table__primary" onClick={(e) => e.stopPropagation()}>
             {r.customerName}
           </Link>
           <div className="table__secondary">{r.dealerName}</div>
@@ -62,7 +66,12 @@ export function GcpUsagePage() {
     <>
       <PageHeader
         title="GCP 流量與用量"
-        titleAddon={<PendingTag hint="資料來源預計為 GCP Billing 匯出，待 Terry 確認" />}
+        titleAddon={
+          <>
+            <PendingTag hint="第一階段不納入，保留供討論" />
+            <PendingTag hint="資料來源預計為 GCP Billing 匯出，待 Terry 確認" />
+          </>
+        }
         description={
           <>
             統計期間 <span className="mono">{formatDate(u.periodStart)}</span> 至 <span className="mono">{formatDate(u.periodEnd)}</span>（近 30 天）。
@@ -88,8 +97,8 @@ export function GcpUsagePage() {
           />
         </Card>
 
-        <Card title="各客戶用量" bodyless actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>依費用排序</span>}>
-          <DataTable caption="各客戶 GCP 用量" columns={columns} rows={u.rows} rowKey={(r) => r.customerId} />
+        <Card title="各客戶用量" bodyless actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>依費用排序，點一列看專案明細</span>}>
+          <DataTable caption="各客戶 GCP 用量" columns={columns} rows={u.rows} rowKey={(r) => r.customerId} onRowClick={(r) => setSelected(r.customerId)} />
           <div className="table-total">
             <span>合計 {u.rows.length} 個客戶</span>
             <span className="tnum">
@@ -97,6 +106,12 @@ export function GcpUsagePage() {
             </span>
           </div>
         </Card>
+
+        {sel && (
+          <Card title={`專案明細：${sel.customerName}`} bodyless actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>{sel.byProject.length} 個專案 · {formatUsd(sel.costCents)} USD</span>}>
+            <ProjectCostTable key={sel.customerId} caption={`${sel.customerName} 各專案費用`} projects={sel.byProject} defaultOpen={sel.byProject[0]?.project} />
+          </Card>
+        )}
       </div>
     </>
   );

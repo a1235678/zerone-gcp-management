@@ -5,19 +5,15 @@ import {
   TODAY,
   billAmountTwd,
   getGcpBill,
+  groupByProject,
   issueBills,
   issueBlocker,
   markBillPaid,
   resendBill,
   updateBill,
 } from "@data/api";
-import type { BillLine } from "@data/types";
 import { Card } from "@shared/components/Card";
-import {
-  DataTable,
-  EmptyState,
-  type Column,
-} from "@shared/components/DataTable";
+import { EmptyState } from "@shared/components/DataTable";
 import { DescriptionList } from "@shared/components/DescriptionList";
 import { Callout, FormField } from "@shared/components/Form";
 import { Icon } from "@shared/components/Icon";
@@ -28,6 +24,7 @@ import { StatusFlow } from "@shared/components/StatusFlow";
 import { useToast } from "@shared/components/Toast";
 import { formatDate, formatDateTime, formatUsd } from "@shared/format";
 import { useAsync } from "@shared/hooks/useAsync";
+import { ProjectCostTable } from "../components/ProjectCostTable";
 import { usePermission } from "../auth";
 import { BillStatusTag, ReconcileStateTag } from "../tags";
 
@@ -36,20 +33,6 @@ const signedUsd = (cents: number) =>
   `${cents > 0 ? "+" : "−"}${usd(Math.abs(cents))}`;
 const twd = (n: number) => n.toLocaleString("en-US");
 
-const lineColumns: Column<BillLine>[] = [
-  { key: "service", header: "服務", render: (l) => l.service },
-  {
-    key: "project",
-    header: "專案",
-    render: (l) => <span className="mono">{l.project}</span>,
-  },
-  {
-    key: "cost",
-    header: "Google 費用（USD）",
-    align: "right",
-    render: (l) => <span className="tnum">{usd(l.costCents)}</span>,
-  },
-];
 
 export function GcpBillDetailPage() {
   const { id = "" } = useParams();
@@ -206,12 +189,7 @@ export function GcpBillDetailPage() {
               <PendingTag hint="資料來源預計為 GCP Billing 匯出（Terry）" />
             }
           >
-            <DataTable
-              caption="GCP 費用明細"
-              columns={lineColumns}
-              rows={b.lines}
-              rowKey={(l) => `${l.project}-${l.service}`}
-            />
+            <ProjectCostTable caption="GCP 費用明細（依專案）" projects={groupByProject(b.lines)} />
             <dl className="amount-summary">
               <dt>Google 費用小計（Billing 匯出）</dt>
               <dd>{usd(b.exportCents)} USD</dd>

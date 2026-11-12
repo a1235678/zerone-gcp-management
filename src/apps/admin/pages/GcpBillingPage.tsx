@@ -92,6 +92,7 @@ export function GcpBillingPage() {
     <>
       <PageHeader
         title="GCP 帳單"
+        titleAddon={<PendingTag hint="第一階段不納入，保留供討論" />}
         description={
           monthInfo ? (
             <>

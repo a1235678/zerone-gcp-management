@@ -1,7 +1,8 @@
-import type { Customer } from '../types';
+import type { Address, Customer } from '../types';
+import { TW_DISTRICTS } from './twAddress';
 
 // 名稱、統編、聯絡人皆為虛構；網域一律 .example
-export const customers: Customer[] = [
+const base: Customer[] = [
   c('C0001', '晨光設計工作室', '90010001', 'chenguang-design.example', 'D000', '陳品妤', '02-2700-1001', '林怡君', '2024-03-12'),
   c('C0002', '禾豐食品股份有限公司', '90010002', 'hefeng-foods.example', 'D001', '王建宏', '04-2300-1002', '林怡君', '2024-04-02'),
   c('C0003', '海岸線旅行社', '90010003', 'coastline-travel.example', 'D002', '張雅婷', '07-5500-1003', '黃柏翰', '2024-05-20'),
@@ -27,8 +28,10 @@ export const customers: Customer[] = [
   c('C0023', '白鷺鷥文創', '90010023', 'egret-creative.example', 'D002', '江承翰', '06-2200-1023', '黃柏翰', '2026-10-28', 'active', '由其他經銷商轉入（WO-1027-002）'),
   c('C0024', '晴川電子', '90010024', 'qingchuan-elec.example', 'D001', '何佳蓉', '03-5770-1024', '林怡君', '2026-03-02'),
   c('C0025', '一葉茶堂', '90010025', 'oneleaf-tea.example', 'D000', '林冠宇', '049-2900-1025', '林怡君', '2026-06-19'),
-  c('C0026', '新創合作社', '90010026', 'coop-lab.example', 'D003', '施怡安', '02-2706-1026', '黃柏翰', '2026-09-08', 'active', '新客戶，首張訂閱執行單簽核中', 'pending'),
-  c('C0027', '曉風出版社', '90010027', 'xiaofeng-press.example', 'D003', '馮靜宜', '02-2368-1027', '黃柏翰', '2026-10-19', 'active', '轉入失敗，等客戶重新產生轉移碼'),
+  c('C0026', '新創合作社', '90010026', 'coop-lab.example', 'D003', '施怡安', '02-2706-1026', '黃柏翰', '2026-09-08', 'active', '新客戶', 'pending'),
+  c('C0027', '曉風出版社', '90010027', 'xiaofeng-press.example', 'D003', '馮靜宜', '02-2368-1027', '黃柏翰', '2026-10-19', 'active', '等客戶在 Google 申請轉移'),
+  // 經銷商本身也是零壹的客戶（自己公司用的 GWS）：名下已有客戶，所以不能取消「是否為經銷商」
+  { ...c('C0028', '北辰資訊股份有限公司', '90010028', 'beichen-info.example', 'D000', '周文彬', '02-2655-1028', '林怡君', '2024-02-15', 'active', '經銷商本身的帳號'), isDealer: true, dealerOrgId: 'D001' },
 ];
 
 function c(
@@ -59,5 +62,49 @@ function c(
     note,
     status,
     domainVerification,
+    attribute: /基金會|協會/.test(name) ? 'nonprofit' : 'enterprise',
+    shortNames: /(股份)?有限公司$/.test(name) ? [name.replace(/(股份)?有限公司$/, '')] : [],
+    isDealer: false,
+    registeredAddress: addressOf(contactPhone, Number(id.slice(1))),
+    contactAddress: addressOf(contactPhone, Number(id.slice(1))),
+    contactSameAsRegistered: true,
+    otherDomains: [],
+    salesAssignments: [],
+    contacts: [{ name: contactName, title: '主要聯絡人', email: `admin@${primaryDomain}`, phone: contactPhone }],
   };
 }
+
+/** 依電話區碼產生一個假地址（街道、門牌皆為虛構） */
+function addressOf(phone: string, n: number): Address {
+  const ROADS = ['中山路', '民生路', '復興路', '建國路', '光復路', '中正路', '文化路', '自由路', '和平路', '仁愛路'];
+  const prefix = phone.split('-')[0];
+  const city =
+    prefix === '02' ? (n % 4 === 0 ? '新北市' : '台北市') : prefix === '03' ? (phone.startsWith('03-5') ? '新竹縣' : phone.startsWith('03-6') ? '新竹市' : '桃園市') : prefix === '04' ? '台中市' : prefix === '05' ? '嘉義市' : prefix === '06' ? '台南市' : prefix === '07' ? '高雄市' : prefix === '049' ? '南投縣' : '台北市';
+  const list = TW_DISTRICTS[city];
+  const [district, postalCode] = list[n % list.length];
+  return { country: '台灣', city, district, postalCode, street: `${ROADS[n % ROADS.length]}${(n * 37) % 300 + 1}號${(n % 12) + 1}樓` };
+}
+
+// 其他網域（一個客戶可以有多個網域）
+const otherDomains: Record<string, string[]> = {
+  C0002: ['hefeng-bakery.example'],
+  C0011: ['heguang-lab.example', 'heguang-care.example'],
+  C0024: ['qingchuan-semi.example'],
+};
+// 有 GCP 的客戶
+const gcpCustomers = new Set(['C0003', 'C0006', 'C0007', 'C0008', 'C0011', 'C0016', 'C0020', 'C0022', 'C0024']);
+const SALES = ['黃柏翰', '李冠霖'];
+
+/** 負責業務：新約沿用開發的業務；續約輪流分給兩位業務，示意同一客戶可以新約、續約不同人 */
+export const customers: Customer[] = base.map((c, i) => {
+  const newSales = SALES.includes(c.createdBy) ? c.createdBy : '李冠霖';
+  const renewalSales = SALES[i % 2];
+  const assignments: Customer['salesAssignments'] = [
+    { product: 'GWS', term: 'new', salesName: newSales },
+    { product: 'GWS', term: 'renewal', salesName: renewalSales },
+  ];
+  if (gcpCustomers.has(c.id)) {
+    assignments.push({ product: 'GCP', term: 'new', salesName: '黃柏翰' }, { product: 'GCP', term: 'renewal', salesName: '黃柏翰' });
+  }
+  return { ...c, otherDomains: otherDomains[c.id] ?? [], salesAssignments: assignments };
+});

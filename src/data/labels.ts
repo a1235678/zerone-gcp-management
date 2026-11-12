@@ -8,6 +8,9 @@ import type {
   OrgType,
   PermissionLevel,
   ResourceKey,
+  CustomerAttribute,
+  ExecutionMode,
+  TransferSource,
   BillDisplayStatus,
   ReconcileState,
   ReconcileHow,
@@ -28,11 +31,11 @@ export const domainVerificationLabel: Record<DomainVerification, string> = { ver
 export const subscriptionStatusLabel: Record<SubscriptionStatus, string> = { active: '使用中', expiring: '即將到期', cancelled: '已取消' };
 
 export const workOrderTypeLabel: Record<WorkOrderType, string> = {
-  new: '新訂閱',
+  new: '新訂',
+  transfer: '客戶轉入',
   renewal: '續約',
-  seats: '調整席次',
-  transfer: '客戶轉移',
-  cancel: '取消訂閱',
+  addSeats: '加購',
+  upgrade: '中途升版',
 };
 export const operationTypeLabel = workOrderTypeLabel;
 
@@ -49,18 +52,23 @@ export const workOrderStatusLabel: Record<WorkOrderStatus, string> = {
 export const workOrderFlow: WorkOrderStatus[] = ['draft', 'salesReview', 'techReview', 'approved', 'processing', 'completed'];
 
 export const operationStatusLabel: Record<OperationStatus, string> = {
+  scheduled: '已排程',
+  pendingManual: '待人工執行',
   submitted: '已送出 Google',
   completed: '完成',
   failed: '失敗',
-  manual: '手動處理・待同步確認',
+  manual: '已手動處理・待同步',
+  cancelled: '已取消',
 };
+export const executionModeLabel: Record<ExecutionMode, string> = { schedule: '排程執行', manual: '人工執行' };
+export const transferSourceLabel: Record<TransferSource, string> = { selfPaid: '客戶自己刷卡，要轉進來', otherDealer: '從其他經銷商轉入' };
 
 export const scheduleKindLabel: Record<ScheduleKind, string> = { once: '單次', monthly: '每月', yearly: '每年' };
 export const scheduleActionLabel: Record<ScheduleAction, string> = {
-  addSeats: '增加席次',
-  removeSeats: '減少席次',
+  new: '新訂',
+  addSeats: '加購席次',
+  upgrade: '中途升版',
   renew: '續約',
-  cancel: '取消訂閱',
   sync: '同步訂閱資料',
 };
 export const scheduleStatusLabel: Record<ScheduleStatus, string> = {
@@ -94,12 +102,14 @@ export const logCategoryLabel: Record<LogCategory, string> = {
   workOrder: '執行單',
   gws: 'GWS 操作',
   billing: '帳單',
+  catalog: '品牌與產品',
   permission: '權限',
   login: '登入',
   sync: '同步',
 };
 export const logResultLabel: Record<LogResult, string> = { success: '成功', failure: '失敗', warning: '警示' };
 
+export const customerAttributeLabel: Record<CustomerAttribute, string> = { enterprise: '一般企業', government: '政府機關', school: '學校', nonprofit: '非營利組織' };
 export const billStatusLabel: Record<BillDisplayStatus, string> = { pending: '待確認', billed: '已出帳', overdue: '逾期', paid: '已收款' };
 export const reconcileStateLabel: Record<ReconcileState, string> = { match: '一致', mismatch: '有差異', resolved: '已處理', noInvoice: '尚無 Google 帳單' };
 export const reconcileHowLabel: Record<ReconcileHow, string> = { adoptGoogle: '採用 Google 金額', keepOurs: '維持我方金額' };

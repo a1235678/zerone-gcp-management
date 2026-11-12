@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { getCustomers, getDealers, getPlans, getSubscriptions, getWorkOrder, saveWorkOrder, validateWorkOrder } from '@data/api';
-import { workOrderTypeLabel } from '@data/labels';
+import { analyzeOrder, getCustomers, getDealers, getPlanList, getSubscriptions, getWorkOrder, saveWorkOrder, validateWorkOrder } from '@data/api';
+import { executionModeLabel, workOrderTypeLabel } from '@data/labels';
 import type { NewCustomerDraft, WorkOrderInput, WorkOrderType } from '@data/types';
+import { StatusTag } from '@shared/components/StatusTag';
+import { ChangeTags } from '../components/OperationModal';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { PageHeader } from '@shared/components/PageHeader';
@@ -12,8 +14,8 @@ import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
 
 const emptyCustomer: NewCustomerDraft = { name: '', taxId: '', primaryDomain: '', contactName: '', contactEmail: '', contactPhone: '', note: '' };
-const types: WorkOrderType[] = ['new', 'renewal', 'seats', 'cancel', 'transfer'];
-const needsSubscription = (t: WorkOrderType) => t === 'renewal' || t === 'seats' || t === 'cancel';
+const types: WorkOrderType[] = ['new', 'transfer', 'renewal', 'addSeats', 'upgrade'];
+const needsSubscription = (t: WorkOrderType) => t === 'renewal' || t === 'addSeats' || t === 'upgrade';
 
 /** 業務開立或修改執行單（草稿、已退回才能修改） */
 export function WorkOrderFormPage() {
@@ -24,9 +26,9 @@ export function WorkOrderFormPage() {
   const existing = useAsync(() => (id ? getWorkOrder(id) : Promise.resolve(undefined)), [id]);
   const customers = useAsync(() => getCustomers({ status: 'active' }));
   const dealers = useAsync(getDealers);
-  const plans = useAsync(getPlans);
+  const plans = useAsync(getPlanList);
 
-  const [input, setInput] = useState<WorkOrderInput>({ type: 'new', customerMode: 'existing', payload: { renewMonths: 12 } });
+  const [input, setInput] = useState<WorkOrderInput>({ type: 'new', customerMode: 'new', payload: { renewMonths: 12 } });
   const [nc, setNc] = useState<NewCustomerDraft>(emptyCustomer);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -47,6 +49,11 @@ export function WorkOrderFormPage() {
   );
   const liveSubs = (subs.data ?? []).filter((s) => s.status !== 'cancelled');
   const sub = liveSubs.find((s) => s.id === input.subscriptionId);
+  const activePlans = (plans.data ?? []).filter((p) => p.productId === 'P01' && p.status === 'active');
+  const subTier = activePlans.find((p) => p.name === sub?.plan)?.tier ?? 0;
+  const analysis = analyzeOrder(input.type, sub, input.payload);
+  const planLabel = input.type === 'upgrade' ? '升級後的方案' : input.type === 'renewal' ? '續約方案（版本）' : '方案';
+  const upgradeOnly = input.type === 'upgrade';
 
   const full: WorkOrderInput = { ...input, newCustomer: input.customerMode === 'new' ? nc : undefined };
   const errors = useMemo(() => validateWorkOrder(full, id), [JSON.stringify(full), id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -54,8 +61,18 @@ export function WorkOrderFormPage() {
   const show = (k: string) => (tried || (k === 'primaryDomain' && nc.primaryDomain) ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
+  // 客戶轉入一定是新客戶；續約、加購、中途升版一定是現有客戶；新訂可以選新客戶或現有客戶（其他產品的客戶）
   const setType = (t: WorkOrderType) =>
-    setInput((x) => ({ ...x, type: t, customerMode: needsSubscription(t) ? 'existing' : x.customerMode, subscriptionId: needsSubscription(t) ? x.subscriptionId : undefined }));
+    setInput((x) => {
+      const mode = needsSubscription(t) ? 'existing' : t === 'transfer' ? 'new' : x.customerMode;
+      return {
+        ...x,
+        type: t,
+        customerMode: mode,
+        customerId: mode === 'existing' ? x.customerId : undefined,
+        subscriptionId: needsSubscription(t) ? x.subscriptionId : undefined,
+      };
+    });
   const setPayload = (k: keyof WorkOrderInput['payload'], v: string | number | undefined) => setInput((x) => ({ ...x, payload: { ...x.payload, [k]: v } }));
   const setNcField = (k: keyof NewCustomerDraft) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setNc((x) => ({ ...x, [k]: e.target.value }));
 
@@ -126,25 +143,20 @@ export function WorkOrderFormPage() {
           </FormSection>
 
           <FormSection title="客戶">
-            <FormField label="客戶" required className="is-full" message={show('customerMode')} state={st('customerMode')}>
-              {(p) => (
-                <div className="segmented" role="group" aria-labelledby={p.id}>
-                  <button type="button" aria-pressed={input.customerMode === 'existing'} onClick={() => setInput((x) => ({ ...x, customerMode: 'existing' }))}>
-                    現有客戶
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={input.customerMode === 'new'}
-                    disabled={needsSubscription(input.type)}
-                    title={needsSubscription(input.type) ? '續約、調整席次、取消訂閱只適用現有客戶' : undefined}
-                    onClick={() => setInput((x) => ({ ...x, customerMode: 'new', customerId: undefined, subscriptionId: undefined }))}
-                  >
-                    新客戶
-                  </button>
-                </div>
-              )}
-            </FormField>
-
+            {input.type === 'new' && (
+              <FormField label="客戶" required className="is-full" message={show('customerMode')} state={st('customerMode')} help="現有客戶：已經是我們平台其他產品的客戶。">
+                {(p) => (
+                  <div className="segmented" role="group" aria-labelledby={p.id}>
+                    <button type="button" aria-pressed={input.customerMode === 'new'} onClick={() => setInput((x) => ({ ...x, customerMode: 'new', customerId: undefined }))}>
+                      新客戶
+                    </button>
+                    <button type="button" aria-pressed={input.customerMode === 'existing'} onClick={() => setInput((x) => ({ ...x, customerMode: 'existing' }))}>
+                      現有客戶
+                    </button>
+                  </div>
+                )}
+              </FormField>
+            )}
             {input.customerMode === 'existing' ? (
               <>
                 <FormField label="選擇客戶" required message={show('customerId')} state={st('customerId')}>
@@ -172,12 +184,20 @@ export function WorkOrderFormPage() {
                         className="select"
                         value={input.subscriptionId ?? ''}
                         disabled={!input.customerId}
-                        onChange={(e) => setInput((x) => ({ ...x, subscriptionId: e.target.value || undefined }))}
+                        onChange={(e) => {
+                          const next = liveSubs.find((x) => x.id === e.target.value);
+                          // 續約預設帶入目前的方案與人數
+                          setInput((x) => ({
+                            ...x,
+                            subscriptionId: e.target.value || undefined,
+                            payload: x.type === 'renewal' && next ? { ...x.payload, plan: next.plan, seats: next.seats ?? undefined } : x.payload,
+                          }));
+                        }}
                       >
                         <option value="">{input.customerId ? (liveSubs.length ? '請選擇' : '這個客戶沒有有效訂閱') : '請先選擇客戶'}</option>
                         {liveSubs.map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.plan} · {s.seats} 席 · 到期 {s.expiresAt}
+                            {s.plan} · {s.seats} 席 · 合約 {s.startsAt} – {s.expiresAt}
                           </option>
                         ))}
                       </select>
@@ -189,7 +209,14 @@ export function WorkOrderFormPage() {
               </>
             ) : (
               <>
-                <Callout tone="neutral">客戶資料會在核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。主網域現在就會檢查格式與是否重複。</Callout>
+                <div className="is-full">
+                  <Callout tone="neutral">
+                    {input.type === 'transfer'
+                      ? '客戶轉入：客戶從其他經銷商轉進來，一定是新客戶，請填客戶主檔「轉入客戶」的欄位。核准後由後勤在「轉入客戶」建檔並建立轉入，這裡填的內容會自動帶入。'
+                      : '新客戶的資料會在核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。'}
+                    主網域現在就會檢查格式與是否重複。
+                  </Callout>
+                </div>
                 <FormField label="客戶名稱" required message={show('name')} state={st('name')}>
                   {(p) => <input {...p} className="input" value={nc.name} onChange={setNcField('name')} />}
                 </FormField>
@@ -199,7 +226,7 @@ export function WorkOrderFormPage() {
                 <FormField label="主網域" required message={show('primaryDomain')} state={st('primaryDomain')} help="例如 company.example">
                   {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={nc.primaryDomain} onChange={setNcField('primaryDomain')} />}
                 </FormField>
-                <FormField label="經銷商" required message={show('dealerId')} state={st('dealerId')}>
+                <FormField label={input.type === 'transfer' ? '轉入後的經銷商' : '經銷商'} required message={show('dealerId')} state={st('dealerId')}>
                   {(p) => (
                     <select {...p} className="select" value={input.dealerId ?? ''} onChange={(e) => setInput((x) => ({ ...x, dealerId: e.target.value || undefined }))}>
                       <option value="">請選擇</option>
@@ -228,17 +255,21 @@ export function WorkOrderFormPage() {
           <FormSection title="需求內容">
             {input.type === 'new' && (
               <>
-                <FormField label="方案" required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
+                <FormField label={planLabel} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
                   {(p) => (
                     <select {...p} className="select" value={input.payload.plan ?? ''} onChange={(e) => setPayload('plan', e.target.value || undefined)}>
                       <option value="">請選擇</option>
-                      {(plans.data ?? []).map((pl) => (
-                        <option key={pl}>{pl}</option>
-                      ))}
+                      {activePlans
+                        .filter((pl) => !upgradeOnly || pl.tier > subTier)
+                        .map((pl) => (
+                          <option key={pl.id} value={pl.name}>
+                            {pl.name}（等級 {pl.tier}）{pl.name === sub?.plan ? '・目前' : ''}
+                          </option>
+                        ))}
                     </select>
                   )}
                 </FormField>
-                <FormField label="席次" required message={show('seats')} state={st('seats')}>
+                <FormField label="人數" required message={show('seats')} state={st('seats')}>
                   {(p) => (
                     <input {...p} className="input tnum" type="number" min={1} value={input.payload.seats ?? ''} onChange={(e) => setPayload('seats', e.target.value ? Number(e.target.value) : undefined)} />
                   )}
@@ -246,28 +277,96 @@ export function WorkOrderFormPage() {
               </>
             )}
             {input.type === 'renewal' && (
-              <FormField label="續約期間" required message={show('renewMonths')} state={st('renewMonths')}>
-                {(p) => (
-                  <select {...p} className="select" value={input.payload.renewMonths ?? ''} onChange={(e) => setPayload('renewMonths', Number(e.target.value))}>
-                    <option value="12">12 個月</option>
-                    <option value="24">24 個月</option>
-                    <option value="36">36 個月</option>
-                  </select>
-                )}
-              </FormField>
+              <>
+                <FormField label={planLabel} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
+                  {(p) => (
+                    <select {...p} className="select" value={input.payload.plan ?? ''} onChange={(e) => setPayload('plan', e.target.value || undefined)}>
+                      <option value="">請選擇</option>
+                      {activePlans
+                        .filter((pl) => !upgradeOnly || pl.tier > subTier)
+                        .map((pl) => (
+                          <option key={pl.id} value={pl.name}>
+                            {pl.name}（等級 {pl.tier}）{pl.name === sub?.plan ? '・目前' : ''}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </FormField>
+                <FormField label="續約人數" required message={show('seats')} state={st('seats')} help={sub ? `目前 ${sub.seats} 席` : '請先選擇訂閱'}>
+                  {(p) => (
+                    <input {...p} className="input tnum" type="number" min={1} value={input.payload.seats ?? ''} onChange={(e) => setPayload('seats', e.target.value ? Number(e.target.value) : undefined)} />
+                  )}
+                </FormField>
+                <FormField label="續約期間" required message={show('renewMonths')} state={st('renewMonths')}>
+                  {(p) => (
+                    <select {...p} className="select" value={input.payload.renewMonths ?? ''} onChange={(e) => setPayload('renewMonths', Number(e.target.value))}>
+                      <option value="12">12 個月</option>
+                      <option value="24">24 個月</option>
+                      <option value="36">36 個月</option>
+                    </select>
+                  )}
+                </FormField>
+                <FormField label="新合約期間">
+                  {(p) => <input {...p} className="input mono" readOnly value={sub ? `${analysis.newStartsAt?.replace(/-/g, '/')} – ${analysis.newExpiresAt?.replace(/-/g, '/')}` : '請先選擇訂閱'} />}
+                </FormField>
+              </>
             )}
-            {input.type === 'seats' && (
-              <FormField label="調整後席次" required message={show('toSeats')} state={st('toSeats')} help={sub ? `目前 ${sub.seats} 席` : '請先選擇訂閱'}>
-                {(p) => (
-                  <input {...p} className="input tnum" type="number" min={1} value={input.payload.toSeats ?? ''} onChange={(e) => setPayload('toSeats', e.target.value ? Number(e.target.value) : undefined)} />
-                )}
-              </FormField>
+            {input.type === 'addSeats' && (
+              <>
+                <FormField label="加購人數" required message={show('addSeats')} state={st('addSeats')} help={sub ? `目前 ${sub.seats} 席。加購只能加人，不能減人。` : '請先選擇訂閱'}>
+                  {(p) => (
+                    <input {...p} className="input tnum" type="number" min={1} value={input.payload.addSeats ?? ''} onChange={(e) => setPayload('addSeats', e.target.value ? Number(e.target.value) : undefined)} />
+                  )}
+                </FormField>
+                <FormField label="加購期間" help="期間一律到舊合約結束日。">
+                  {(p) => <input {...p} className="input mono" readOnly value={sub ? `生效日起 – ${sub.expiresAt.replace(/-/g, '/')}` : '請先選擇訂閱'} />}
+                </FormField>
+              </>
+            )}
+            {input.type === 'upgrade' && (
+              <>
+                <FormField label={planLabel} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
+                  {(p) => (
+                    <select {...p} className="select" value={input.payload.plan ?? ''} onChange={(e) => setPayload('plan', e.target.value || undefined)}>
+                      <option value="">請選擇</option>
+                      {activePlans
+                        .filter((pl) => !upgradeOnly || pl.tier > subTier)
+                        .map((pl) => (
+                          <option key={pl.id} value={pl.name}>
+                            {pl.name}（等級 {pl.tier}）{pl.name === sub?.plan ? '・目前' : ''}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </FormField>
+                <FormField label="同時加購人數" message={show('addSeats')} state={st('addSeats')} help={sub ? `選填。目前 ${sub.seats} 席，只能加人。` : '選填'}>
+                  {(p) => (
+                    <input {...p} className="input tnum" type="number" min={0} placeholder="0" value={input.payload.addSeats ?? ''} onChange={(e) => setPayload('addSeats', e.target.value ? Number(e.target.value) : undefined)} />
+                  )}
+                </FormField>
+              </>
             )}
             {input.type === 'transfer' && (
-              <Callout tone="info">轉移碼由客戶的 Google 管理員產生，14 天內有效。為避免簽核期間過期，轉移碼由後勤處理時再填，開單時不用填。</Callout>
+              <div className="is-full">
+                <Callout tone="neutral">客戶已經在 Google 申請完轉移，不需要轉移碼。客戶的訂閱會全部轉入，不能只轉一部分。</Callout>
+              </div>
             )}
-            {input.type === 'cancel' && <Callout tone="warning">核准後由後勤送 Google 取消，完成後這筆訂閱的所有授權會停止。</Callout>}
-            <FormField label={input.type === 'cancel' ? '取消原因' : '備註'} required={input.type === 'cancel'} className="is-full" message={show('memo')} state={st('memo')}>
+            {(input.type === 'new' || input.type === 'transfer' || sub) && (
+              <div className="is-full exec-box" style={{ gridColumn: '1 / -1' }}>
+                <div className="exec-box__head">
+                  <span className="muted">核准後的執行方式</span>
+                  <StatusTag tone={analysis.execution === 'schedule' ? 'info' : 'warning'}>{executionModeLabel[analysis.execution]}</StatusTag>
+                  {analysis.pendingId && <PendingTag id={analysis.pendingId} />}
+                  {input.type === 'renewal' && input.payload.plan && <ChangeTags planChange={analysis.planChange} seatChange={analysis.seatChange} />}
+                </div>
+                <ul className="exec-box__reasons">
+                  {analysis.reasons.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <FormField label={input.type === 'transfer' ? '轉移備註' : '備註'} className="is-full">
               {(p) => <textarea {...p} className="textarea" value={input.payload.memo ?? ''} onChange={(e) => setPayload('memo', e.target.value)} />}
             </FormField>
           </FormSection>

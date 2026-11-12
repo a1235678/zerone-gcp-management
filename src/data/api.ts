@@ -4,7 +4,7 @@
  * 所有寫入只改記憶體，重新整理頁面就會回到初始資料。
  * 真正的權限與資料範圍檢查必須在後端做，這裡不模擬。
  */
-import { brands as seedBrands, products as seedProducts } from './mock/brands';
+import { brands as seedBrands, plans as seedPlans, products as seedProducts } from './mock/brands';
 import { customers as seedCustomers } from './mock/customers';
 import { dealers as seedDealers } from './mock/dealers';
 import { BILL_MONTHS, PAYMENT_DAYS, gcpBills as seedBills, googleInvoices as seedInvoices } from './mock/billing';
@@ -12,23 +12,27 @@ import { GCP_DAYS, GCP_PERIOD_END, gcpAccounts, gcpDates } from './mock/gcp';
 import { auditLogs as seedLogs, roleOfActor } from './mock/logs';
 import { roles as seedRoles } from './mock/roles';
 import { schedules as seedSchedules } from './mock/schedules';
-import { gwsPlans, subscriptions as seedSubscriptions } from './mock/subscriptions';
+import { subscriptions as seedSubscriptions } from './mock/subscriptions';
 import { users as seedUsers } from './mock/users';
 import { operations as seedOperations } from './mock/operations';
 import { workOrders as seedWorkOrders } from './mock/workOrders';
-import { operationStatusLabel, operationTypeLabel, orgTypeLabel, workOrderTypeLabel } from './labels';
+import { executionModeLabel, operationStatusLabel, operationTypeLabel, orgTypeLabel, transferSourceLabel, workOrderTypeLabel } from './labels';
 import type {
   AuditLog,
   AuditLogQuery,
   Brand,
   BrandListItem,
   Customer,
+  SalesAssignment,
+  Address,
+  CustomerContact,
   CustomerListItem,
   CustomerQuery,
   Dealer,
   DealerListItem,
   DomainCheck,
   GcpUsage,
+  ProjectCost,
   BillDisplayStatus,
   BillMonth,
   BillQuery,
@@ -49,11 +53,18 @@ import type {
   OperationPayload,
   OperationStatus,
   OperationType,
+  OrderAnalysis,
+  ExecutionMode,
+  Schedule,
   GwsOperation,
   WorkOrderInput,
+  WorkOrderPayload,
+  WorkOrderType,
   WorkOrderStep,
   WorkOrderStepState,
   OrgType,
+  Plan,
+  PlanListItem,
   Product,
   ProductListItem,
   Role,
@@ -95,6 +106,7 @@ const db = {
   logs: structuredClone(seedLogs),
   brands: structuredClone(seedBrands),
   products: structuredClone(seedProducts),
+  plans: structuredClone(seedPlans),
   bills: structuredClone(seedBills),
   invoices: structuredClone(seedInvoices),
 };
@@ -282,14 +294,18 @@ export function createDealer(input: { name: string; adminName: string; adminEmai
 
 // ═════════ 客戶 ═════════
 
-const withDealer = (c: Customer): CustomerListItem => ({ ...c, dealerName: dealerName(c.dealerId) });
+const withDealer = (c: Customer): CustomerListItem => ({
+  ...c,
+  dealerName: dealerName(c.dealerId),
+  downstreamCount: c.isDealer && c.dealerOrgId ? db.customers.filter((x) => x.dealerId === c.dealerOrgId).length : 0,
+});
 
 export function getCustomers(query: CustomerQuery = {}): Promise<CustomerListItem[]> {
   const kw = normKw(query.keyword);
   const rows = db.customers
     .filter((c) => !query.dealerId || c.dealerId === query.dealerId)
     .filter((c) => !query.status || c.status === query.status)
-    .filter((c) => includesKw(kw, c.name, c.primaryDomain, c.taxId, c.contactName))
+    .filter((c) => includesKw(kw, c.name, ...c.shortNames, c.primaryDomain, c.taxId, c.contactName, ...c.otherDomains, ...c.salesAssignments.map((a) => a.salesName)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .map(withDealer);
   return delay(rows);
@@ -315,9 +331,116 @@ export function checkDomain(domain: string): DomainCheck {
         : '格式不正確，例如 company.example';
     return { ok: false, reason: 'format', message: hint };
   }
-  const existing = db.customers.find((c) => c.primaryDomain === d);
+  const existing = db.customers.find((c) => c.primaryDomain === d || c.otherDomains.includes(d));
   if (existing) return { ok: false, reason: 'duplicate', message: `這個網域已被「${existing.name}」使用`, existingCustomer: existing.id };
   return { ok: true };
+}
+
+export const emptyAddress = (): Address => ({ country: '台灣', city: '', district: '', postalCode: '', street: '' });
+export const formatAddress = (a: Address) => [a.postalCode, a.country === '台灣' ? '' : a.country, a.city, a.district, a.street].filter(Boolean).join(' ').replace(/^(\d+) /, '$1 ');
+
+/** 模擬依統一編號查詢公司登記資料（正式版的資料來源待確認） */
+const fakeRegistry: Record<string, { name: string; address: Address }> = {
+  '90010088': { name: '松濤設計股份有限公司', address: { country: '台灣', city: '台北市', district: '大安區', postalCode: '106', street: '復興南路一段 120 號 5 樓' } },
+  '90010099': { name: '山嵐資訊股份有限公司', address: { country: '台灣', city: '新竹市', district: '東區', postalCode: '300', street: '光復路二段 88 號' } },
+  '90010032': { name: '霧峰農創有限公司', address: { country: '台灣', city: '台中市', district: '南屯區', postalCode: '408', street: '五權西路二段 66 號' } },
+};
+export function lookupTaxId(taxId: string): Promise<{ name: string; address: Address } | undefined> {
+  if (!/^\d{8}$/.test(taxId)) return fail('請輸入 8 碼統一編號');
+  const used = db.customers.find((c) => c.taxId === taxId);
+  if (used) return fail(`這個統一編號已是客戶「${used.name}」`);
+  return delay(fakeRegistry[taxId], 400);
+}
+
+/** 新增客戶的其他網域（一個客戶可以有多個網域） */
+export function addCustomerDomain(customerId: string, domain: string): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  const check = checkDomain(domain);
+  if (!check.ok) return fail(check.message);
+  c.otherDomains.push(domain.trim());
+  log('customer', c.name, `新增網域 ${domain.trim()}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
+export function removeCustomerDomain(customerId: string, domain: string): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  c.otherDomains = c.otherDomains.filter((d) => d !== domain);
+  log('customer', c.name, `移除網域 ${domain}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
+export type CustomerEdit = Pick<
+  Customer,
+  'attribute' | 'name' | 'shortNames' | 'contactPhone' | 'contactEmail' | 'contactName' | 'isDealer' | 'registeredAddress' | 'contactAddress' | 'contactSameAsRegistered' | 'note'
+>;
+
+/** 修改客戶基本資訊（統一編號、主網域、所屬經銷商不在這裡改） */
+export function updateCustomer(customerId: string, input: CustomerEdit): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  const name = input.name.trim();
+  if (!name) return fail('請輸入公司全名');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.contactEmail.trim())) return fail('Email 格式不正確');
+  if (!input.contactName.trim()) return fail('請輸入聯絡人');
+  if (input.note.length > 2000) return fail('備註最多 2000 字');
+  const downstream = withDealer(c).downstreamCount;
+  if (c.isDealer && !input.isDealer && downstream > 0) return fail(`這個客戶名下已有 ${downstream} 個客戶，不能取消「是否為經銷商」`);
+  const labels: Partial<Record<keyof CustomerEdit, string>> = {
+    attribute: '客戶屬性',
+    name: '公司全名',
+    shortNames: '公司簡稱',
+    contactPhone: '聯絡電話',
+    contactEmail: 'Email',
+    contactName: '聯絡人',
+    isDealer: '是否為經銷商',
+    registeredAddress: '登記地址',
+    contactAddress: '聯絡地址',
+    note: '備註',
+  };
+  const next: CustomerEdit = {
+    ...input,
+    name,
+    contactPhone: input.contactPhone.trim(),
+    contactEmail: input.contactEmail.trim(),
+    contactName: input.contactName.trim(),
+    contactAddress: input.contactSameAsRegistered ? { ...input.registeredAddress } : input.contactAddress,
+  };
+  const changed = (Object.keys(labels) as (keyof CustomerEdit)[]).filter((k) => JSON.stringify(c[k]) !== JSON.stringify(next[k]));
+  if (!changed.length) return delay(withDealer(c));
+  const before = c.name;
+  Object.assign(c, next);
+  log('customer', before, `修改客戶資料：${changed.map((k) => (k === 'name' ? `公司全名 ${before} → ${name}` : labels[k])).join('、')}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
+/** 新增一般聯絡人 */
+export function addCustomerContact(customerId: string, contact: CustomerContact): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  if (!contact.name.trim()) return fail('請輸入姓名');
+  if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) return fail('Email 格式不正確');
+  c.contacts.push({ name: contact.name.trim(), title: contact.title.trim(), email: contact.email.trim(), phone: contact.phone.trim() });
+  log('customer', c.name, `新增一般聯絡人 ${contact.name.trim()}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
+/** 可以指定為負責業務的內部帳號（業務、業務主管） */
+export function getSalesPeople(): Promise<string[]> {
+  return delay(db.users.filter((u) => u.orgType === 'internal' && (u.roleId === 'R03' || u.roleId === 'R12') && u.status === 'active').map((u) => u.name));
+}
+
+/** 更新負責業務：依產品 × 新約／續約 */
+export function saveSalesAssignments(customerId: string, assignments: SalesAssignment[]): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  const clean = assignments.filter((a) => a.salesName);
+  const keys = new Set(clean.map((a) => `${a.product}-${a.term}`));
+  if (keys.size !== clean.length) return fail('同一個產品的新約或續約只能指定一位業務');
+  c.salesAssignments = clean;
+  log('customer', c.name, `更新負責業務：${clean.map((a) => `${a.product}${a.term === 'new' ? '新約' : '續約'} ${a.salesName}`).join('、') || '無'}`, 'success', c.id);
+  return delay(withDealer(c));
 }
 
 export function createCustomer(input: NewCustomerInput): Promise<CustomerListItem> {
@@ -340,6 +463,18 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
     note: input.note.trim(),
     status: 'active',
     domainVerification: 'pending',
+    attribute: input.attribute ?? 'enterprise',
+    shortNames: input.shortNames ?? [],
+    isDealer: input.isDealer ?? false,
+    registeredAddress: input.registeredAddress ?? emptyAddress(),
+    contactAddress: input.contactSameAsRegistered !== false ? { ...(input.registeredAddress ?? emptyAddress()) } : (input.contactAddress ?? emptyAddress()),
+    contactSameAsRegistered: input.contactSameAsRegistered !== false,
+    otherDomains: [],
+    contacts: [{ name: input.contactName.trim(), title: '主要聯絡人', email: input.contactEmail.trim(), phone: input.contactPhone.trim() }],
+    salesAssignments: [
+      ...(input.salesNew ? [{ product: 'GWS' as const, term: 'new' as const, salesName: input.salesNew }] : []),
+      ...(input.salesRenewal ? [{ product: 'GWS' as const, term: 'renewal' as const, salesName: input.salesRenewal }] : []),
+    ],
   };
   db.customers.push(customer);
   db.users.push({
@@ -359,32 +494,18 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
   return delay(withDealer(customer));
 }
 
-/** 轉移碼有效天數（依 Google Cloud Channel 文件，待 Ray 確認） */
-export const TRANSFER_TOKEN_VALID_DAYS = 14;
-
-/** 檢查轉移碼欄位，回傳各欄位的錯誤訊息 */
-export function checkTransferToken(token: string, expiresAt: string): { token?: string; tokenExpiresAt?: string } {
-  const e: { token?: string; tokenExpiresAt?: string } = {};
-  const max = addDays(TODAY, TRANSFER_TOKEN_VALID_DAYS);
-  if (!token.trim()) e.token = '請輸入客戶提供的轉移碼';
-  if (!expiresAt) e.tokenExpiresAt = '請輸入轉移碼到期日';
-  else if (expiresAt < TODAY) e.tokenExpiresAt = '轉移碼已過期，請客戶重新產生';
-  else if (expiresAt > max) e.tokenExpiresAt = `轉移碼最長 ${TRANSFER_TOKEN_VALID_DAYS} 天有效，到期日不會晚於 ${max}`;
-  return e;
-}
-
-/** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後直接送出 Google 轉移 */
+/** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後建立一筆移轉，由後勤人工執行（客戶已在 Google 申請完移轉，不需要轉移碼） */
 export async function createTransferInCustomer(
-  input: NewCustomerInput & { transferToken: string; tokenExpiresAt: string; memo: string },
+  input: NewCustomerInput & { memo: string; workOrderId?: string },
 ): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
-  const tokenErrors = checkTransferToken(input.transferToken, input.tokenExpiresAt);
-  const firstError = tokenErrors.token ?? tokenErrors.tokenExpiresAt;
-  if (firstError) return fail(firstError);
   const customer = await createCustomer({ ...input, note: input.note || '由其他經銷商轉入' });
+  // 依執行單轉入時，先把客戶接回執行單，再建立移轉（記錄來源單號）
+  if (input.workOrderId) await linkCustomerToWorkOrder(input.workOrderId, customer.id);
   const operation = await createOperation({
     type: 'transfer',
     customerId: customer.id,
-    payload: { transferToken: input.transferToken.trim(), tokenExpiresAt: input.tokenExpiresAt, memo: input.memo.trim() || undefined },
+    workOrderId: input.workOrderId,
+    payload: { transferSource: 'otherDealer', memo: input.memo.trim() || undefined },
   });
   return { customer, operation };
 }
@@ -421,17 +542,17 @@ function effectiveStatus(s: Subscription): Subscription['status'] {
   return daysUntil(s.expiresAt) <= EXPIRING_DAYS ? 'expiring' : 'active';
 }
 
-/** 一筆訂閱最近一次尚未完成的 Google 操作（送出中、失敗、手動待同步） */
-function latestOpenOperation(subscriptionId: string) {
-  return db.operations
-    .filter((o) => o.subscriptionId === subscriptionId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .find((o, i) => i === 0 && o.status !== 'completed');
+/** 一筆訂閱尚未結束的操作（已排程、待人工、送出中、手動待同步），加上最近一次失敗 */
+function openOperations(subscriptionId: string) {
+  const ops = db.operations.filter((o) => o.subscriptionId === subscriptionId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const open = ops.filter((o) => ['scheduled', 'pendingManual', 'submitted', 'manual'].includes(o.status));
+  const lastFailed = ops.find((o) => o.status === 'failed' && !open.some((x) => x.type === o.type));
+  return lastFailed ? [...open, lastFailed] : open;
 }
 
 function subscriptionListItem(s: Subscription): SubscriptionListItem {
   const c = customerOf(s.customerId)!;
-  const open = latestOpenOperation(s.id);
+  const open = openOperations(s.id);
   return {
     ...s,
     status: effectiveStatus(s),
@@ -439,8 +560,7 @@ function subscriptionListItem(s: Subscription): SubscriptionListItem {
     primaryDomain: c.primaryDomain,
     dealerId: c.dealerId,
     dealerName: dealerName(c.dealerId),
-    openOperationId: open?.id,
-    openOperationStatus: open?.status,
+    openOperations: open.map((o) => ({ id: o.id, type: o.type, status: o.status })),
   };
 }
 
@@ -458,25 +578,96 @@ export function getSubscriptions(query: SubscriptionQuery = {}): Promise<Subscri
   return delay(rows);
 }
 
-export function getPlans(): Promise<string[]> {
-  return delay(gwsPlans);
+/** 上架中的 GWS 方案名稱，依等級由低到高 */
+export function getSubscription(id: string): Promise<(SubscriptionListItem & { planTier: number; salesNew?: string; salesRenewal?: string }) | undefined> {
+  const s = db.subscriptions.find((x) => x.id === id);
+  if (!s) return delay(undefined);
+  const c = customerOf(s.customerId)!;
+  const sales = (term: 'new' | 'renewal') => c.salesAssignments.find((a) => a.product === s.product && a.term === term)?.salesName;
+  return delay({ ...subscriptionListItem(s), planTier: planTier(s.plan), salesNew: sales('new'), salesRenewal: sales('renewal') });
 }
 
-// ═════════ GWS 操作（後勤直接送 Google） ═════════
+export function getPlans(): Promise<string[]> {
+  return delay(activeGwsPlans().map((p) => p.name));
+}
+const activeGwsPlans = () => db.plans.filter((p) => p.productId === 'P01' && p.status === 'active').sort((a, b) => a.tier - b.tier);
+/** 方案等級；找不到回傳 0 */
+export const planTier = (name?: string) => db.plans.find((p) => p.name === name)?.tier ?? 0;
+
+// ═════════ GWS 訂單操作（排程執行／人工執行） ═════════
+// 2026/11/10 會議：新訂（全新）排程、新訂（移轉）人工、續約升版或加人排程、續約減人人工、
+// 續約降版待確認（先人工）、加購排程（只能加人，期間到舊合約結束日）、中途升版排程（待確認）。
+
+/** 這個方案比目前的高、低或一樣 */
+function planChangeOf(from?: string, to?: string): 'up' | 'down' | 'same' {
+  const a = planTier(from);
+  const b = planTier(to);
+  return b > a ? 'up' : b < a ? 'down' : 'same';
+}
+
+/** 依類型與內容判斷執行方式；畫面（訂單對話框、執行單）與資料層用同一套規則 */
+export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan' | 'seats' | 'expiresAt'> | undefined, payload: OperationPayload): OrderAnalysis {
+  switch (type) {
+    case 'new':
+      return { execution: 'schedule', reasons: ['全新客戶的新訂由排程執行'], defaultDate: TODAY };
+    case 'transfer':
+      return {
+        execution: 'manual',
+        reasons: [payload.transferSource === 'selfPaid' ? '客戶自己刷卡、要轉進來，由後勤人工執行' : '從其他經銷商轉入，由後勤人工執行'],
+      };
+    case 'renewal': {
+      const planChange = planChangeOf(sub?.plan, payload.plan ?? sub?.plan);
+      const seatChange = (payload.seats ?? sub?.seats ?? 0) - (sub?.seats ?? 0);
+      const start = sub ? addDays(sub.expiresAt, 1) : TODAY;
+      const end = addDays(addMonths(start, payload.renewMonths ?? 12), -1);
+      const reasons: string[] = [];
+      let execution: ExecutionMode = 'schedule';
+      let pendingId: OrderAnalysis['pendingId'];
+      if (planChange === 'down') {
+        execution = 'manual';
+        pendingId = 17;
+        reasons.push('降版能否排程還在等 Terry 確認，先由後勤人工執行');
+      }
+      if (seatChange < 0) {
+        execution = 'manual';
+        reasons.push('續約減人數由後勤人工執行');
+      }
+      if (execution === 'schedule') reasons.push(`排在舊合約到期隔天（${start.replace(/-/g, '/')}）自動續約`);
+      return { execution, pendingId, planChange, seatChange, reasons, defaultDate: start, newStartsAt: start, newExpiresAt: end };
+    }
+    case 'addSeats':
+      return { execution: 'schedule', reasons: [`加購只能加人，期間到舊合約結束日（${sub?.expiresAt.replace(/-/g, '/') ?? '—'}）`], defaultDate: TODAY };
+    case 'upgrade':
+      return {
+        execution: 'schedule',
+        pendingId: 16,
+        planChange: planChangeOf(sub?.plan, payload.plan),
+        reasons: ['合約未到期前升版，預計排程執行（能否自動排程待 Terry 確認）'],
+        defaultDate: TODAY,
+      };
+  }
+}
 
 function describeOperation(op: { type: OperationType; subscriptionId?: string; payload: OperationPayload }): string {
-  const plan = db.subscriptions.find((s) => s.id === op.subscriptionId)?.plan ?? op.payload.plan ?? '';
+  const sub = db.subscriptions.find((s) => s.id === op.subscriptionId);
+  const p = op.payload;
+  const fromPlan = p.fromPlan ?? sub?.plan ?? '';
+  const fromSeats = p.fromSeats ?? sub?.seats ?? 0;
   switch (op.type) {
     case 'new':
-      return `${op.payload.plan} ${op.payload.seats} 席`;
-    case 'renewal':
-      return `${plan} 續約 ${op.payload.renewMonths} 個月`;
-    case 'seats':
-      return `${plan}：${op.payload.fromSeats} → ${op.payload.toSeats} 席`;
-    case 'cancel':
-      return `取消 ${plan}`;
+      return `${p.plan} ${p.seats} 席`;
     case 'transfer':
-      return op.payload.transferToken ? `轉入，轉移碼 ${op.payload.transferToken}` : '轉入';
+      return transferSourceLabel[p.transferSource ?? 'otherDealer'];
+    case 'renewal': {
+      const plan = p.plan ?? fromPlan;
+      const seats = p.seats ?? fromSeats;
+      const change = plan !== fromPlan || seats !== fromSeats ? `${fromPlan} ${fromSeats} 席 → ${plan} ${seats} 席，` : `${plan} ${seats} 席，`;
+      return `${change}續約 ${p.renewMonths ?? 12} 個月`;
+    }
+    case 'addSeats':
+      return `加購 ${p.addSeats} 席（${fromSeats} → ${fromSeats + (p.addSeats ?? 0)}）`;
+    case 'upgrade':
+      return `${fromPlan} → ${p.plan}${p.addSeats ? `，加購 ${p.addSeats} 席（${fromSeats} → ${fromSeats + p.addSeats}）` : ''}`;
   }
 }
 
@@ -490,10 +681,11 @@ export function getOperation(id: string): Promise<OperationListItem | undefined>
   return delay(op ? operationListItem(op) : undefined);
 }
 
-export function getOperations(query: { customerId?: string; type?: OperationType } = {}): Promise<OperationListItem[]> {
+export function getOperations(query: { customerId?: string; subscriptionId?: string; type?: OperationType } = {}): Promise<OperationListItem[]> {
   return delay(
     db.operations
       .filter((o) => !query.customerId || o.customerId === query.customerId)
+      .filter((o) => !query.subscriptionId || o.subscriptionId === query.subscriptionId)
       .filter((o) => !query.type || o.type === query.type)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map(operationListItem),
@@ -507,56 +699,108 @@ function nextId(prefix: string, ids: string[], at: string) {
   return `${head}${String(max + 1).padStart(3, '0')}`;
 }
 
+const OPEN_STATUSES: OperationStatus[] = ['scheduled', 'pendingManual', 'submitted', 'manual'];
+const isOpen = (o: GwsOperation) => OPEN_STATUSES.includes(o.status);
+
+/** 這個客戶（網域）目前等待執行的排程，加購時用來提醒排程衝突 */
+export function getPendingSchedules(customerId: string): Promise<ScheduleListItem[]> {
+  return getSchedules({ status: 'waiting' }).then((rows) => rows.filter((s) => s.customerId === customerId).sort((a, b) => a.enabledAt.localeCompare(b.enabledAt)));
+}
+
 /** 檢查操作內容，回傳錯誤訊息（沒有錯誤回傳 undefined） */
 export function validateOperation(input: NewOperationInput): string | undefined {
   const sub = db.subscriptions.find((s) => s.id === input.subscriptionId);
+  const p = input.payload;
   if (input.type !== 'new' && input.type !== 'transfer') {
     if (!sub) return '找不到訂閱';
     if (sub.status === 'cancelled') return '這筆訂閱已取消';
-    const open = latestOpenOperation(sub.id);
-    if (open && open.status !== 'failed') return `這筆訂閱已有處理中的操作 ${open.id}`;
+    const same = db.operations.find((o) => o.subscriptionId === sub.id && isOpen(o) && o.type === input.type);
+    if (same) return `這筆訂閱已有處理中的${operationTypeLabel[same.type]} ${same.id}`;
   }
+  const activePlans = activeGwsPlans().map((x) => x.name);
   if (input.type === 'new') {
-    if (!input.payload.plan) return '請選擇方案';
-    if (!(Number(input.payload.seats) >= 1)) return '席次至少 1';
+    if (!p.plan || !activePlans.includes(p.plan)) return '請選擇方案';
+    if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) return '席次至少 1';
   }
-  if (input.type === 'seats') {
-    const n = Number(input.payload.toSeats);
-    if (!Number.isInteger(n) || n < 1) return '席次需為大於 0 的整數';
-    if (n === sub?.seats) return '與目前席次相同';
+  if (input.type === 'renewal') {
+    if (!p.plan || !activePlans.includes(p.plan)) return '請選擇續約方案';
+    if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) return '人數需為大於 0 的整數';
   }
+  if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) return '加購人數需為大於 0 的整數，加購不能減人';
+  if (input.type === 'upgrade' && p.addSeats !== undefined && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 0)) return '加購人數需為 0 以上的整數，升版不能減人';
+  if (input.type === 'upgrade' && planChangeOf(sub?.plan, p.plan) !== 'up') return '中途升版只能選比目前高的方案';
+  if (p.scheduledAt && p.scheduledAt < TODAY) return '啟用日不能早於今天';
   if (input.type === 'transfer') {
-    const e = checkTransferToken(input.payload.transferToken ?? '', input.payload.tokenExpiresAt ?? '');
-    if (e.token || e.tokenExpiresAt) return e.token ?? e.tokenExpiresAt;
-    const open = db.operations.find((o) => o.customerId === input.customerId && o.type === 'transfer' && (o.status === 'submitted' || o.status === 'manual'));
-    if (open) return `這個客戶已有處理中的轉移 ${open.id}`;
+    if (!p.transferSource) return '請選擇轉入來源';
+    const open = db.operations.find((o) => o.customerId === input.customerId && o.type === 'transfer' && isOpen(o));
+    if (open) return `這個客戶已有處理中的客戶轉入 ${open.id}`;
   }
   return undefined;
 }
 
-/** 送出 Google：直接建立操作，狀態為「已送出 Google」 */
+const scheduleActionOf: Record<OperationType, Schedule['action'] | undefined> = {
+  new: 'new',
+  transfer: undefined,
+  renewal: 'renew',
+  addSeats: 'addSeats',
+  upgrade: 'upgrade',
+};
+
+/** 建立訂單操作：排程執行的建立排程，人工執行的進入「待人工執行」 */
 export function createOperation(input: NewOperationInput): Promise<OperationListItem> {
   const c = customerOf(input.customerId);
   if (!c) return fail('找不到客戶');
   const error = validateOperation(input);
   if (error) return fail(error);
   const sub = db.subscriptions.find((s) => s.id === input.subscriptionId);
+  const analysis = analyzeOrder(input.type, sub, input.payload);
   const at = now();
+  const payload: OperationPayload = { ...input.payload };
+  if (sub) Object.assign(payload, { fromPlan: sub.plan, fromSeats: sub.seats ?? 0 });
+  if (input.type === 'renewal') Object.assign(payload, { newStartsAt: analysis.newStartsAt, newExpiresAt: analysis.newExpiresAt });
+  if (analysis.execution === 'schedule') payload.scheduledAt = payload.scheduledAt ?? analysis.defaultDate ?? TODAY;
+  else delete payload.scheduledAt;
   const op: GwsOperation = {
     id: nextId('OP', db.operations.map((o) => o.id), at),
     type: input.type,
     customerId: c.id,
     subscriptionId: input.subscriptionId,
     workOrderId: input.workOrderId,
-    payload: input.type === 'seats' ? { ...input.payload, fromSeats: sub?.seats ?? 0 } : input.payload,
-    status: 'submitted',
+    payload,
+    execution: analysis.execution,
+    status: analysis.execution === 'schedule' ? 'scheduled' : 'pendingManual',
     createdBy: currentUser.name,
     createdAt: at,
     updatedAt: at,
-    history: [{ at, by: currentUser.name, action: '送出 Google', status: 'submitted' }],
+    history: [],
   };
+  if (analysis.execution === 'schedule') {
+    const jid = `J${String(Math.max(0, ...db.schedules.map((x) => Number(x.id.slice(1)))) + 1).padStart(3, '0')}`;
+    db.schedules.push({
+      id: jid,
+      kind: 'once',
+      action: scheduleActionOf[op.type] ?? 'sync',
+      status: 'waiting',
+      enabledAt: `${payload.scheduledAt} 00:00`,
+      customerId: c.id,
+      subscriptionId: op.subscriptionId,
+      operationId: op.id,
+      detail: describeOperation(op),
+      createdBy: currentUser.name,
+    });
+    op.scheduleId = jid;
+    op.history.push({ at, by: currentUser.name, action: `建立排程 ${jid}，${payload.scheduledAt!.replace(/-/g, '/')} 執行`, status: 'scheduled' });
+  } else {
+    op.history.push({ at, by: currentUser.name, action: '建立，待後勤人工執行', status: 'pendingManual', note: analysis.reasons.join('；') });
+  }
   db.operations.push(op);
-  log('gws', op.id, `送出 Google：${operationTypeLabel[op.type]}，${describeOperation(op)}${op.workOrderId ? `（${op.workOrderId}）` : ''}`, 'success', c.id);
+  log(
+    'gws',
+    op.id,
+    `${operationTypeLabel[op.type]}（${executionModeLabel[op.execution]}）：${describeOperation(op)}${op.workOrderId ? `（${op.workOrderId}）` : ''}`,
+    'success',
+    c.id,
+  );
   if (op.workOrderId) {
     const wo = db.workOrders.find((w) => w.id === op.workOrderId);
     if (wo) {
@@ -568,9 +812,12 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
 }
 
 const operationTransitions: Record<OperationAction, { from: OperationStatus[]; to: OperationStatus; label: string; system?: boolean }> = {
+  runSchedule: { from: ['scheduled'], to: 'submitted', label: '排程啟動，送出 Google', system: true },
+  cancelSchedule: { from: ['scheduled'], to: 'cancelled', label: '取消排程' },
   simulateSuccess: { from: ['submitted'], to: 'completed', label: 'Google 回應完成', system: true },
   simulateFailure: { from: ['submitted'], to: 'failed', label: 'Google 回應失敗', system: true },
   retry: { from: ['failed'], to: 'submitted', label: '重新送出 Google' },
+  completeManual: { from: ['pendingManual'], to: 'manual', label: '已在 Google 完成人工處理' },
   markManual: { from: ['failed'], to: 'manual', label: '改為在 Google 手動處理' },
   simulateSync: { from: ['manual'], to: 'completed', label: '同步確認完成', system: true },
 };
@@ -580,7 +827,7 @@ export function actOnOperation(id: string, action: OperationAction, note?: strin
   if (!op) return fail('找不到操作');
   const t = operationTransitions[action];
   if (!t.from.includes(op.status)) return fail('狀態已變更，請重新整理');
-  if (action === 'markManual' && !note?.trim()) return fail('請填寫在 Google 做了什麼');
+  if ((action === 'markManual' || action === 'completeManual') && !note?.trim()) return fail('請填寫在 Google 做了什麼');
   const at = now();
   const by = t.system ? '系統' : currentUser.name;
   let eventNote = note?.trim() || undefined;
@@ -589,10 +836,17 @@ export function actOnOperation(id: string, action: OperationAction, note?: strin
     eventNote = op.failureReason;
   }
   if (action === 'retry') op.failureReason = undefined;
-  if (action === 'markManual') op.manualNote = eventNote;
+  if (action === 'markManual' || action === 'completeManual') op.manualNote = eventNote;
   op.status = t.to;
   op.updatedAt = at;
   op.history.push({ at, by, action: t.label, status: t.to, note: eventNote });
+  const schedule = db.schedules.find((x) => x.id === op.scheduleId);
+  if (schedule) {
+    if (action === 'runSchedule') schedule.status = 'running';
+    if (action === 'cancelSchedule') schedule.status = 'cancelled';
+    if (t.to === 'completed') schedule.status = 'done';
+    if (t.to === 'failed') schedule.status = 'failed';
+  }
   log('gws', op.id, eventNote ? `${t.label}：${eventNote}` : t.label, t.to === 'failed' ? 'failure' : t.to === 'manual' ? 'warning' : 'success', op.customerId, by);
   if (t.to === 'completed') applyCompletedOperation(op, at);
   const wo = db.workOrders.find((w) => w.id === op.workOrderId);
@@ -604,26 +858,35 @@ export function actOnOperation(id: string, action: OperationAction, note?: strin
 function applyCompletedOperation(op: GwsOperation, at: string) {
   const sub = db.subscriptions.find((s) => s.id === op.subscriptionId);
   const c = customerOf(op.customerId)!;
+  const p = op.payload;
   switch (op.type) {
-    case 'seats':
-      if (sub) sub.seats = op.payload.toSeats ?? sub.seats;
+    case 'addSeats':
+      if (sub) sub.seats = (sub.seats ?? 0) + (p.addSeats ?? 0);
       break;
     case 'renewal':
-      if (sub) sub.expiresAt = addMonths(sub.expiresAt, op.payload.renewMonths ?? 12);
+      if (sub) {
+        sub.plan = p.plan ?? sub.plan;
+        sub.seats = p.seats ?? sub.seats;
+        sub.startsAt = p.newStartsAt ?? addDays(sub.expiresAt, 1);
+        sub.expiresAt = p.newExpiresAt ?? addMonths(sub.expiresAt, p.renewMonths ?? 12);
+      }
       break;
-    case 'cancel':
-      if (sub) sub.status = 'cancelled';
+    case 'upgrade':
+      if (sub && p.plan) sub.plan = p.plan;
+      if (sub && p.addSeats) sub.seats = (sub.seats ?? 0) + p.addSeats;
       break;
     case 'new': {
       const id = `S${String(db.subscriptions.length + 1).padStart(3, '0')}`;
+      const start = p.scheduledAt ?? TODAY;
       db.subscriptions.push({
         id,
         customerId: c.id,
         product: 'GWS',
-        plan: op.payload.plan ?? 'Business Starter',
-        seats: op.payload.seats ?? 1,
+        plan: p.plan ?? 'Business Starter',
+        seats: p.seats ?? 1,
         status: 'active',
-        expiresAt: addMonths(TODAY, 12),
+        startsAt: start,
+        expiresAt: addDays(addMonths(start, 12), -1),
         lastSyncedAt: at,
       });
       op.subscriptionId = id;
@@ -644,20 +907,8 @@ function workOrderCustomer(wo: WorkOrder) {
 }
 
 function describeWorkOrder(wo: WorkOrder): string {
-  const sub = db.subscriptions.find((s) => s.id === wo.subscriptionId);
-  const p = wo.payload;
-  switch (wo.type) {
-    case 'new':
-      return `${p.plan} ${p.seats} 席`;
-    case 'renewal':
-      return `${sub?.plan ?? ''} 續約 ${p.renewMonths} 個月`;
-    case 'seats':
-      return `${sub?.plan ?? ''}：${sub?.seats ?? '?'} → ${p.toSeats} 席`;
-    case 'cancel':
-      return `取消 ${sub?.plan ?? ''}`;
-    case 'transfer':
-      return wo.customerMode === 'new' ? '新客戶從其他經銷商轉入' : '客戶從其他經銷商轉入';
-  }
+  const text = describeOperation({ type: wo.type, subscriptionId: wo.subscriptionId, payload: wo.payload });
+  return wo.type === 'transfer' ? `${workOrderCustomer(wo).name} 從其他經銷商轉入` : text;
 }
 
 const processable = (wo: WorkOrder) => wo.status === 'approved' || wo.status === 'processing' || wo.status === 'completed';
@@ -669,18 +920,27 @@ function workOrderSteps(wo: WorkOrder): WorkOrderStep[] {
   if (wo.customerMode === 'new') {
     steps.push({
       key: 'createCustomer',
-      label: '建立客戶',
+      label: wo.type === 'transfer' ? '轉入客戶（建檔）' : '建立客戶',
       state: wo.customerId ? 'done' : canWork ? 'todo' : 'blocked',
       detail: wo.customerId ? `已建立 ${wo.customerId}` : undefined,
     });
   }
   const op = db.operations.find((o) => o.id === wo.operationId);
-  const stateOf: Record<OperationStatus, WorkOrderStepState> = { submitted: 'inProgress', completed: 'done', failed: 'failed', manual: 'manual' };
+  const stateOf: Record<OperationStatus, WorkOrderStepState> = {
+    scheduled: 'inProgress',
+    pendingManual: 'manual',
+    submitted: 'inProgress',
+    completed: 'done',
+    failed: 'failed',
+    manual: 'manual',
+    cancelled: 'todo',
+  };
+  const mode = executionModeLabel[op?.execution ?? analyzeOrder(wo.type, db.subscriptions.find((x) => x.id === wo.subscriptionId), wo.payload).execution];
   steps.push({
     key: 'google',
-    label: `${operationTypeLabel[wo.type]}（送 Google）`,
+    label: `${operationTypeLabel[wo.type]}（${mode}）`,
     state: op ? stateOf[op.status] : canWork && wo.customerId ? 'todo' : 'blocked',
-    detail: op ? `${op.id}・${operationStatusLabel[op.status]}` : undefined,
+    detail: op ? `${op.id}・${operationStatusLabel[op.status]}${op.status === 'scheduled' && op.payload.scheduledAt ? `（${op.payload.scheduledAt.replace(/-/g, '/')}）` : ''}` : undefined,
   });
   return steps;
 }
@@ -723,6 +983,7 @@ export function getWorkOrders(query: WorkOrderQuery = {}): Promise<WorkOrderList
     .filter((w) => !query.status || w.status === query.status)
     .filter((w) => !query.dealerId || w.dealerId === query.dealerId)
     .filter((w) => !query.customerId || w.customerId === query.customerId)
+    .filter((w) => !query.subscriptionId || w.subscriptionId === query.subscriptionId)
     .map(workOrderListItem)
     .filter((w) => includesKw(kw, w.id, w.customerName, w.primaryDomain, w.summary, w.createdBy))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -737,8 +998,9 @@ export function getWorkOrder(id: string): Promise<WorkOrderListItem | undefined>
 /** 檢查執行單內容，回傳欄位錯誤（key 為欄位名稱） */
 export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Record<string, string> {
   const e: Record<string, string> = {};
-  const needsSubscription = input.type === 'renewal' || input.type === 'seats' || input.type === 'cancel';
-  if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、調整席次、取消訂閱只適用現有客戶';
+  const needsSubscription = input.type === 'renewal' || input.type === 'addSeats' || input.type === 'upgrade';
+  if (needsSubscription && input.customerMode === 'new') e.customerMode = '續約、加購、中途升版只適用現有客戶';
+  if (input.type === 'transfer' && input.customerMode === 'existing') e.customerMode = '客戶轉入一定是新客戶';
   if (input.customerMode === 'existing' && !input.customerId) e.customerId = '請選擇客戶';
   if (needsSubscription && input.customerId && !input.subscriptionId) e.subscriptionId = '請選擇訂閱';
   if (input.customerMode === 'new') {
@@ -757,18 +1019,18 @@ export function validateWorkOrder(input: WorkOrderInput, selfId?: string): Recor
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(n?.contactEmail ?? '')) e.contactEmail = 'Email 格式不正確';
     if (!input.dealerId) e.dealerId = '請選擇經銷商';
   }
-  if (input.type === 'new') {
-    if (!input.payload.plan) e.plan = '請選擇方案';
-    if (!(Number(input.payload.seats) >= 1)) e.seats = '席次至少 1';
+  const p = input.payload;
+  const sub = db.subscriptions.find((x) => x.id === input.subscriptionId);
+  if (input.type === 'new' || input.type === 'renewal' || input.type === 'upgrade') {
+    if (!p.plan) e.plan = '請選擇方案';
   }
-  if (input.type === 'seats') {
-    const sub = db.subscriptions.find((s) => s.id === input.subscriptionId);
-    const n = Number(input.payload.toSeats);
-    if (!Number.isInteger(n) || n < 1) e.toSeats = '席次需為大於 0 的整數';
-    else if (sub && n === sub.seats) e.toSeats = '與目前席次相同';
+  if (input.type === 'new' || input.type === 'renewal') {
+    if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) e.seats = '人數需為大於 0 的整數';
   }
-  if (input.type === 'renewal' && !input.payload.renewMonths) e.renewMonths = '請選擇續約期間';
-  if (input.type === 'cancel' && !input.payload.memo?.trim()) e.memo = '請填寫取消原因';
+  if (input.type === 'renewal' && !p.renewMonths) e.renewMonths = '請選擇續約期間';
+  if (input.type === 'addSeats' && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 1)) e.addSeats = '加購人數需為大於 0 的整數';
+  if (input.type === 'upgrade' && p.addSeats !== undefined && (!Number.isInteger(Number(p.addSeats)) || Number(p.addSeats) < 0)) e.addSeats = '加購人數需為 0 以上的整數';
+  if (input.type === 'upgrade' && p.plan && sub && planChangeOf(sub.plan, p.plan) !== 'up') e.plan = '中途升版只能選比目前高的方案';
   return e;
 }
 
@@ -783,14 +1045,14 @@ function applyInput(wo: WorkOrder, input: WorkOrderInput) {
   const p = input.payload;
   const memo = p.memo?.trim() || undefined;
   // 只保留這個類型用得到的欄位
-  wo.payload =
-    input.type === 'new'
-      ? { plan: p.plan, seats: p.seats, memo }
-      : input.type === 'renewal'
-        ? { renewMonths: p.renewMonths, memo }
-        : input.type === 'seats'
-          ? { toSeats: p.toSeats, memo }
-          : { memo };
+  const pick: Record<WorkOrderType, WorkOrderPayload> = {
+    new: { plan: p.plan, seats: p.seats, memo },
+    transfer: { transferSource: p.transferSource, memo },
+    renewal: { plan: p.plan, seats: p.seats, renewMonths: p.renewMonths, memo },
+    addSeats: { addSeats: p.addSeats, memo },
+    upgrade: { plan: p.plan, addSeats: p.addSeats || undefined, memo },
+  };
+  wo.payload = pick[input.type];
 }
 
 /** 建立或修改執行單。submit 為 true 時直接送出簽核 */
@@ -907,6 +1169,7 @@ export function getGcpUsage(): Promise<GcpUsage> {
         costCents,
         egressGb: a.egressGb,
         changePct: Math.round(((costCents - a.prevPeriodCents) / a.prevPeriodCents) * 1000) / 10,
+        byProject: projectBreakdown(c.id, costCents),
       };
     })
     .sort((a, b) => b.costCents - a.costCents);
@@ -923,6 +1186,40 @@ export function getGcpUsage(): Promise<GcpUsage> {
   });
 }
 export const GCP_PERIOD_DAYS = GCP_DAYS;
+
+/** 把金額依「專案 × 服務」拆開，比例沿用最近一期帳單的費用明細，加總保證等於總額 */
+function projectBreakdown(customerId: string, totalCents: number): ProjectCost[] {
+  const bill = db.bills.filter((b) => b.customerId === customerId).sort((a, b) => b.month.localeCompare(a.month))[0];
+  if (!bill) return [];
+  const billTotal = bill.lines.reduce((s, l) => s + l.costCents, 0);
+  const projects = groupByProject(bill.lines);
+  let left = totalCents;
+  return projects.map((p, i) => {
+    const pc = i === projects.length - 1 ? left : Math.round((totalCents * p.costCents) / billTotal);
+    left -= pc;
+    let sLeft = pc;
+    const services = p.services.map((sv, j) => {
+      const c = j === p.services.length - 1 ? sLeft : Math.round((pc * sv.costCents) / p.costCents);
+      sLeft -= c;
+      return { service: sv.service, costCents: c };
+    });
+    return { project: p.project, costCents: pc, services };
+  });
+}
+
+/** 費用明細依專案彙總，專案、服務都依金額由大到小 */
+export function groupByProject(lines: { service: string; project: string; costCents: number }[]): ProjectCost[] {
+  const map = new Map<string, ProjectCost>();
+  for (const l of lines) {
+    const p = map.get(l.project) ?? { project: l.project, costCents: 0, services: [] };
+    p.costCents += l.costCents;
+    const sv = p.services.find((x) => x.service === l.service);
+    if (sv) sv.costCents += l.costCents;
+    else p.services.push({ service: l.service, costCents: l.costCents });
+    map.set(l.project, p);
+  }
+  return [...map.values()].map((p) => ({ ...p, services: p.services.sort((a, b) => b.costCents - a.costCents) })).sort((a, b) => b.costCents - a.costCents);
+}
 
 // ═════════ GCP 帳單 ═════════
 // 流程：系統匯入 Billing 費用並計算 → 後勤上傳 Google 帳單對帳 → 確認並出帳 → 標記已收款。
@@ -1129,6 +1426,7 @@ export function resolveReconcile(month: string, customerId: string, input: { how
 
 export function getSchedules(query: ScheduleQuery = {}): Promise<ScheduleListItem[]> {
   const rows = db.schedules
+    .filter((s) => !query.subscriptionId || s.subscriptionId === query.subscriptionId)
     .filter((s) => !query.kind || s.kind === query.kind)
     .filter((s) => !query.action || s.action === query.action)
     .filter((s) => !query.status || s.status === query.status)
@@ -1146,8 +1444,84 @@ export function cancelSchedule(id: string): Promise<void> {
   const s = db.schedules.find((x) => x.id === id);
   if (!s) return fail('找不到排程');
   if (s.status !== 'waiting') return fail('只有「等待執行」的排程可以取消');
+  const op = db.operations.find((o) => o.id === s.operationId && o.status === 'scheduled');
+  if (op) return actOnOperation(op.id, 'cancelSchedule').then(() => undefined);
   s.status = 'cancelled';
-  log('workOrder', id, '取消排程', 'success', s.customerId);
+  log('gws', id, '取消排程', 'success', s.customerId);
+  return delay(undefined);
+}
+
+// ═════════ 到期通知 ═════════
+// GWS 到期前 N 天寄信給負責續約的業務和後勤（2026/11/10 會議；天數待定 #18、是否第一階段待定 #7）
+
+const OPS_NOTICE = { name: '何佩真', email: 'peichen.ho@zerone.example' };
+const noticeSettings = { enabled: true, daysBefore: 30 };
+const manualNotices: Record<string, string> = {};
+
+export interface ExpiryNoticeRow {
+  subscriptionId: string;
+  customerId: string;
+  customerName: string;
+  primaryDomain: string;
+  plan: string;
+  seats: number | null;
+  expiresAt: string;
+  noticeDate: string;
+  recipients: { name: string; email: string; role: string }[];
+  /** 已寄出的時間；還沒寄是 undefined */
+  sentAt?: string;
+}
+
+function noticeRows(): ExpiryNoticeRow[] {
+  return db.subscriptions
+    .filter((s) => s.product === 'GWS' && s.status !== 'cancelled')
+    .map((s) => {
+      const c = customerOf(s.customerId)!;
+      const salesName = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'renewal')?.salesName;
+      const sales = db.users.find((u) => u.name === salesName);
+      const noticeDate = addDays(s.expiresAt, -noticeSettings.daysBefore);
+      const recipients = [
+        ...(sales ? [{ name: sales.name, email: sales.email, role: '續約業務' }] : []),
+        { ...OPS_NOTICE, role: '後勤' },
+      ];
+      const autoSent = noticeSettings.enabled && noticeDate <= TODAY && noticeDate >= addDays(TODAY, -45) ? `${noticeDate} 08:00` : undefined;
+      return {
+        subscriptionId: s.id,
+        customerId: c.id,
+        customerName: c.name,
+        primaryDomain: c.primaryDomain,
+        plan: s.plan,
+        seats: s.seats,
+        expiresAt: s.expiresAt,
+        noticeDate,
+        recipients,
+        sentAt: manualNotices[s.id] ?? autoSent,
+      };
+    })
+    .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+}
+
+/** 一筆訂閱的到期通知（通知日、收件人、是否已寄出） */
+export function getExpiryNoticeFor(subscriptionId: string): Promise<ExpiryNoticeRow | undefined> {
+  return delay(noticeRows().find((r) => r.subscriptionId === subscriptionId));
+}
+
+export function getExpiryNotices(): Promise<{ settings: typeof noticeSettings; rows: ExpiryNoticeRow[] }> {
+  return delay({ settings: noticeSettings, rows: noticeRows().filter((r) => r.expiresAt >= TODAY && r.expiresAt <= addDays(TODAY, 120)) });
+}
+
+export function saveExpiryNoticeSettings(input: { enabled: boolean; daysBefore: number }): Promise<void> {
+  if (!Number.isInteger(input.daysBefore) || input.daysBefore < 1 || input.daysBefore > 180) return fail('天數請填 1 到 180 的整數');
+  Object.assign(noticeSettings, input);
+  log('sync', '到期通知', `${input.enabled ? '啟用' : '停用'}到期通知，到期前 ${input.daysBefore} 天寄出`);
+  return delay(undefined);
+}
+
+export function sendExpiryNoticeNow(subscriptionId: string): Promise<void> {
+  const r = noticeRows().find((x) => x.subscriptionId === subscriptionId);
+  if (!r) return fail('找不到訂閱');
+  manualNotices[subscriptionId] = now();
+  log('sync', r.primaryDomain, `手動寄出到期通知給 ${r.recipients.map((x) => x.name).join('、')}`, 'success', r.customerId);
   return delay(undefined);
 }
 
@@ -1282,7 +1656,7 @@ export function createBrand(name: string): Promise<Brand> {
   if (db.brands.some((b) => b.name === n)) return fail('已有同名品牌');
   const brand: Brand = { id: `B${String(db.brands.length + 1).padStart(2, '0')}`, name: n, status: 'draft', createdAt: TODAY };
   db.brands.push(brand);
-  log('customer', n, '新增品牌');
+  log('catalog', n, '新增品牌');
   return delay(brand);
 }
 export function getProducts(): Promise<ProductListItem[]> {
@@ -1295,8 +1669,46 @@ export function createProduct(input: { brandId: string; name: string; code: stri
   if (db.products.some((p) => p.code === code)) return fail('產品代碼已存在');
   const product: Product = { id: `P${String(db.products.length + 1).padStart(2, '0')}`, brandId: input.brandId, name, code, status: 'draft', createdAt: TODAY };
   db.products.push(product);
-  log('customer', name, '新增產品');
+  log('catalog', name, '新增產品');
   return delay(product);
+}
+
+// ═════════ 方案 ═════════
+
+export function getPlanList(): Promise<PlanListItem[]> {
+  return delay(
+    db.plans
+      .map((p) => {
+        const product = db.products.find((x) => x.id === p.productId);
+        return {
+          ...p,
+          productName: product?.name ?? '—',
+          brandName: db.brands.find((b) => b.id === product?.brandId)?.name ?? '—',
+          subscriptionCount: db.subscriptions.filter((s) => s.plan === p.name && s.status !== 'cancelled').length,
+        };
+      })
+      .sort((a, b) => a.productId.localeCompare(b.productId) || a.tier - b.tier),
+  );
+}
+
+export function savePlan(input: { id?: string; productId: string; name: string; tier: number; status: Plan['status'] }): Promise<Plan> {
+  const name = input.name.trim();
+  if (!name) return fail('請輸入方案名稱');
+  if (!Number.isInteger(input.tier) || input.tier < 1) return fail('等級請填 1 以上的整數');
+  if (db.plans.some((p) => p.name === name && p.productId === input.productId && p.id !== input.id)) return fail('同一個產品已有同名方案');
+  const clash = db.plans.find((p) => p.productId === input.productId && p.tier === input.tier && p.id !== input.id);
+  if (clash) return fail(`等級 ${input.tier} 已經是「${clash.name}」，同一個產品的等級不能重複`);
+  const existing = db.plans.find((p) => p.id === input.id);
+  if (existing) {
+    if (existing.name !== name && db.subscriptions.some((s) => s.plan === existing.name)) return fail('已有訂閱使用這個方案，不能改名');
+    Object.assign(existing, { name, tier: input.tier, status: input.status });
+    log('catalog', name, `修改方案：等級 ${input.tier}、${input.status === 'active' ? '上架' : '草稿'}`);
+    return delay(existing);
+  }
+  const plan: Plan = { id: `PL${String(db.plans.length + 1).padStart(2, '0')}`, productId: input.productId, name, tier: input.tier, status: input.status, createdAt: TODAY };
+  db.plans.push(plan);
+  log('catalog', name, `新增方案（等級 ${plan.tier}）`);
+  return delay(plan);
 }
 
 // ═════════ 首頁 ═════════

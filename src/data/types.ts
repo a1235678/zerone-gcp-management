@@ -24,12 +24,54 @@ export interface DealerListItem extends Dealer {
 export type CustomerStatus = 'active' | 'disabled';
 /** Google 網域驗證：建立客戶後才檢查 */
 export type DomainVerification = 'verified' | 'pending' | 'failed';
+/** 客戶屬性（選項待確認） */
+export type CustomerAttribute = 'enterprise' | 'government' | 'school' | 'nonprofit';
+export interface Address {
+  /** 國家／地區 */
+  country: string;
+  /** 縣市（台灣用選單，其他國家自由輸入） */
+  city: string;
+  /** 鄉鎮區 */
+  district: string;
+  /** 郵遞區號：台灣依鄉鎮區自動帶出 */
+  postalCode: string;
+  street: string;
+}
+export interface CustomerContact {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+}
+/** 負責業務：依「產品／新約或續約」指定，同一客戶可以不同（2026/11/10 會議） */
+export interface SalesAssignment {
+  product: ProductCode;
+  term: 'new' | 'renewal';
+  salesName: string;
+}
 export interface Customer {
   id: string;
+  attribute: CustomerAttribute;
+  /** 公司全名 */
   name: string;
+  /** 公司簡稱，可以有多個別名 */
+  shortNames: string[];
+  /** 這個客戶本身也是經銷商 */
+  isDealer: boolean;
+  /** 是經銷商時，對應「經銷商管理」裡的經銷商；名下有客戶就不能取消「是否為經銷商」 */
+  dealerOrgId?: string;
+  /** 登記地址（公司法定登記地） */
+  registeredAddress: Address;
+  contactAddress: Address;
+  contactSameAsRegistered: boolean;
   /** 統一編號（8 碼） */
   taxId: string;
   primaryDomain: string;
+  /** 主網域以外的其他網域（一個客戶可以有多個網域） */
+  otherDomains: string[];
+  salesAssignments: SalesAssignment[];
+  /** 一般聯絡人（不一定有系統帳號） */
+  contacts: CustomerContact[];
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -42,6 +84,8 @@ export interface Customer {
 }
 export interface CustomerListItem extends Customer {
   dealerName: string;
+  /** 是經銷商時，名下的客戶數 */
+  downstreamCount: number;
 }
 export interface CustomerQuery {
   keyword?: string;
@@ -59,6 +103,15 @@ export interface NewCustomerInput {
   note: string;
   adminName: string;
   adminEmail: string;
+  attribute?: CustomerAttribute;
+  shortNames?: string[];
+  isDealer?: boolean;
+  registeredAddress?: Address;
+  contactAddress?: Address;
+  contactSameAsRegistered?: boolean;
+  /** GWS 新約、續約的負責業務 */
+  salesNew?: string;
+  salesRenewal?: string;
 }
 export type DomainCheck =
   | { ok: true }
@@ -75,6 +128,9 @@ export interface Subscription {
   /** GWS 才有席次 */
   seats: number | null;
   status: SubscriptionStatus;
+  /** 目前合約起日 */
+  startsAt: string;
+  /** 目前合約迄日（到期日） */
   expiresAt: string;
   lastSyncedAt: string;
 }
@@ -83,9 +139,8 @@ export interface SubscriptionListItem extends Subscription {
   primaryDomain: string;
   dealerId: string;
   dealerName: string;
-  /** 這筆訂閱目前有沒有送出中（或待處理）的 Google 操作 */
-  openOperationId?: string;
-  openOperationStatus?: OperationStatus;
+  /** 這筆訂閱尚未結束的操作（已排程、待人工、送出中、手動待同步），加上最近一次失敗的 */
+  openOperations: { id: string; type: OperationType; status: OperationStatus }[];
 }
 export interface SubscriptionQuery {
   product?: ProductCode;
@@ -96,23 +151,44 @@ export interface SubscriptionQuery {
   plan?: string;
 }
 
-// ── GWS 操作（後勤直接送 Google 的變更） ─────
-export type OperationType = 'new' | 'renewal' | 'seats' | 'transfer' | 'cancel';
+// ── GWS 訂單操作（後勤直接處理的變更） ─────
 /**
+ * 2026/11/10 會議定案的訂單類型：
+ * new 新訂（全新客戶）、transfer 新訂（移轉進來）、renewal 續約、addSeats 加購、upgrade 中途升版。
+ * 不提供取消訂閱（2026/11/11 確認）；續約也不提供取消。
+ */
+export type OperationType = 'new' | 'transfer' | 'renewal' | 'addSeats' | 'upgrade';
+/** 排程執行：到啟用時間由系統送 Google；人工執行：後勤在 Google 後台處理後回來標記 */
+export type ExecutionMode = 'schedule' | 'manual';
+/** selfPaid：客戶自己刷卡、要移轉進來；otherDealer：從其他經銷商移轉（需移轉 ID） */
+export type TransferSource = 'selfPaid' | 'otherDealer';
+/**
+ * scheduled：已排程，等啟用時間
+ * pendingManual：待人工執行
  * submitted：已送出 Google，等待回應
  * completed：完成
  * failed：Google 回應失敗，可以重試或改為手動
- * manual：改為在 Google 手動處理，等下次同步確認
+ * manual：已在 Google 手動處理，等下次同步確認
+ * cancelled：已取消（取消排程）
  */
-export type OperationStatus = 'submitted' | 'completed' | 'failed' | 'manual';
+export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'completed' | 'failed' | 'manual' | 'cancelled';
 export interface OperationPayload {
+  /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
+  /** 新訂的席次，或續約後的席次 */
   seats?: number;
+  /** 加購的人數 */
+  addSeats?: number;
+  /** 送出當下的方案與席次（續約、加購、升版） */
+  fromPlan?: string;
   fromSeats?: number;
-  toSeats?: number;
   renewMonths?: number;
-  transferToken?: string;
-  tokenExpiresAt?: string;
+  /** 續約後的新合約起迄 */
+  newStartsAt?: string;
+  newExpiresAt?: string;
+  /** 排程執行的啟用日 */
+  scheduledAt?: string;
+  transferSource?: TransferSource;
   memo?: string;
 }
 export interface HistoryEvent<S extends string> {
@@ -130,6 +206,9 @@ export interface GwsOperation {
   /** 由執行單發起時記錄來源 */
   workOrderId?: string;
   payload: OperationPayload;
+  execution: ExecutionMode;
+  /** 排程執行時在 GWS 排程中心建立的排程 */
+  scheduleId?: string;
   status: OperationStatus;
   failureReason?: string;
   manualNote?: string;
@@ -151,7 +230,22 @@ export interface NewOperationInput {
   workOrderId?: string;
   payload: OperationPayload;
 }
-export type OperationAction = 'simulateSuccess' | 'simulateFailure' | 'retry' | 'markManual' | 'simulateSync';
+/** 一筆訂單依規則判斷出來的結果，畫面與資料層共用 */
+export interface OrderAnalysis {
+  execution: ExecutionMode;
+  /** 執行方式還沒定案時，對應的待確認編號 */
+  pendingId?: 16 | 17;
+  planChange?: 'up' | 'down' | 'same';
+  /** 續約後與目前的席次差 */
+  seatChange?: number;
+  /** 為什麼用這種執行方式 */
+  reasons: string[];
+  /** 排程執行的預設啟用日 */
+  defaultDate?: string;
+  newStartsAt?: string;
+  newExpiresAt?: string;
+}
+export type OperationAction = 'runSchedule' | 'cancelSchedule' | 'simulateSuccess' | 'simulateFailure' | 'retry' | 'completeManual' | 'markManual' | 'simulateSync';
 
 // ── 執行單（業務的需求單，簽核後由後勤處理） ─────
 export type WorkOrderType = OperationType;
@@ -169,8 +263,9 @@ export interface NewCustomerDraft {
 export interface WorkOrderPayload {
   plan?: string;
   seats?: number;
-  toSeats?: number;
+  addSeats?: number;
   renewMonths?: number;
+  transferSource?: TransferSource;
   memo?: string;
 }
 export interface WorkOrder {
@@ -213,6 +308,7 @@ export interface WorkOrderQuery {
   status?: WorkOrderStatus | '';
   dealerId?: string;
   customerId?: string;
+  subscriptionId?: string;
 }
 export interface WorkOrderInput {
   type: WorkOrderType;
@@ -236,6 +332,13 @@ export interface GcpUsageRow {
   egressGb: number;
   /** 較前 30 天的變化（%） */
   changePct: number;
+  /** 依專案彙總，可以往下看各服務的明細（2026/11/11 與 Ray 的會議） */
+  byProject: ProjectCost[];
+}
+export interface ProjectCost {
+  project: string;
+  costCents: number;
+  services: { service: string; costCents: number }[];
 }
 export interface GcpUsage {
   periodStart: string;
@@ -344,7 +447,7 @@ export interface Reconciliation {
 
 // ── 排程 ───────────────────────────────
 export type ScheduleKind = 'once' | 'monthly' | 'yearly';
-export type ScheduleAction = 'addSeats' | 'removeSeats' | 'renew' | 'cancel' | 'sync';
+export type ScheduleAction = 'new' | 'addSeats' | 'renew' | 'upgrade' | 'sync';
 export type ScheduleStatus = 'waiting' | 'running' | 'done' | 'failed' | 'cancelled';
 export interface Schedule {
   id: string;
@@ -355,6 +458,8 @@ export interface Schedule {
   enabledAt: string;
   customerId: string;
   subscriptionId?: string;
+  /** 由訂單操作建立的排程 */
+  operationId?: string;
   detail: string;
   createdBy: string;
 }
@@ -364,6 +469,7 @@ export interface ScheduleListItem extends Schedule {
   dealerName: string;
 }
 export interface ScheduleQuery {
+  subscriptionId?: string;
   kind?: ScheduleKind | '';
   action?: ScheduleAction | '';
   status?: ScheduleStatus | '';
@@ -435,7 +541,7 @@ export interface RoleListItem extends Role {
 }
 
 // ── 操作紀錄 ───────────────────────────
-export type LogCategory = 'customer' | 'workOrder' | 'gws' | 'billing' | 'permission' | 'login' | 'sync';
+export type LogCategory = 'customer' | 'workOrder' | 'gws' | 'billing' | 'catalog' | 'permission' | 'login' | 'sync';
 export type LogResult = 'success' | 'failure' | 'warning';
 export interface AuditLog {
   id: string;
@@ -473,6 +579,21 @@ export interface Product {
   code: string;
   status: 'active' | 'draft';
   createdAt: string;
+}
+/** 方案：等級數字越大版本越高，用來判斷升版、降版 */
+export interface Plan {
+  id: string;
+  productId: string;
+  name: string;
+  tier: number;
+  status: 'active' | 'draft';
+  createdAt: string;
+}
+export interface PlanListItem extends Plan {
+  productName: string;
+  brandName: string;
+  /** 使用中（未取消）的訂閱數 */
+  subscriptionCount: number;
 }
 export interface BrandListItem extends Brand {
   productCount: number;

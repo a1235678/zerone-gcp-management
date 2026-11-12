@@ -45,7 +45,15 @@ export const WorkOrderStatusTag = tag<WorkOrderStatus>(workOrderStatusLabel, {
   completed: 'success',
   returned: 'danger',
 });
-export const OperationStatusTag = tag<OperationStatus>(operationStatusLabel, { submitted: 'info', completed: 'success', failed: 'danger', manual: 'warning' });
+export const OperationStatusTag = tag<OperationStatus>(operationStatusLabel, {
+  scheduled: 'info',
+  pendingManual: 'warning',
+  submitted: 'info',
+  completed: 'success',
+  failed: 'danger',
+  manual: 'warning',
+  cancelled: 'neutral',
+});
 export const ScheduleStatusTag = tag<ScheduleStatus>(scheduleStatusLabel, { waiting: 'neutral', running: 'info', done: 'success', failed: 'danger', cancelled: 'neutral' });
 export const UserStatusTag = tag<UserStatus>(userStatusLabel, { active: 'success', disabled: 'neutral', invited: 'info' });
 export const LogResultTag = tag<LogResult>(logResultLabel, { success: 'success', failure: 'danger', warning: 'warning' });

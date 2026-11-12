@@ -12,6 +12,7 @@ export const adminNav: NavGroup[] = [
       { to: '/work-orders', label: '執行單', icon: 'workOrders' },
       { to: '/brands', label: '品牌管理', icon: 'brand' },
       { to: '/catalog', label: '產品管理', icon: 'product' },
+      { to: '/plans', label: '方案管理', icon: 'layers' },
     ],
   },
   {
@@ -29,7 +30,13 @@ export const adminNav: NavGroup[] = [
       },
     ],
   },
-  { label: '排程', items: [{ to: '/schedules/gws', label: 'GWS 排程中心', icon: 'schedule' }] },
+  {
+    label: '排程',
+    items: [
+      { to: '/schedules/gws', label: 'GWS 排程中心', icon: 'schedule' },
+      { to: '/schedules/notifications', label: '到期通知', icon: 'bell' },
+    ],
+  },
   {
     label: '系統',
     items: [
@@ -47,10 +54,12 @@ export const pageResource: Record<string, ResourceKey> = {
   '/work-orders': 'workOrders',
   '/brands': 'catalog',
   '/catalog': 'catalog',
+  '/plans': 'catalog',
   '/products/gws': 'subscriptions',
   '/products/gcp/usage': 'gcpUsage',
   '/products/gcp/billing': 'billing',
   '/schedules/gws': 'schedules',
+  '/schedules/notifications': 'schedules',
   '/system/users': 'accounts',
   '/system/roles': 'roles',
   '/system/logs': 'auditLogs',

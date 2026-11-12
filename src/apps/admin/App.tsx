@@ -7,10 +7,11 @@ import { resourceOf, visibleNav } from './nav';
 import { NoPermissionPage } from './pages/PlaceholderPage';
 import { ForgotPasswordPage, LoginPage } from './pages/LoginPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
-import { BrandsPage, ProductsPage } from './pages/CatalogPages';
+import { BrandsPage, PlansPage, ProductsPage } from './pages/CatalogPages';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { DealersPage } from './pages/DealersPage';
+import { ExpiryNoticePage } from './pages/ExpiryNoticePage';
 import { GcpBillDetailPage } from './pages/GcpBillDetailPage';
 import { GcpBillingPage } from './pages/GcpBillingPage';
 import { GcpUsagePage } from './pages/GcpUsagePage';
@@ -20,6 +21,7 @@ import { NewCustomerPage } from './pages/NewCustomerPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RolesPage } from './pages/RolesPage';
 import { SchedulesPage } from './pages/SchedulesPage';
+import { SubscriptionDetailPage } from './pages/SubscriptionDetailPage';
 import { UsersPage } from './pages/UsersPage';
 import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
 import { WorkOrderFormPage } from './pages/WorkOrderFormPage';
@@ -80,12 +82,15 @@ function Protected() {
             <Route path="/work-orders/:id/edit" element={<WorkOrderFormPage key="edit" />} />
             <Route path="/brands" element={<BrandsPage />} />
             <Route path="/catalog" element={<ProductsPage />} />
+            <Route path="/plans" element={<PlansPage />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
+            <Route path="/products/gws/:id" element={<SubscriptionDetailPage />} />
             <Route path="/products/gcp" element={<GcpIndex />} />
             <Route path="/products/gcp/usage" element={<GcpUsagePage />} />
             <Route path="/products/gcp/billing" element={<GcpBillingPage />} />
             <Route path="/products/gcp/billing/:id" element={<GcpBillDetailPage />} />
             <Route path="/schedules/gws" element={<SchedulesPage />} />
+            <Route path="/schedules/notifications" element={<ExpiryNoticePage />} />
             <Route path="/system/users" element={<UsersPage />} />
             <Route path="/system/roles" element={<RolesPage />} />
             <Route path="/system/logs" element={<AuditLogsPage />} />
