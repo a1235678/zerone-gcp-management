@@ -80,7 +80,7 @@ export const scheduleStatusLabel: Record<ScheduleStatus, string> = {
 };
 
 export const userStatusLabel: Record<UserStatus, string> = { active: '啟用', disabled: '停用', invited: '已邀請' };
-export const permissionLabel: Record<PermissionLevel, string> = { none: '禁止', read: '唯讀', write: '可編輯' };
+export const permissionLabel: Record<PermissionLevel, string> = { none: '禁止', read: '唯讀', write: '可編輯', create: '可新增' };
 export const resourceLabel: Record<ResourceKey, string> = {
   customers: '客戶',
   dealers: '經銷商',

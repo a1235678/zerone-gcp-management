@@ -202,7 +202,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     Object.keys(errors).length > 0 && `${Object.keys(errors).length} 個必填欄位`,
   ].filter(Boolean);
 
-  if (!(can('customers', 'write') && (!isTransfer || can('subscriptions', 'write'))))
+  if (!(can('customers', 'create') && (!isTransfer || can('subscriptions', 'write'))))
     return (
       <Callout tone="warning" title="你的角色沒有權限">
         你的角色不能建立客戶。如果需要，請聯絡系統管理員調整角色權限。

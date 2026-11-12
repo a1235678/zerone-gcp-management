@@ -137,7 +137,7 @@ export function UsersPage() {
         title="使用者"
         description="管理內部、經銷商、客戶的所有帳號。零壹建立經銷商或客戶時會一併建立第一個組織管理員；其他帳號通常由對方自行建立，零壹也可以代為新增、停用或重設密碼。"
         actions={
-          can('accounts', 'write') ? (
+          can('accounts', 'create') ? (
             <button className="btn btn--primary" onClick={() => setNewOpen(true)}>
               <Icon name="plus" size={16} />
               新增使用者

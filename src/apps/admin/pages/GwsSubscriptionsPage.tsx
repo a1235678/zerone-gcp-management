@@ -169,7 +169,7 @@ export function GwsSubscriptionsPage() {
       <PageHeader
         title="GWS 訂閱"
         actions={
-          canOperate ? (
+          can('subscriptions', 'create') ? (
             <button className="btn btn--primary" onClick={() => setPickOpen(true)}>
               <Icon name="plus" size={16} />
               新訂

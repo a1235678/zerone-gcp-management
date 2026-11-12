@@ -514,7 +514,8 @@ export interface NewUserInput {
   roleId: string;
 }
 
-export type PermissionLevel = 'none' | 'read' | 'write';
+/** 禁止 < 唯讀 < 可編輯 < 可新增（可新增包含可編輯，2026/11/12） */
+export type PermissionLevel = 'none' | 'read' | 'write' | 'create';
 export type ResourceKey =
   | 'customers'
   | 'dealers'

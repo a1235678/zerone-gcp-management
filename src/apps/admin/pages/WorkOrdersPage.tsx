@@ -83,7 +83,7 @@ export function WorkOrdersPage() {
         titleAddon={<PendingTag id={6} hint="是否列入第一階段上線" />}
         description="業務接到客戶需求後開立，依序由業務主管、技術主管簽核，核准後由後勤處理。後勤也可以不經執行單，直接在「產品 › GWS」操作訂閱。"
         actions={
-          can('workOrders', 'write') ? (
+          can('workOrders', 'create') ? (
             <Link to="/work-orders/new" className="btn btn--primary">
               <Icon name="plus" size={16} />
               開立執行單

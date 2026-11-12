@@ -98,7 +98,7 @@ export function DealersPage() {
         title="經銷商管理"
         description="「直銷（零壹）」也列為一個經銷商。總席次為名下客戶 GWS 訂閱（不含已取消）的席次加總。"
         actions={
-          can('dealers', 'write') ? (
+          can('dealers', 'create') ? (
             <button className="btn btn--primary" onClick={() => setOpen(true)}>
               <Icon name="plus" size={16} />
               新增經銷商

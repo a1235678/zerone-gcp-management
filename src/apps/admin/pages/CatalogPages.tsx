@@ -56,7 +56,7 @@ export function BrandsPage() {
         titleAddon={<PendingTag hint="欄位與內容之後再補" />}
         description="目前整合 Google，之後會支援其他品牌。"
         actions={
-          can('catalog', 'write') ? (
+          can('catalog', 'create') ? (
             <button className="btn btn--primary" onClick={() => setOpen(true)}>
               <Icon name="plus" size={16} />
               新增品牌
@@ -140,7 +140,7 @@ export function ProductsPage() {
         titleAddon={<PendingTag hint="欄位與內容之後再補" />}
         description="目前整合 Google Workspace 與 Google Cloud。"
         actions={
-          can('catalog', 'write') ? (
+          can('catalog', 'create') ? (
             <button className="btn btn--primary" onClick={() => setOpen(true)}>
               <Icon name="plus" size={16} />
               新增產品
@@ -269,7 +269,7 @@ export function PlansPage() {
         title="方案管理"
         description="方案依等級排序，數字越大版本越高。續約、中途升版時，系統用等級判斷是升版還是降版。"
         actions={
-          canWrite ? (
+          can("catalog", "create") ? (
             <button
               className="btn btn--primary"
               onClick={() => {

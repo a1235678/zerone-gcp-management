@@ -100,7 +100,7 @@ export function WorkOrderFormPage() {
       </Callout>
     );
 
-  if (!(can('workOrders', 'write')))
+  if (!can('workOrders', id ? 'write' : 'create'))
     return (
       <Callout tone="warning" title="你的角色沒有權限">
         你的角色不能開立或修改執行單。如果需要，請聯絡系統管理員調整角色權限。

@@ -14,12 +14,12 @@ import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
 import { useAuth, usePermission } from '../auth';
 
-const levels: PermissionLevel[] = ['none', 'read', 'write'];
-const rank: Record<PermissionLevel, number> = { none: 0, read: 1, write: 2 };
+const levels: PermissionLevel[] = ['none', 'read', 'write', 'create'];
+const rank: Record<PermissionLevel, number> = { none: 0, read: 1, write: 2, create: 3 };
 
 // 可編輯、唯讀用標籤；禁止只顯示淡色文字，讓表格一眼看出有權限的地方
 const LevelTag = ({ level }: { level: PermissionLevel }) =>
-  level === 'none' ? <span className="muted">{permissionLabel[level]}</span> : <StatusTag tone={level === 'write' ? 'info' : 'neutral'}>{permissionLabel[level]}</StatusTag>;
+  level === 'none' ? <span className="muted">{permissionLabel[level]}</span> : <StatusTag tone={level === 'create' ? 'success' : level === 'write' ? 'info' : 'neutral'}>{permissionLabel[level]}</StatusTag>;
 
 /** 資源欄位標題 */
 const ResourceHeader = ({ r }: { r: ResourceKey }) => <>{resourceLabel[r]}</>;
@@ -71,7 +71,7 @@ export function RolesPage() {
         title="角色管理"
         description="每個資源設定「禁止、唯讀、可編輯」三種等級。經銷商與客戶的組織管理員可以自建角色；任何帳號都不能授予比自己更大的權限。"
         actions={
-          can('roles', 'write') ? (
+          can('roles', 'create') ? (
             <button className="btn btn--primary" onClick={startNew}>
               <Icon name="plus" size={16} />
               新增角色
@@ -212,7 +212,7 @@ function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => 
         </div>
         <div className="perm-table" role="table" aria-label="資源權限">
           {resourceOrder.map((r) => {
-            const cap = mine.data?.[r] ?? 'write';
+            const cap = mine.data?.[r] ?? 'create';
             return (
               <div className="perm-row" role="row" key={r}>
                 <div role="rowheader" className="perm-row__name">
