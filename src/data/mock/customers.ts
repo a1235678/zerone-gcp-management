@@ -1,4 +1,5 @@
-import type { Customer } from '../types';
+import type { Address, Customer } from '../types';
+import { TW_DISTRICTS } from './twAddress';
 
 // 名稱、統編、聯絡人皆為虛構；網域一律 .example
 const base: Customer[] = [
@@ -59,9 +60,27 @@ function c(
     note,
     status,
     domainVerification,
+    attribute: /基金會|協會/.test(name) ? 'nonprofit' : 'enterprise',
+    shortNames: /(股份)?有限公司$/.test(name) ? [name.replace(/(股份)?有限公司$/, '')] : [],
+    isDealer: false,
+    registeredAddress: addressOf(contactPhone, Number(id.slice(1))),
+    contactAddress: addressOf(contactPhone, Number(id.slice(1))),
+    contactSameAsRegistered: true,
     otherDomains: [],
     salesAssignments: [],
+    contacts: [{ name: contactName, title: '主要聯絡人', email: `admin@${primaryDomain}`, phone: contactPhone }],
   };
+}
+
+/** 依電話區碼產生一個假地址（街道、門牌皆為虛構） */
+function addressOf(phone: string, n: number): Address {
+  const ROADS = ['中山路', '民生路', '復興路', '建國路', '光復路', '中正路', '文化路', '自由路', '和平路', '仁愛路'];
+  const prefix = phone.split('-')[0];
+  const city =
+    prefix === '02' ? (n % 4 === 0 ? '新北市' : '台北市') : prefix === '03' ? (phone.startsWith('03-5') ? '新竹縣' : phone.startsWith('03-6') ? '新竹市' : '桃園市') : prefix === '04' ? '台中市' : prefix === '05' ? '嘉義市' : prefix === '06' ? '台南市' : prefix === '07' ? '高雄市' : prefix === '049' ? '南投縣' : '台北市';
+  const list = TW_DISTRICTS[city];
+  const [district, postalCode] = list[n % list.length];
+  return { country: '台灣', city, district, postalCode, street: `${ROADS[n % ROADS.length]}${(n * 37) % 300 + 1}號${(n % 12) + 1}樓` };
 }
 
 // 其他網域（一個客戶可以有多個網域）

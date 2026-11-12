@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { addCustomerContact, formatAddress, getSubscriptions, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
-import { EmptyState } from '@shared/components/DataTable';
+import { DataTable, EmptyState } from '@shared/components/DataTable';
+import { Tabs } from '@shared/components/Tabs';
+import { customerAttributeLabel, workOrderTypeLabel } from '@data/labels';
+import type { CustomerContact } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Icon } from '@shared/components/Icon';
@@ -16,8 +19,10 @@ import { useAsync } from '@shared/hooks/useAsync';
 import { AuditLogTable } from '../components/AuditLogTable';
 import { OperationModal } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
-import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag } from '../tags';
+import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag, SubscriptionStatusTag, UserStatusTag, WorkOrderStatusTag } from '../tags';
 import { usePermission } from '../auth';
+
+type DetailTab = 'org' | 'users' | 'contacts' | 'subscriptions' | 'workOrders' | 'logs';
 
 export function CustomerDetailPage() {
   const { can } = usePermission();
@@ -27,6 +32,14 @@ export function CustomerDetailPage() {
   const reload = () => setVersion((v) => v + 1);
 
   const customer = useAsync(() => getCustomer(id), [id, version]);
+  const [params, setParams] = useSearchParams();
+  const tab = (params.get('tab') ?? 'org') as DetailTab;
+  const navigate = useNavigate();
+  const users = useAsync(() => getUsers({ orgType: 'customer', orgId: id }), [id, version]);
+  const subs = useAsync(() => (can('subscriptions') ? getSubscriptions({ customerId: id }) : Promise.resolve([])), [id, version]);
+  const orders = useAsync(() => (can('workOrders') ? getWorkOrders({ customerId: id }) : Promise.resolve([])), [id, version]);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contact, setContact] = useState<CustomerContact>({ name: '', title: '', email: '', phone: '' });
   const transfers = useAsync(() => getOperations({ customerId: id, type: 'transfer' }), [id, version]);
   const [panelId, setPanelId] = useState<string | null>(null);
   const logs = useAsync(() => getAuditLogs({ customerId: id }), [id, version]);
@@ -79,6 +92,16 @@ export function CustomerDetailPage() {
       await addCustomerDomain(c.id, domainInput);
       toast(`已新增網域 ${domainInput.trim()}`);
       setDomainOpen(false);
+      reload();
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    }
+  };
+  const saveContact = async () => {
+    try {
+      await addCustomerContact(c.id, contact);
+      toast(`已新增聯絡人 ${contact.name.trim()}`);
+      setContactOpen(false);
       reload();
     } catch (e) {
       toast((e as Error).message, 'danger');
@@ -139,19 +162,41 @@ export function CustomerDetailPage() {
         }
       />
 
-      <div className="stack">
+      <div className="page-tabs">
+        <Tabs<DetailTab>
+          label="客戶詳情分頁"
+          value={tab}
+          onChange={(v) => setParams(v === 'org' ? {} : { tab: v }, { replace: true })}
+          tabs={[
+            { value: 'org', label: '組織資訊' },
+            { value: 'users', label: '客戶使用者', count: users.data?.length },
+            { value: 'contacts', label: '一般聯絡人', count: c.contacts.length },
+            { value: 'subscriptions', label: '訂閱', count: subs.data?.length },
+            { value: 'workOrders', label: '執行單', count: orders.data?.length },
+            { value: 'logs', label: '異動歷程' },
+          ]}
+        />
+      </div>
+
+      {tab === 'org' && (
+        <div className="stack">
         <div className="split">
-          <Card title="客戶資料">
+          <Card title="基本資訊">
             <DescriptionList
               items={[
-                { label: '客戶名稱', value: c.name },
+                { label: '客戶屬性', value: <StatusTag tone="neutral">{customerAttributeLabel[c.attribute]}</StatusTag> },
+                { label: '公司全名', value: c.name },
+                { label: '公司簡稱', value: c.shortNames.join('、') },
                 { label: '統一編號', value: <span className="mono">{c.taxId}</span> },
+                { label: '登記地址', value: formatAddress(c.registeredAddress), full: true },
+                { label: '聯絡地址', value: c.contactSameAsRegistered ? <>同登記地址</> : formatAddress(c.contactAddress), full: true },
+                { label: '聯絡電話', value: <span className="mono">{c.contactPhone}</span> },
+                { label: 'Email', value: <span className="mono">{c.contactEmail}</span> },
+                { label: '是否為經銷商', value: c.isDealer ? '是' : '否' },
+                { label: '所屬經銷商', value: c.dealerName },
                 { label: '主網域', value: <span className="mono">{c.primaryDomain}</span> },
                 { label: '其他網域', value: c.otherDomains.length ? <span className="mono">{c.otherDomains.join('、')}</span> : '' },
-                { label: '經銷商', value: c.dealerName },
                 { label: '聯絡人', value: c.contactName },
-                { label: 'Email', value: <span className="mono">{c.contactEmail}</span> },
-                { label: '電話', value: <span className="mono">{c.contactPhone}</span> },
                 { label: '客戶編號', value: <span className="mono">{c.id}</span> },
                 { label: '建立人', value: c.createdBy },
                 { label: '建立日期', value: <span className="mono">{formatDate(c.createdAt)}</span> },
@@ -274,10 +319,88 @@ export function CustomerDetailPage() {
           </div>
         </div>
 
-        <Card title="操作紀錄" bodyless actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>{logs.data?.length ?? 0} 筆</span>}>
+        </div>
+      )}
+
+      {tab === 'users' && (
+        <Card bodyless title="客戶使用者" actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>零壹只建立第一個組織管理員帳號，其他由客戶自己建立</span>}>
+          <DataTable
+            caption="客戶使用者"
+            rows={users.data ?? []}
+            rowKey={(u) => u.id}
+            columns={[
+              { key: 'name', header: '姓名', render: (u) => <span className="table__primary">{u.name}</span> },
+              { key: 'email', header: 'Email', render: (u) => <span className="mono">{u.email}</span> },
+              { key: 'role', header: '角色', render: (u) => u.roleName },
+              { key: 'status', header: '狀態', render: (u) => <UserStatusTag value={u.status} /> },
+              { key: 'login', header: '最後登入', render: (u) => <span className="mono">{u.lastLoginAt ? formatDateTime(u.lastLoginAt) : '—'}</span> },
+            ]}
+            empty={<EmptyState title="還沒有使用者" />}
+          />
+        </Card>
+      )}
+
+      {tab === 'contacts' && (
+        <Card bodyless title="一般聯絡人" actions={canEdit ? <button className="btn btn--sm" onClick={() => { setContact({ name: '', title: '', email: '', phone: '' }); setContactOpen(true); }}>新增聯絡人</button> : undefined}>
+          <DataTable
+            caption="一般聯絡人"
+            rows={c.contacts}
+            rowKey={(x) => x.name + x.email}
+            columns={[
+              { key: 'name', header: '姓名', render: (x) => <span className="table__primary">{x.name}</span> },
+              { key: 'title', header: '職稱／用途', render: (x) => x.title || '—' },
+              { key: 'email', header: 'Email', render: (x) => <span className="mono">{x.email || '—'}</span> },
+              { key: 'phone', header: '電話', render: (x) => <span className="mono">{x.phone || '—'}</span> },
+            ]}
+            empty={<EmptyState title="沒有聯絡人" />}
+          />
+        </Card>
+      )}
+
+      {tab === 'subscriptions' && (
+        <Card bodyless title="訂閱">
+          <DataTable
+            caption="客戶的訂閱"
+            rows={subs.data ?? []}
+            rowKey={(x) => x.id}
+            onRowClick={(x) => navigate(`/products/gws/${x.id}`)}
+            columns={[
+              { key: 'product', header: '產品', render: (x) => x.product },
+              { key: 'plan', header: '方案', render: (x) => <span className="table__primary">{x.plan}</span> },
+              { key: 'seats', header: '人數', align: 'right', render: (x) => <span className="tnum">{x.seats}</span> },
+              { key: 'contract', header: '合約期間', render: (x) => <span className="mono">{formatDate(x.startsAt)} – {formatDate(x.expiresAt)}</span> },
+              { key: 'status', header: '狀態', render: (x) => <SubscriptionStatusTag value={x.status} /> },
+            ]}
+            empty={<EmptyState title="沒有訂閱" />}
+          />
+        </Card>
+      )}
+
+      {tab === 'workOrders' && (
+        <Card bodyless title="執行單">
+          <DataTable
+            caption="客戶的執行單"
+            rows={orders.data ?? []}
+            rowKey={(w) => w.id}
+            onRowClick={(w) => navigate(`/work-orders/${w.id}`)}
+            columns={[
+              { key: 'id', header: '單號', render: (w) => <span className="mono table__primary">{w.id}</span> },
+              { key: 'type', header: '類型', render: (w) => workOrderTypeLabel[w.type] },
+              { key: 'summary', header: '內容', render: (w) => w.summary },
+              { key: 'status', header: '狀態', render: (w) => <WorkOrderStatusTag value={w.status} /> },
+              { key: 'by', header: '開單人', render: (w) => w.createdBy },
+              { key: 'at', header: '開單時間', render: (w) => <span className="mono">{formatDateTime(w.createdAt)}</span> },
+            ]}
+            empty={<EmptyState title="沒有執行單" />}
+          />
+        </Card>
+      )}
+
+      {tab === 'logs' && (
+        <Card title="異動歷程" bodyless actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>{logs.data?.length ?? 0} 筆</span>}>
           <AuditLogTable rows={logs.data ?? []} loading={logs.loading && !logs.data} />
         </Card>
-      </div>
+      )}
 
       <OperationModal
         open={transferOpen}
@@ -291,6 +414,29 @@ export function CustomerDetailPage() {
         }}
       />
       <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={reload} />
+      <Modal
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        title="新增一般聯絡人"
+        width={480}
+        footer={
+          <>
+            <button className="btn" onClick={() => setContactOpen(false)}>
+              取消
+            </button>
+            <button className="btn btn--primary" disabled={!contact.name.trim()} onClick={saveContact}>
+              新增
+            </button>
+          </>
+        }
+      >
+        <div className="form-grid">
+          <FormField label="姓名" required>{(p) => <input {...p} className="input" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} />}</FormField>
+          <FormField label="職稱／用途" help="例如：帳務、IT 窗口">{(p) => <input {...p} className="input" value={contact.title} onChange={(e) => setContact({ ...contact, title: e.target.value })} />}</FormField>
+          <FormField label="Email">{(p) => <input {...p} className="input" type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} />}</FormField>
+          <FormField label="電話">{(p) => <input {...p} className="input" type="tel" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} />}</FormField>
+        </div>
+      </Modal>
       <Modal
         open={domainOpen}
         onClose={() => setDomainOpen(false)}

@@ -24,6 +24,25 @@ export interface DealerListItem extends Dealer {
 export type CustomerStatus = 'active' | 'disabled';
 /** Google 網域驗證：建立客戶後才檢查 */
 export type DomainVerification = 'verified' | 'pending' | 'failed';
+/** 客戶屬性（選項待確認） */
+export type CustomerAttribute = 'enterprise' | 'government' | 'school' | 'nonprofit';
+export interface Address {
+  /** 國家／地區 */
+  country: string;
+  /** 縣市（台灣用選單，其他國家自由輸入） */
+  city: string;
+  /** 鄉鎮區 */
+  district: string;
+  /** 郵遞區號：台灣依鄉鎮區自動帶出 */
+  postalCode: string;
+  street: string;
+}
+export interface CustomerContact {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+}
 /** 負責業務：依「產品／新約或續約」指定，同一客戶可以不同（2026/11/10 會議） */
 export interface SalesAssignment {
   product: ProductCode;
@@ -32,13 +51,25 @@ export interface SalesAssignment {
 }
 export interface Customer {
   id: string;
+  attribute: CustomerAttribute;
+  /** 公司全名 */
   name: string;
+  /** 公司簡稱，可以有多個別名 */
+  shortNames: string[];
+  /** 這個客戶本身也是經銷商 */
+  isDealer: boolean;
+  /** 登記地址（公司法定登記地） */
+  registeredAddress: Address;
+  contactAddress: Address;
+  contactSameAsRegistered: boolean;
   /** 統一編號（8 碼） */
   taxId: string;
   primaryDomain: string;
   /** 主網域以外的其他網域（一個客戶可以有多個網域） */
   otherDomains: string[];
   salesAssignments: SalesAssignment[];
+  /** 一般聯絡人（不一定有系統帳號） */
+  contacts: CustomerContact[];
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -68,6 +99,12 @@ export interface NewCustomerInput {
   note: string;
   adminName: string;
   adminEmail: string;
+  attribute?: CustomerAttribute;
+  shortNames?: string[];
+  isDealer?: boolean;
+  registeredAddress?: Address;
+  contactAddress?: Address;
+  contactSameAsRegistered?: boolean;
   /** GWS 新約、續約的負責業務 */
   salesNew?: string;
   salesRenewal?: string;

@@ -8,6 +8,7 @@ import type {
   OrgType,
   PermissionLevel,
   ResourceKey,
+  CustomerAttribute,
   ExecutionMode,
   TransferSource,
   BillDisplayStatus,
@@ -108,6 +109,7 @@ export const logCategoryLabel: Record<LogCategory, string> = {
 };
 export const logResultLabel: Record<LogResult, string> = { success: '成功', failure: '失敗', warning: '警示' };
 
+export const customerAttributeLabel: Record<CustomerAttribute, string> = { enterprise: '一般企業', government: '政府機關', school: '學校', nonprofit: '非營利組織' };
 export const billStatusLabel: Record<BillDisplayStatus, string> = { pending: '待確認', billed: '已出帳', overdue: '逾期', paid: '已收款' };
 export const reconcileStateLabel: Record<ReconcileState, string> = { match: '一致', mismatch: '有差異', resolved: '已處理', noInvoice: '尚無 Google 帳單' };
 export const reconcileHowLabel: Record<ReconcileHow, string> = { adoptGoogle: '採用 Google 金額', keepOurs: '維持我方金額' };

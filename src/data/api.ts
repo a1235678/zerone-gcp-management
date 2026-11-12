@@ -24,6 +24,8 @@ import type {
   BrandListItem,
   Customer,
   SalesAssignment,
+  Address,
+  CustomerContact,
   CustomerListItem,
   CustomerQuery,
   Dealer,
@@ -299,7 +301,7 @@ export function getCustomers(query: CustomerQuery = {}): Promise<CustomerListIte
   const rows = db.customers
     .filter((c) => !query.dealerId || c.dealerId === query.dealerId)
     .filter((c) => !query.status || c.status === query.status)
-    .filter((c) => includesKw(kw, c.name, c.primaryDomain, c.taxId, c.contactName, ...c.otherDomains, ...c.salesAssignments.map((a) => a.salesName)))
+    .filter((c) => includesKw(kw, c.name, ...c.shortNames, c.primaryDomain, c.taxId, c.contactName, ...c.otherDomains, ...c.salesAssignments.map((a) => a.salesName)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .map(withDealer);
   return delay(rows);
@@ -330,6 +332,22 @@ export function checkDomain(domain: string): DomainCheck {
   return { ok: true };
 }
 
+export const emptyAddress = (): Address => ({ country: '台灣', city: '', district: '', postalCode: '', street: '' });
+export const formatAddress = (a: Address) => [a.postalCode, a.country === '台灣' ? '' : a.country, a.city, a.district, a.street].filter(Boolean).join(' ').replace(/^(\d+) /, '$1 ');
+
+/** 模擬依統一編號查詢公司登記資料（正式版的資料來源待確認） */
+const fakeRegistry: Record<string, { name: string; address: Address }> = {
+  '90010088': { name: '松濤設計股份有限公司', address: { country: '台灣', city: '台北市', district: '大安區', postalCode: '106', street: '復興南路一段 120 號 5 樓' } },
+  '90010099': { name: '山嵐資訊股份有限公司', address: { country: '台灣', city: '新竹市', district: '東區', postalCode: '300', street: '光復路二段 88 號' } },
+  '90010032': { name: '霧峰農創有限公司', address: { country: '台灣', city: '台中市', district: '南屯區', postalCode: '408', street: '五權西路二段 66 號' } },
+};
+export function lookupTaxId(taxId: string): Promise<{ name: string; address: Address } | undefined> {
+  if (!/^\d{8}$/.test(taxId)) return fail('請輸入 8 碼統一編號');
+  const used = db.customers.find((c) => c.taxId === taxId);
+  if (used) return fail(`這個統一編號已是客戶「${used.name}」`);
+  return delay(fakeRegistry[taxId], 400);
+}
+
 /** 新增客戶的其他網域（一個客戶可以有多個網域） */
 export function addCustomerDomain(customerId: string, domain: string): Promise<CustomerListItem> {
   const c = customerOf(customerId);
@@ -346,6 +364,17 @@ export function removeCustomerDomain(customerId: string, domain: string): Promis
   if (!c) return fail('找不到客戶');
   c.otherDomains = c.otherDomains.filter((d) => d !== domain);
   log('customer', c.name, `移除網域 ${domain}`, 'success', c.id);
+  return delay(withDealer(c));
+}
+
+/** 新增一般聯絡人 */
+export function addCustomerContact(customerId: string, contact: CustomerContact): Promise<CustomerListItem> {
+  const c = customerOf(customerId);
+  if (!c) return fail('找不到客戶');
+  if (!contact.name.trim()) return fail('請輸入姓名');
+  if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) return fail('Email 格式不正確');
+  c.contacts.push({ name: contact.name.trim(), title: contact.title.trim(), email: contact.email.trim(), phone: contact.phone.trim() });
+  log('customer', c.name, `新增一般聯絡人 ${contact.name.trim()}`, 'success', c.id);
   return delay(withDealer(c));
 }
 
@@ -386,7 +415,14 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
     note: input.note.trim(),
     status: 'active',
     domainVerification: 'pending',
+    attribute: input.attribute ?? 'enterprise',
+    shortNames: input.shortNames ?? [],
+    isDealer: input.isDealer ?? false,
+    registeredAddress: input.registeredAddress ?? emptyAddress(),
+    contactAddress: input.contactSameAsRegistered !== false ? { ...(input.registeredAddress ?? emptyAddress()) } : (input.contactAddress ?? emptyAddress()),
+    contactSameAsRegistered: input.contactSameAsRegistered !== false,
     otherDomains: [],
+    contacts: [{ name: input.contactName.trim(), title: '主要聯絡人', email: input.contactEmail.trim(), phone: input.contactPhone.trim() }],
     salesAssignments: [
       ...(input.salesNew ? [{ product: 'GWS' as const, term: 'new' as const, salesName: input.salesNew }] : []),
       ...(input.salesRenewal ? [{ product: 'GWS' as const, term: 'renewal' as const, salesName: input.salesRenewal }] : []),

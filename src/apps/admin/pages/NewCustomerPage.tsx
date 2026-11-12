@@ -6,6 +6,8 @@ import {
   createTransferInCustomer,
   getDealers,
   getSalesPeople,
+  emptyAddress,
+  lookupTaxId,
   getWorkOrder,
   linkCustomerToWorkOrder,
 } from '@data/api';
@@ -16,6 +18,9 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
+import { customerAttributeLabel } from '@data/labels';
+import type { Address, CustomerAttribute } from '@data/types';
+import { AddressFields, TagInput } from '../components/CustomerFields';
 import { usePermission } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,6 +78,30 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     }));
     setPrefilled(true);
   }, [wo.data, prefilled]);
+  const [attribute, setAttribute] = useState<CustomerAttribute>('enterprise');
+  const [shortNames, setShortNames] = useState<string[]>([]);
+  const [isDealer, setIsDealer] = useState(false);
+  const [regAddr, setRegAddr] = useState<Address>(emptyAddress());
+  const [conAddr, setConAddr] = useState<Address>(emptyAddress());
+  const [sameAddr, setSameAddr] = useState(true);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupMsg, setLookupMsg] = useState<{ text: string; tone: 'success' | 'error' } | undefined>();
+  const lookup = async () => {
+    setLookingUp(true);
+    setLookupMsg(undefined);
+    try {
+      const r = await lookupTaxId(form.taxId);
+      if (r) {
+        setForm((f) => ({ ...f, name: r.name }));
+        setRegAddr(r.address);
+        setLookupMsg({ text: `已帶入：${r.name}`, tone: 'success' });
+      } else setLookupMsg({ text: '查無登記資料，請手動輸入', tone: 'error' });
+    } catch (e) {
+      setLookupMsg({ text: (e as Error).message, tone: 'error' });
+    } finally {
+      setLookingUp(false);
+    }
+  };
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [sameAsContact, setSameAsContact] = useState(true);
   const [domain, setDomain] = useState<{ checking: boolean; result?: DomainCheck }>({ checking: false });
@@ -96,7 +125,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
   const admin = sameAsContact ? { adminName: form.contactName, adminEmail: form.contactEmail } : { adminName: form.adminName, adminEmail: form.adminEmail };
 
   const errors: Partial<Record<Key, string>> = {};
-  if (!form.name.trim()) errors.name = '請輸入客戶名稱';
+  if (!form.name.trim()) errors.name = '請輸入公司全名';
   if (!/^\d{8}$/.test(form.taxId)) errors.taxId = '統一編號為 8 位數字';
   if (!form.dealerId) errors.dealerId = '請選擇經銷商';
   if (!form.contactName.trim()) errors.contactName = '請輸入聯絡人';
@@ -115,11 +144,11 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     setSaving(true);
     try {
       if (isTransfer) {
-        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, memo: form.transferMemo, workOrderId: fromWo ?? undefined });
+        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, attribute, shortNames, isDealer, registeredAddress: regAddr, contactAddress: sameAddr ? regAddr : conAddr, contactSameAsRegistered: sameAddr, memo: form.transferMemo, workOrderId: fromWo ?? undefined });
         toast(`已建立「${customer.name}」，客戶轉入（${operation.id}）待後勤人工執行`);
         navigate(fromWo ? `/work-orders/${fromWo}` : `/customers/${customer.id}`);
       } else {
-        const c = await createCustomer({ ...form, ...admin });
+        const c = await createCustomer({ ...form, ...admin, attribute, shortNames, isDealer, registeredAddress: regAddr, contactAddress: sameAddr ? regAddr : conAddr, contactSameAsRegistered: sameAddr });
         if (fromWo) {
           await linkCustomerToWorkOrder(fromWo, c.id);
           toast(`已建立客戶「${c.name}」，回到執行單 ${fromWo} 繼續處理`);
@@ -223,22 +252,78 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             </div>
           )}
 
-          <FormSection title="客戶資料">
-            <FormField label="客戶名稱" required message={err('name')} state={errState('name')}>
-              {(p) => <input {...p} className="input" value={form.name} onChange={set('name')} onBlur={touch('name')} />}
-            </FormField>
-            <FormField label="統一編號" required message={err('taxId')} state={errState('taxId')}>
+          <FormSection title="客戶屬性">
+            <FormField label="客戶屬性" required addon={<PendingTag hint="選項待確認" />}>
               {(p) => (
-                <input {...p} className="input mono" inputMode="numeric" maxLength={8} value={form.taxId} onChange={set('taxId')} onBlur={touch('taxId')} />
+                <select {...p} className="select" value={attribute} onChange={(e) => setAttribute(e.target.value as CustomerAttribute)}>
+                  {Object.entries(customerAttributeLabel).map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
               )}
             </FormField>
+            <div />
+          </FormSection>
+
+          <FormSection title="基本資訊">
+            <FormField
+              label="統一編號"
+              required
+              message={err('taxId') ?? lookupMsg?.text}
+              state={err('taxId') ? 'error' : lookupMsg?.tone}
+              help="輸入 8 碼統一編號後按「查詢」，會帶入公司全名與登記地址。"
+              addon={<PendingTag hint="查詢的資料來源待確認" />}
+            >
+              {(p) => (
+                <div className="input-with-button">
+                  <input {...p} className="input mono" inputMode="numeric" maxLength={8} value={form.taxId} onChange={set('taxId')} onBlur={touch('taxId')} />
+                  <button type="button" className="btn" disabled={lookingUp || !/^\d{8}$/.test(form.taxId)} onClick={lookup}>
+                    <Icon name="search" size={16} />
+                    {lookingUp ? '查詢中…' : '查詢'}
+                  </button>
+                </div>
+              )}
+            </FormField>
+            <FormField label="公司全名" required message={err('name')} state={errState('name')}>
+              {(p) => <input {...p} className="input" value={form.name} onChange={set('name')} onBlur={touch('name')} />}
+            </FormField>
+            <FormField label="公司簡稱" help="可輸入多個別名，按 Enter 確認。">
+              {(p) => <TagInput id={p.id} values={shortNames} onChange={setShortNames} />}
+            </FormField>
+            <FormField label="聯絡電話">{(p) => <input {...p} className="input" type="tel" value={form.contactPhone} onChange={set('contactPhone')} />}</FormField>
+            <FormField label={isTransfer ? '轉入後的經銷商' : '所屬經銷商'} required message={err('dealerId')} state={errState('dealerId')}>
+              {(p) => (
+                <select {...p} className="select" value={form.dealerId} onChange={set('dealerId')} onBlur={touch('dealerId')}>
+                  <option value="">請選擇</option>
+                  {(dealers.data ?? [])
+                    .filter((d) => d.status === 'active')
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </FormField>
+            <FormField label="Email" required message={err('contactEmail')} state={errState('contactEmail')}>
+              {(p) => <input {...p} className="input" type="email" value={form.contactEmail} onChange={set('contactEmail')} onBlur={touch('contactEmail')} />}
+            </FormField>
+            <FormField label="聯絡人" required message={err('contactName')} state={errState('contactName')}>
+              {(p) => <input {...p} className="input" value={form.contactName} onChange={set('contactName')} onBlur={touch('contactName')} />}
+            </FormField>
+            <label className="inline checkbox-row">
+              <input type="checkbox" checked={isDealer} onChange={(e) => setIsDealer(e.target.checked)} />
+              是否為經銷商
+            </label>
             <FormField
               className="is-full"
               label="主網域"
               required
               state={domainField.state}
               message={domainField.message}
-              help="只能用小寫英文、數字、連字號，例如 company.example。Google 網域驗證會在客戶建立後才檢查。"
+              help="只能用小寫英文、數字、連字號，例如 company.example。Google 網域驗證會在客戶建立後才檢查；其他網域可以建立後在客戶詳情新增。"
             >
               {(p) => (
                 <input
@@ -253,30 +338,27 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
                 />
               )}
             </FormField>
-            <FormField label={isTransfer ? '轉入後的經銷商' : '經銷商'} required message={err('dealerId')} state={errState('dealerId')}>
-              {(p) => (
-                <select {...p} className="select" value={form.dealerId} onChange={set('dealerId')} onBlur={touch('dealerId')}>
-                  <option value="">請選擇</option>
-                  {(dealers.data ?? [])
-                    .filter((d) => d.status === 'active')
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                </select>
-              )}
-            </FormField>
-            <div />
-            <FormField label="聯絡人" required message={err('contactName')} state={errState('contactName')}>
-              {(p) => <input {...p} className="input" value={form.contactName} onChange={set('contactName')} onBlur={touch('contactName')} />}
-            </FormField>
-            <FormField label="聯絡人 Email" required message={err('contactEmail')} state={errState('contactEmail')}>
-              {(p) => <input {...p} className="input" type="email" value={form.contactEmail} onChange={set('contactEmail')} onBlur={touch('contactEmail')} />}
-            </FormField>
-            <FormField label="電話">{(p) => <input {...p} className="input" type="tel" value={form.contactPhone} onChange={set('contactPhone')} />}</FormField>
-            <FormField label="備註" className="is-full">
-              {(p) => <textarea {...p} className="textarea" value={form.note} onChange={set('note')} />}
+          </FormSection>
+
+          <FormSection title="登記地址（公司法定登記地）">
+            <div className="is-full">
+              <AddressFields label="登記地址" value={regAddr} onChange={setRegAddr} />
+            </div>
+          </FormSection>
+
+          <FormSection title="聯絡地址">
+            <label className="inline checkbox-row is-full">
+              <input type="checkbox" checked={sameAddr} onChange={(e) => setSameAddr(e.target.checked)} />
+              同登記地址
+            </label>
+            <div className="is-full">
+              <AddressFields label="聯絡地址" value={sameAddr ? regAddr : conAddr} onChange={setConAddr} disabled={sameAddr} />
+            </div>
+          </FormSection>
+
+          <FormSection title="其他資訊">
+            <FormField label="備註" className="is-full" help={`${form.note.length} / 2000`}>
+              {(p) => <textarea {...p} className="textarea" maxLength={2000} value={form.note} onChange={set('note')} />}
             </FormField>
           </FormSection>
 
