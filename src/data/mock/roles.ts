@@ -2,7 +2,7 @@ import type { PermissionLevel, ResourceKey, Role } from '../types';
 
 // 零壹內部角色：後台管理員、業務、技術、PM、業務主管、技術主管、後勤（2026/11/06 與使用者確認）。
 // 經銷商與客戶各有一個預設的「組織管理員」，其他角色由他們自建。
-// 權限等級：none 禁止／read 唯讀／write 可編輯／create 可新增（包含可編輯）
+// 權限等級：none 禁止／read 唯讀／write 可編輯／create 可新增與編輯
 const P = (
   customers: PermissionLevel,
   subscriptions: PermissionLevel,

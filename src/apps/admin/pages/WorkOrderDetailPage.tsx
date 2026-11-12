@@ -100,7 +100,7 @@ export function WorkOrderDetailPage() {
     : undefined;
 
   const p = w.payload;
-  // 新訂、客戶轉入會新增訂閱，需要「可新增」；續約、加購、升版只要「可編輯」
+  // 新訂、客戶轉入會新增訂閱，需要「可新增與編輯」；續約、加購、升版只要「可編輯」
   const opLevel = w.type === 'new' || w.type === 'transfer' ? ('create' as const) : ('write' as const);
   const analysis = analyzeOrder(w.type, sub, p);
   const items = [
