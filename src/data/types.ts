@@ -24,8 +24,6 @@ export interface DealerListItem extends Dealer {
 export type CustomerStatus = 'active' | 'disabled';
 /** Google 網域驗證：建立客戶後才檢查 */
 export type DomainVerification = 'verified' | 'pending' | 'failed';
-/** 客戶屬性（選項待確認） */
-export type CustomerAttribute = 'enterprise' | 'government' | 'school' | 'nonprofit';
 export interface Address {
   /** 國家／地區 */
   country: string;
@@ -51,21 +49,17 @@ export interface SalesAssignment {
 }
 export interface Customer {
   id: string;
-  attribute: CustomerAttribute;
   /** 公司全名 */
   name: string;
   /** 公司簡稱，可以有多個別名 */
   shortNames: string[];
-  /** 這個客戶本身也是經銷商 */
-  isDealer: boolean;
-  /** 是經銷商時，對應「經銷商管理」裡的經銷商；名下有客戶就不能取消「是否為經銷商」 */
-  dealerOrgId?: string;
   /** 登記地址（公司法定登記地） */
   registeredAddress: Address;
   contactAddress: Address;
   contactSameAsRegistered: boolean;
   /** 統一編號（8 碼） */
   taxId: string;
+  /** 主網域：建立客戶時不填，GWS 新訂時填寫（新買或綁定既有），訂閱成功後寫回（2026/11/12） */
   primaryDomain: string;
   /** 主網域以外的其他網域（一個客戶可以有多個網域） */
   otherDomains: string[];
@@ -84,8 +78,6 @@ export interface Customer {
 }
 export interface CustomerListItem extends Customer {
   dealerName: string;
-  /** 是經銷商時，名下的客戶數 */
-  downstreamCount: number;
 }
 export interface CustomerQuery {
   keyword?: string;
@@ -95,7 +87,8 @@ export interface CustomerQuery {
 export interface NewCustomerInput {
   name: string;
   taxId: string;
-  primaryDomain: string;
+  /** 只有客戶轉入要填（既有的 GWS 客戶） */
+  primaryDomain?: string;
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -103,9 +96,7 @@ export interface NewCustomerInput {
   note: string;
   adminName: string;
   adminEmail: string;
-  attribute?: CustomerAttribute;
   shortNames?: string[];
-  isDealer?: boolean;
   registeredAddress?: Address;
   contactAddress?: Address;
   contactSameAsRegistered?: boolean;
@@ -175,6 +166,9 @@ export type TransferSource = 'selfPaid' | 'otherDealer';
  */
 export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'completed' | 'failed' | 'manual' | 'cancelled';
 export interface OperationPayload {
+  /** 新訂的網域與取得方式；訂閱成功後寫回客戶主檔 */
+  domain?: string;
+  domainMode?: DomainMode;
   /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
   /** 新訂的席次，或續約後的席次 */
@@ -256,13 +250,18 @@ export type WorkOrderStatus = 'draft' | 'salesReview' | 'techReview' | 'approved
 export interface NewCustomerDraft {
   name: string;
   taxId: string;
+  /** 客戶轉入才填 */
   primaryDomain: string;
   contactName: string;
   contactEmail: string;
   contactPhone: string;
   note: string;
 }
+/** 新訂時的網域：新買，或綁定客戶已有的網域 */
+export type DomainMode = 'purchase' | 'bind';
 export interface WorkOrderPayload {
+  domain?: string;
+  domainMode?: DomainMode;
   plan?: string;
   seats?: number;
   addSeats?: number;
@@ -492,6 +491,8 @@ export interface User {
   status: UserStatus;
   /** 零壹建立的第一個組織管理員 */
   isFirstAdmin: boolean;
+  /** 客戶帳號使用的產品（2026/11/12：使用者帳號新增「產品」欄） */
+  products?: ProductCode[];
   lastLoginAt: string | null;
   createdAt: string;
 }

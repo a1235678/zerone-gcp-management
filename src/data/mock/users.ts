@@ -48,6 +48,10 @@ const customerExtra: User[] = [
   u('U303', '溫子涵', 'mis@heguang-medical.example', 'customer', 'C0011', 'R09', 'active', false, '2026-11-05 08:05', '2025-01-20'),
 ];
 
+// 客戶帳號使用的產品：有 GCP 的客戶，組織管理員兩個產品都用；和光的 MIS 只管 GCP
+const gcpCustomers = new Set(['C0003', 'C0006', 'C0007', 'C0008', 'C0011', 'C0016', 'C0020', 'C0022', 'C0024']);
+for (const x of [...customerAdmins, ...customerExtra]) x.products = x.id === 'U303' ? ['GCP'] : gcpCustomers.has(x.orgId) ? ['GWS', 'GCP'] : ['GWS'];
+
 export const users: User[] = [...internal, ...dealerUsers, ...customerAdmins, ...customerExtra];
 
 function u(

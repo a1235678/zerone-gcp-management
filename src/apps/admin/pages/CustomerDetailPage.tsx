@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getSubscriptions, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
+import { addressComplete, addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { Tabs } from '@shared/components/Tabs';
-import { customerAttributeLabel, workOrderTypeLabel } from '@data/labels';
-import type { CustomerContact } from '@data/types';
+import { domainModeLabel, workOrderTypeLabel } from '@data/labels';
+import type { CustomerContact, DomainMode } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Icon } from '@shared/components/Icon';
@@ -19,11 +19,11 @@ import { useAsync } from '@shared/hooks/useAsync';
 import { AuditLogTable } from '../components/AuditLogTable';
 import { OperationModal } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
-import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag, SubscriptionStatusTag, UserStatusTag, WorkOrderStatusTag } from '../tags';
+import { CustomerStatusTag, DomainVerificationTag, OperationStatusTag, UserStatusTag, WorkOrderStatusTag } from '../tags';
 import { usePermission } from '../auth';
 import { AddressFields, TagInput } from '../components/CustomerFields';
 
-type DetailTab = 'org' | 'users' | 'contacts' | 'subscriptions' | 'workOrders' | 'logs';
+type DetailTab = 'org' | 'users' | 'contacts' | 'workOrders' | 'logs';
 
 export function CustomerDetailPage() {
   const { can } = usePermission();
@@ -37,7 +37,6 @@ export function CustomerDetailPage() {
   const tab = (params.get('tab') ?? 'org') as DetailTab;
   const navigate = useNavigate();
   const users = useAsync(() => getUsers({ orgType: 'customer', orgId: id }), [id, version]);
-  const subs = useAsync(() => (can('subscriptions') ? getSubscriptions({ customerId: id }) : Promise.resolve([])), [id, version]);
   const orders = useAsync(() => (can('workOrders') ? getWorkOrders({ customerId: id }) : Promise.resolve([])), [id, version]);
   const [editForm, setEditForm] = useState<CustomerEdit | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -50,6 +49,7 @@ export function CustomerDetailPage() {
   const [transferOpen, setTransferOpen] = useState(false);
   const [domainOpen, setDomainOpen] = useState(false);
   const [domainInput, setDomainInput] = useState('');
+  const [domainMode, setDomainMode] = useState<DomainMode>('bind');
   const [salesOpen, setSalesOpen] = useState(false);
   const [salesForm, setSalesForm] = useState<Record<string, string>>({});
   const salesPeople = useAsync(getSalesPeople);
@@ -92,7 +92,7 @@ export function CustomerDetailPage() {
   const domainCheck = domainInput ? checkDomain(domainInput) : undefined;
   const addDomain = async () => {
     try {
-      await addCustomerDomain(c.id, domainInput);
+      await addCustomerDomain(c.id, domainInput, domainMode);
       toast(`已新增網域 ${domainInput.trim()}`);
       setDomainOpen(false);
       reload();
@@ -100,16 +100,13 @@ export function CustomerDetailPage() {
       toast((e as Error).message, 'danger');
     }
   };
-  const dealerLocked = c.isDealer && c.downstreamCount > 0;
   const openEdit = () =>
     setEditForm({
-      attribute: c.attribute,
       name: c.name,
       shortNames: [...c.shortNames],
       contactPhone: c.contactPhone,
       contactEmail: c.contactEmail,
       contactName: c.contactName,
-      isDealer: c.isDealer,
       registeredAddress: { ...c.registeredAddress },
       contactAddress: { ...c.contactAddress },
       contactSameAsRegistered: c.contactSameAsRegistered,
@@ -202,9 +199,8 @@ export function CustomerDetailPage() {
           onChange={(v) => setParams(v === 'org' ? {} : { tab: v }, { replace: true })}
           tabs={[
             { value: 'org', label: '組織資訊' },
-            { value: 'users', label: '客戶使用者', count: users.data?.length },
+            { value: 'users', label: '使用者帳號', count: users.data?.length },
             { value: 'contacts', label: '一般聯絡人', count: c.contacts.length },
-            { value: 'subscriptions', label: '訂閱', count: subs.data?.length },
             { value: 'workOrders', label: '執行單', count: orders.data?.length },
             { value: 'logs', label: '異動歷程' },
           ]}
@@ -217,19 +213,18 @@ export function CustomerDetailPage() {
           <Card title="基本資訊" actions={canEdit ? <button className="btn btn--sm" onClick={openEdit}>編輯</button> : undefined}>
             <DescriptionList
               items={[
-                { label: '客戶屬性', value: <StatusTag tone="neutral">{customerAttributeLabel[c.attribute]}</StatusTag> },
                 { label: '公司全名', value: c.name },
                 { label: '公司簡稱', value: c.shortNames.join('、') },
                 { label: '統一編號', value: <span className="mono">{c.taxId}</span> },
                 { label: '登記地址', value: formatAddress(c.registeredAddress), full: true },
-                { label: '聯絡地址', value: c.contactSameAsRegistered ? <>同登記地址</> : formatAddress(c.contactAddress), full: true },
-                { label: '聯絡電話', value: <span className="mono">{c.contactPhone}</span> },
-                { label: 'Email', value: <span className="mono">{c.contactEmail}</span> },
-                { label: '是否為經銷商', value: c.isDealer ? `是${c.downstreamCount ? `（名下 ${c.downstreamCount} 個客戶）` : ''}` : '否' },
                 { label: '所屬經銷商', value: c.dealerName },
-                { label: '主網域', value: <span className="mono">{c.primaryDomain}</span> },
+                { label: '經銷商 ID', value: <span className="mono">{c.dealerId}</span> },
+                { label: '主網域', value: c.primaryDomain ? <span className="mono">{c.primaryDomain}</span> : <span className="muted">尚未有網域（GWS 新訂時填寫）</span> },
                 { label: '其他網域', value: c.otherDomains.length ? <span className="mono">{c.otherDomains.join('、')}</span> : '' },
-                { label: '聯絡人', value: c.contactName },
+                { label: '聯絡地址', value: c.contactSameAsRegistered ? <>同登記地址</> : formatAddress(c.contactAddress), full: true },
+                { label: '聯絡人姓名', value: c.contactName },
+                { label: '聯絡電話', value: <span className="mono">{c.contactPhone}</span> },
+                { label: '聯絡人信箱', value: <span className="mono">{c.contactEmail}</span>, full: true },
                 { label: '客戶編號', value: <span className="mono">{c.id}</span> },
                 { label: '建立人', value: c.createdBy },
                 { label: '建立日期', value: <span className="mono">{formatDate(c.createdAt)}</span> },
@@ -244,6 +239,7 @@ export function CustomerDetailPage() {
                 <table className="table">
                   <thead>
                     <tr>
+                      <th>品牌</th>
                       <th>產品</th>
                       <th>新約</th>
                       <th>續約</th>
@@ -252,6 +248,7 @@ export function CustomerDetailPage() {
                   <tbody>
                     {(['GWS', 'GCP'] as const).map((prod) => (
                       <tr key={prod}>
+                        <td>Google</td>
                         <td>
                           {prod}
                           {prod === 'GCP' && <div className="table__secondary">第一階段不納入</div>}
@@ -271,10 +268,16 @@ export function CustomerDetailPage() {
 
             <Card title="網域" actions={canEdit ? <button className="btn btn--sm" onClick={() => { setDomainInput(''); setDomainOpen(true); }}>新增網域</button> : undefined} bodyless>
               <ul className="list-plain">
-                <li>
-                  <span className="mono">{c.primaryDomain}</span>
-                  <StatusTag tone="info">主網域</StatusTag>
-                </li>
+                {c.primaryDomain ? (
+                  <li>
+                    <span className="mono">{c.primaryDomain}</span>
+                    <StatusTag tone="info">主網域</StatusTag>
+                  </li>
+                ) : (
+                  <li>
+                    <span className="muted">尚未有網域。GWS 新訂時填寫，訂閱成功後自動寫回；也可以在這裡新增。</span>
+                  </li>
+                )}
                 {c.otherDomains.map((d) => (
                   <li key={d}>
                     <span className="mono">{d}</span>
@@ -288,6 +291,7 @@ export function CustomerDetailPage() {
               </ul>
             </Card>
 
+            {c.primaryDomain && (
             <Card title="Google 網域驗證">
               <div className="stack" style={{ gap: 'var(--space-3)' }}>
                 <div className="inline">
@@ -309,6 +313,7 @@ export function CustomerDetailPage() {
                 )}
               </div>
             </Card>
+            )}
 
             <Card title={<span className="inline">客戶轉入 <PendingTag id={4} /></span>} bodyless>
               {transfers.data && transfers.data.length > 0 ? (
@@ -356,15 +361,28 @@ export function CustomerDetailPage() {
       )}
 
       {tab === 'users' && (
-        <Card bodyless title="客戶使用者" actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>零壹只建立第一個組織管理員帳號，其他由客戶自己建立</span>}>
+        <Card bodyless title="使用者帳號" actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>零壹只建立第一個組織管理員帳號，其他由客戶自己建立</span>}>
           <DataTable
-            caption="客戶使用者"
+            caption="使用者帳號"
             rows={users.data ?? []}
             rowKey={(u) => u.id}
             columns={[
               { key: 'name', header: '姓名', render: (u) => <span className="table__primary">{u.name}</span> },
               { key: 'email', header: 'Email', render: (u) => <span className="mono">{u.email}</span> },
               { key: 'role', header: '角色', render: (u) => u.roleName },
+              {
+                key: 'products',
+                header: '產品',
+                render: (u) => (
+                  <span className="op-chips">
+                    {(u.products ?? []).map((pr) => (
+                      <StatusTag key={pr} tone="neutral">
+                        {pr}
+                      </StatusTag>
+                    ))}
+                  </span>
+                ),
+              },
               { key: 'status', header: '狀態', render: (u) => <UserStatusTag value={u.status} /> },
               { key: 'login', header: '最後登入', render: (u) => <span className="mono">{u.lastLoginAt ? formatDateTime(u.lastLoginAt) : '—'}</span> },
             ]}
@@ -374,7 +392,7 @@ export function CustomerDetailPage() {
       )}
 
       {tab === 'contacts' && (
-        <Card bodyless title="一般聯絡人" actions={canEdit ? <button className="btn btn--sm" onClick={() => { setContact({ name: '', title: '', email: '', phone: '' }); setContactOpen(true); }}>新增聯絡人</button> : undefined}>
+        <Card bodyless title={<span className="inline">一般聯絡人 <PendingTag id={26} /></span>} actions={canEdit ? <button className="btn btn--sm" onClick={() => { setContact({ name: '', title: '', email: '', phone: '' }); setContactOpen(true); }}>新增聯絡人</button> : undefined}>
           <DataTable
             caption="一般聯絡人"
             rows={c.contacts}
@@ -386,25 +404,6 @@ export function CustomerDetailPage() {
               { key: 'phone', header: '電話', render: (x) => <span className="mono">{x.phone || '—'}</span> },
             ]}
             empty={<EmptyState title="沒有聯絡人" />}
-          />
-        </Card>
-      )}
-
-      {tab === 'subscriptions' && (
-        <Card bodyless title="訂閱">
-          <DataTable
-            caption="客戶的訂閱"
-            rows={subs.data ?? []}
-            rowKey={(x) => x.id}
-            onRowClick={(x) => navigate(`/products/gws/${x.id}`)}
-            columns={[
-              { key: 'product', header: '產品', render: (x) => x.product },
-              { key: 'plan', header: '方案', render: (x) => <span className="table__primary">{x.plan}</span> },
-              { key: 'seats', header: '人數', align: 'right', render: (x) => <span className="tnum">{x.seats}</span> },
-              { key: 'contract', header: '合約期間', render: (x) => <span className="mono">{formatDate(x.startsAt)} – {formatDate(x.expiresAt)}</span> },
-              { key: 'status', header: '狀態', render: (x) => <SubscriptionStatusTag value={x.status} /> },
-            ]}
-            empty={<EmptyState title="沒有訂閱" />}
           />
         </Card>
       )}
@@ -466,17 +465,6 @@ export function CustomerDetailPage() {
         {editForm && (
           <div className="stack">
             <div className="form-grid">
-              <FormField label="客戶屬性" required>
-                {(p) => (
-                  <select {...p} className="select" value={editForm.attribute} onChange={(e) => ef('attribute', e.target.value as CustomerEdit['attribute'])}>
-                    {Object.entries(customerAttributeLabel).map(([v, l]) => (
-                      <option key={v} value={v}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </FormField>
               <FormField label="統一編號" help="統一編號不能修改。">
                 {(p) => <input {...p} className="input mono" value={c.taxId} readOnly disabled />}
               </FormField>
@@ -486,16 +474,9 @@ export function CustomerDetailPage() {
               <FormField label="公司簡稱" help="可輸入多個別名，按 Enter 確認。">
                 {(p) => <TagInput id={p.id} values={editForm.shortNames} onChange={(v) => ef('shortNames', v)} />}
               </FormField>
-              <FormField label="聯絡電話">{(p) => <input {...p} className="input" type="tel" value={editForm.contactPhone} onChange={(e) => ef('contactPhone', e.target.value)} />}</FormField>
-              <FormField label="Email" required>{(p) => <input {...p} className="input" type="email" value={editForm.contactEmail} onChange={(e) => ef('contactEmail', e.target.value)} />}</FormField>
-              <FormField label="聯絡人" required>{(p) => <input {...p} className="input" value={editForm.contactName} onChange={(e) => ef('contactName', e.target.value)} />}</FormField>
-              <div className="checkbox-row">
-                <label className="inline" title={dealerLocked ? '名下已有客戶，不能取消' : undefined}>
-                  <input type="checkbox" checked={editForm.isDealer} disabled={dealerLocked} onChange={(e) => ef('isDealer', e.target.checked)} />
-                  是否為經銷商
-                </label>
-                {dealerLocked && <div className="form-field__help">名下已有 {c.downstreamCount} 個客戶，不能取消。</div>}
-              </div>
+              <FormField label="所屬經銷商" help="所屬經銷商不在這裡修改。">
+                {(p) => <input {...p} className="input" value={`${c.dealerName}（${c.dealerId}）`} readOnly disabled />}
+              </FormField>
             </div>
             <div>
               <h3 className="form-section__title" style={{ marginBottom: 'var(--space-3)' }}>登記地址</h3>
@@ -503,7 +484,9 @@ export function CustomerDetailPage() {
             </div>
             <div>
               <div className="inline" style={{ justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
-                <h3 className="form-section__title" style={{ margin: 0 }}>聯絡地址</h3>
+                <h3 className="form-section__title" style={{ margin: 0 }}>
+                  聯絡地址 <span className="form-field__req">必填</span>
+                </h3>
                 <label className="inline checkbox-row">
                   <input type="checkbox" checked={editForm.contactSameAsRegistered} onChange={(e) => ef('contactSameAsRegistered', e.target.checked)} />
                   同登記地址
@@ -515,6 +498,17 @@ export function CustomerDetailPage() {
                 onChange={(a) => ef('contactAddress', a)}
                 disabled={editForm.contactSameAsRegistered}
               />
+              {!addressComplete(editForm.contactSameAsRegistered ? editForm.registeredAddress : editForm.contactAddress) && (
+                <div className="form-field__msg form-field__msg--error">請填寫完整的聯絡地址（縣市、鄉鎮區、街道）</div>
+              )}
+            </div>
+            <div>
+              <h3 className="form-section__title" style={{ marginBottom: 'var(--space-3)' }}>聯絡人</h3>
+              <div className="form-grid">
+                <FormField label="聯絡人姓名" required>{(p) => <input {...p} className="input" value={editForm.contactName} onChange={(e) => ef('contactName', e.target.value)} />}</FormField>
+                <FormField label="聯絡電話">{(p) => <input {...p} className="input" type="tel" value={editForm.contactPhone} onChange={(e) => ef('contactPhone', e.target.value)} />}</FormField>
+                <FormField label="聯絡人信箱" required>{(p) => <input {...p} className="input" type="email" value={editForm.contactEmail} onChange={(e) => ef('contactEmail', e.target.value)} />}</FormField>
+              </div>
             </div>
             <FormField label="備註" help={`${editForm.note.length} / 2000`}>
               {(p) => <textarea {...p} className="textarea" maxLength={2000} value={editForm.note} onChange={(e) => ef('note', e.target.value)} />}
@@ -564,10 +558,22 @@ export function CustomerDetailPage() {
           </>
         }
       >
+        <fieldset className="plain-fieldset" style={{ marginBottom: 'var(--space-4)' }}>
+          <legend className="form-field__label">網域取得方式</legend>
+          {(['purchase', 'bind'] as DomainMode[]).map((m) => (
+            <label key={m} className="radio-row">
+              <input type="radio" name="domainMode" checked={domainMode === m} onChange={() => setDomainMode(m)} />
+              <span>
+                <strong>{domainModeLabel[m]}</strong>
+                <span className="muted">{m === 'purchase' ? '：幫客戶買一個新的網域。' : '：客戶已經有網域，直接綁定。'}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
         <FormField
           label="網域"
           required
-          help="例如 company-shop.example。和主網域一樣會檢查格式與是否重複。"
+          help={c.primaryDomain ? '例如 company-shop.example，會加到其他網域。' : '這個客戶還沒有網域，新增的網域會成為主網域。'}
           message={domainCheck && !domainCheck.ok ? domainCheck.message : domainCheck?.ok ? '可以使用' : undefined}
           state={domainCheck ? (domainCheck.ok ? 'success' : 'error') : undefined}
         >

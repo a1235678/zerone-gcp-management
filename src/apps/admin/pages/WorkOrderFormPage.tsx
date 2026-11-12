@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { analyzeOrder, getCustomers, getDealers, getPlanList, getSubscriptions, getWorkOrder, saveWorkOrder, validateWorkOrder } from '@data/api';
-import { executionModeLabel, workOrderTypeLabel } from '@data/labels';
-import type { NewCustomerDraft, WorkOrderInput, WorkOrderType } from '@data/types';
+import { domainModeLabel, executionModeLabel, workOrderTypeLabel } from '@data/labels';
+import type { DomainMode, NewCustomerDraft, WorkOrderInput, WorkOrderType } from '@data/types';
 import { StatusTag } from '@shared/components/StatusTag';
 import { ChangeTags } from '../components/OperationModal';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
@@ -52,6 +52,8 @@ export function WorkOrderFormPage() {
   const activePlans = (plans.data ?? []).filter((p) => p.productId === 'P01' && p.status === 'active');
   const subTier = activePlans.find((p) => p.name === sub?.plan)?.tier ?? 0;
   const analysis = analyzeOrder(input.type, sub, input.payload);
+  const ownedCustomer = (customers.data ?? []).find((c) => c.id === input.customerId);
+  const ownedDomains = input.customerMode === 'existing' && ownedCustomer ? [ownedCustomer.primaryDomain, ...ownedCustomer.otherDomains].filter(Boolean) : [];
   const planLabel = input.type === 'upgrade' ? '升級後的方案' : input.type === 'renewal' ? '續約方案（版本）' : '方案';
   const upgradeOnly = input.type === 'upgrade';
 
@@ -170,7 +172,7 @@ export function WorkOrderFormPage() {
                       <option value="">請選擇</option>
                       {(customers.data ?? []).map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name}（{c.primaryDomain}）
+                          {c.name}{c.primaryDomain ? `（${c.primaryDomain}）` : ''}
                         </option>
                       ))}
                     </select>
@@ -213,8 +215,8 @@ export function WorkOrderFormPage() {
                   <Callout tone="neutral">
                     {input.type === 'transfer'
                       ? '客戶轉入：客戶從其他經銷商轉進來，一定是新客戶，請填客戶主檔「轉入客戶」的欄位。核准後由後勤在「轉入客戶」建檔並建立轉入，這裡填的內容會自動帶入。'
-                      : '新客戶的資料會在核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。'}
-                    主網域現在就會檢查格式與是否重複。
+                      : '新客戶的資料會在核准後由後勤建檔，這裡填的內容會自動帶到建檔畫面。網域在下方「需求內容」填寫。'}
+                    {input.type === 'transfer' && '主網域現在就會檢查格式與是否重複。'}
                   </Callout>
                 </div>
                 <FormField label="客戶名稱" required message={show('name')} state={st('name')}>
@@ -223,9 +225,13 @@ export function WorkOrderFormPage() {
                 <FormField label="統一編號" required message={show('taxId')} state={st('taxId')}>
                   {(p) => <input {...p} className="input mono" inputMode="numeric" maxLength={8} value={nc.taxId} onChange={setNcField('taxId')} />}
                 </FormField>
-                <FormField label="主網域" required message={show('primaryDomain')} state={st('primaryDomain')} help="例如 company.example">
-                  {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={nc.primaryDomain} onChange={setNcField('primaryDomain')} />}
-                </FormField>
+                {input.type === 'transfer' ? (
+                  <FormField label="主網域" required message={show('primaryDomain')} state={st('primaryDomain')} help="客戶轉入是既有的 GWS 客戶，例如 company.example">
+                    {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={nc.primaryDomain} onChange={setNcField('primaryDomain')} />}
+                  </FormField>
+                ) : (
+                  <div />
+                )}
                 <FormField label={input.type === 'transfer' ? '轉入後的經銷商' : '經銷商'} required message={show('dealerId')} state={st('dealerId')}>
                   {(p) => (
                     <select {...p} className="select" value={input.dealerId ?? ''} onChange={(e) => setInput((x) => ({ ...x, dealerId: e.target.value || undefined }))}>
@@ -240,13 +246,13 @@ export function WorkOrderFormPage() {
                     </select>
                   )}
                 </FormField>
-                <FormField label="聯絡人" required message={show('contactName')} state={st('contactName')}>
+                <FormField label="聯絡人姓名" required message={show('contactName')} state={st('contactName')}>
                   {(p) => <input {...p} className="input" value={nc.contactName} onChange={setNcField('contactName')} />}
                 </FormField>
-                <FormField label="聯絡人 Email" required message={show('contactEmail')} state={st('contactEmail')}>
+                <FormField label="聯絡電話">{(p) => <input {...p} className="input" type="tel" value={nc.contactPhone} onChange={setNcField('contactPhone')} />}</FormField>
+                <FormField label="聯絡人信箱" required message={show('contactEmail')} state={st('contactEmail')}>
                   {(p) => <input {...p} className="input" type="email" value={nc.contactEmail} onChange={setNcField('contactEmail')} />}
                 </FormField>
-                <FormField label="電話">{(p) => <input {...p} className="input" type="tel" value={nc.contactPhone} onChange={setNcField('contactPhone')} />}</FormField>
                 <div />
               </>
             )}
@@ -255,6 +261,26 @@ export function WorkOrderFormPage() {
           <FormSection title="需求內容">
             {input.type === 'new' && (
               <>
+                <FormField label="網域取得方式" required message={show('domainMode')} state={st('domainMode')}>
+                  {(p) => (
+                    <div className="segmented" role="group" aria-labelledby={p.id}>
+                      {(['purchase', 'bind'] as DomainMode[]).map((m) => (
+                        <button key={m} type="button" aria-pressed={input.payload.domainMode === m} onClick={() => setPayload('domainMode', m)}>
+                          {domainModeLabel[m]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </FormField>
+                <FormField
+                  label="網域"
+                  required
+                  message={show('domain')}
+                  state={st('domain')}
+                  help={ownedDomains.length ? `客戶已有：${ownedDomains.join('、')}（綁定既有時可以直接填）` : '例如 company.example。訂閱成功後會寫回客戶主檔。'}
+                >
+                  {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={input.payload.domain ?? ''} onChange={(e) => setPayload('domain', e.target.value)} />}
+                </FormField>
                 <FormField label={planLabel} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
                   {(p) => (
                     <select {...p} className="select" value={input.payload.plan ?? ''} onChange={(e) => setPayload('plan', e.target.value || undefined)}>
