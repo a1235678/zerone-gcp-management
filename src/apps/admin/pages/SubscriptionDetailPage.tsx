@@ -186,7 +186,7 @@ export function SubscriptionDetailPage() {
                 ]}
               />
             </Card>
-            <Card title={<span className="inline">到期通知 <PendingTag id={18} /></span>}>
+            <Card title={"到期通知"}>
               {notice.data && live ? (
                 <div className="stack" style={{ gap: 'var(--space-2)' }}>
                   <div className="inline">
