@@ -25,6 +25,7 @@ import type {
   Customer,
   DomainMode,
   SalesAssignment,
+  ProductCode,
   Address,
   CustomerContact,
   CustomerListItem,
@@ -498,16 +499,37 @@ export function getSalesPeople(): Promise<string[]> {
   return delay(db.users.filter((u) => u.orgType === 'internal' && (u.roleId === 'R03' || u.roleId === 'R12') && u.status === 'active').map((u) => u.name));
 }
 
-/** 更新負責業務：依產品 × 新約／續約 */
+/** 整理負責業務：去掉沒選業務的列、去掉完全重複的列 */
+export function cleanSalesAssignments(list: SalesAssignment[]): SalesAssignment[] {
+  const seen = new Set<string>();
+  return list
+    .filter((a) => a.salesName && a.product)
+    .filter((a) => {
+      const k = `${a.brand}-${a.product}-${a.term}-${a.salesName}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+}
+export const salesAssignmentText = (a: SalesAssignment) => `${a.brand} ${a.product} ${a.term === 'new' ? '新約' : '續約'} ${a.salesName}`;
+
+/** 更新負責業務（條列；一個客戶可以有多位業務） */
 export function saveSalesAssignments(customerId: string, assignments: SalesAssignment[]): Promise<CustomerListItem> {
   const c = customerOf(customerId);
   if (!c) return fail('找不到客戶');
-  const clean = assignments.filter((a) => a.salesName);
-  const keys = new Set(clean.map((a) => `${a.product}-${a.term}`));
-  if (keys.size !== clean.length) return fail('同一個產品的新約或續約只能指定一位業務');
+  const clean = cleanSalesAssignments(assignments);
   c.salesAssignments = clean;
-  log('customer', c.name, `更新負責業務：${clean.map((a) => `${a.product}${a.term === 'new' ? '新約' : '續約'} ${a.salesName}`).join('、') || '無'}`, 'success', c.id);
+  log('customer', c.name, `更新負責業務：${clean.map(salesAssignmentText).join('、') || '無'}`, 'success', c.id);
   return delay(withDealer(c));
+}
+
+/** 可以選的品牌與產品（之後依品牌與產品管理） */
+export function getBrandProducts(): Promise<{ brand: string; product: ProductCode }[]> {
+  return delay(
+    db.products
+      .filter((p) => p.code === 'GWS' || p.code === 'GCP')
+      .map((p) => ({ brand: db.brands.find((b) => b.id === p.brandId)?.name ?? '', product: p.code as ProductCode })),
+  );
 }
 
 export function createCustomer(input: NewCustomerInput): Promise<CustomerListItem> {
@@ -539,10 +561,7 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
     contactSameAsRegistered: input.contactSameAsRegistered !== false,
     otherDomains: [],
     contacts: [{ name: input.contactName.trim(), title: '主要聯絡人', email: input.contactEmail.trim(), phone: input.contactPhone.trim() }],
-    salesAssignments: [
-      ...(input.salesNew ? [{ product: 'GWS' as const, term: 'new' as const, salesName: input.salesNew }] : []),
-      ...(input.salesRenewal ? [{ product: 'GWS' as const, term: 'renewal' as const, salesName: input.salesRenewal }] : []),
-    ],
+    salesAssignments: cleanSalesAssignments(input.salesAssignments ?? []),
   };
   db.customers.push(customer);
   db.users.push({
@@ -647,12 +666,11 @@ export function getSubscriptions(query: SubscriptionQuery = {}): Promise<Subscri
 }
 
 /** 上架中的 GWS 方案名稱，依等級由低到高 */
-export function getSubscription(id: string): Promise<(SubscriptionListItem & { planTier: number; salesNew?: string; salesRenewal?: string }) | undefined> {
+export function getSubscription(id: string): Promise<(SubscriptionListItem & { planTier: number; sales: SalesAssignment[] }) | undefined> {
   const s = db.subscriptions.find((x) => x.id === id);
   if (!s) return delay(undefined);
   const c = customerOf(s.customerId)!;
-  const sales = (term: 'new' | 'renewal') => c.salesAssignments.find((a) => a.product === s.product && a.term === term)?.salesName;
-  return delay({ ...subscriptionListItem(s), planTier: planTier(s.plan), salesNew: sales('new'), salesRenewal: sales('renewal') });
+  return delay({ ...subscriptionListItem(s), planTier: planTier(s.plan), sales: c.salesAssignments.filter((a) => a.product === s.product) });
 }
 
 export function getPlans(): Promise<string[]> {
@@ -1572,8 +1590,8 @@ function noticeRows(): ExpiryNoticeRow[] {
     .filter((s) => s.product === 'GWS' && s.status !== 'cancelled')
     .map((s) => {
       const c = customerOf(s.customerId)!;
-      const salesName = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'renewal')?.salesName;
-      const sales = db.users.find((u) => u.name === salesName);
+      const salesNames = c.salesAssignments.filter((a) => a.product === 'GWS' && a.term === 'renewal').map((a) => a.salesName);
+      const sales = db.users.filter((u) => salesNames.includes(u.name));
       const cancelled = Boolean(s.renewalCancelled);
       const stages = NOTICE_DAYS.map((d) => {
         const date = addDays(s.expiresAt, -d);
@@ -1591,7 +1609,7 @@ function noticeRows(): ExpiryNoticeRow[] {
         expiresAt: s.expiresAt,
         renewalCancelled: cancelled,
         stages,
-        recipients: [...(sales ? [{ name: sales.name, email: sales.email, role: '續約業務' }] : []), { ...OPS_NOTICE, role: '後勤' }],
+        recipients: [...sales.map((u) => ({ name: u.name, email: u.email, role: '續約業務' })), { ...OPS_NOTICE, role: '後勤' }],
       };
     })
     .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));

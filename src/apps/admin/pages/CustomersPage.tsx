@@ -53,17 +53,19 @@ const columns: Column<CustomerListItem>[] = [
   },
   {
     key: 'sales',
-    header: '負責業務（GWS）',
-    render: (c) => {
-      const n = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'new')?.salesName;
-      const r = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'renewal')?.salesName;
-      return (
+    header: '負責業務',
+    render: (c) =>
+      c.salesAssignments.length ? (
         <div>
-          <div>新約 {n ?? '—'}</div>
-          <div className="table__secondary">續約 {r ?? '—'}</div>
+          {c.salesAssignments.map((a) => (
+            <div key={`${a.product}-${a.term}-${a.salesName}`}>
+              {a.salesName} <span className="table__secondary">{a.product} {a.term === 'new' ? '新約' : '續約'}</span>
+            </div>
+          ))}
         </div>
-      );
-    },
+      ) : (
+        <span className="muted">—</span>
+      ),
   },
   { key: 'createdAt', header: '建立日期', render: (c) => <span className="mono">{formatDate(c.createdAt)}</span> },
   {

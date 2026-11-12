@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addressComplete, addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, getSalesPeople, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
+import { addressComplete, addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, checkDomain, getAuditLogs, getCustomer, getOperations, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { Tabs } from '@shared/components/Tabs';
 import { domainModeLabel, workOrderTypeLabel } from '@data/labels';
-import type { CustomerContact, DomainMode } from '@data/types';
+import type { CustomerContact, DomainMode, SalesAssignment } from '@data/types';
+import { SalesAssignmentEditor, SalesAssignmentTable } from '../components/SalesAssignments';
 import { Callout, FormField } from '@shared/components/Form';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Icon } from '@shared/components/Icon';
@@ -51,8 +52,7 @@ export function CustomerDetailPage() {
   const [domainInput, setDomainInput] = useState('');
   const [domainMode, setDomainMode] = useState<DomainMode>('bind');
   const [salesOpen, setSalesOpen] = useState(false);
-  const [salesForm, setSalesForm] = useState<Record<string, string>>({});
-  const salesPeople = useAsync(getSalesPeople);
+  const [salesForm, setSalesForm] = useState<SalesAssignment[]>([]);
   const [statusOpen, setStatusOpen] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -70,18 +70,12 @@ export function CustomerDetailPage() {
 
   const canEdit = can('customers', 'write');
   const openSales = () => {
-    setSalesForm(Object.fromEntries(c.salesAssignments.map((a) => [`${a.product}-${a.term}`, a.salesName])));
+    setSalesForm(c.salesAssignments.map((x) => ({ ...x })));
     setSalesOpen(true);
   };
   const saveSales = async () => {
     try {
-      await saveSalesAssignments(
-        c.id,
-        Object.entries(salesForm).map(([k, salesName]) => {
-          const [product, term] = k.split('-') as ['GWS' | 'GCP', 'new' | 'renewal'];
-          return { product, term, salesName };
-        }),
-      );
+      await saveSalesAssignments(c.id, salesForm);
       toast('已更新負責業務');
       setSalesOpen(false);
       reload();
@@ -235,34 +229,9 @@ export function CustomerDetailPage() {
 
           <div className="stack">
             <Card title="負責業務" actions={canEdit ? <button className="btn btn--sm" onClick={openSales}>編輯</button> : undefined} bodyless>
-              <div className="table-scroll">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>品牌</th>
-                      <th>產品</th>
-                      <th>新約</th>
-                      <th>續約</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(['GWS', 'GCP'] as const).map((prod) => (
-                      <tr key={prod}>
-                        <td>Google</td>
-                        <td>
-                          {prod}
-                          {prod === 'GCP' && <div className="table__secondary">第一階段不納入</div>}
-                        </td>
-                        {(['new', 'renewal'] as const).map((term) => (
-                          <td key={term}>{c.salesAssignments.find((a) => a.product === prod && a.term === term)?.salesName ?? <span className="muted">未指定</span>}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <SalesAssignmentTable rows={c.salesAssignments} />
               <p className="muted card__body" style={{ fontSize: 'var(--text-sm)', margin: 0, paddingTop: 'var(--space-3)' }}>
-                GWS 到期通知會寄給「續約」的負責業務和後勤。
+                GWS 到期通知會寄給所有「GWS 續約」的業務和後勤。
               </p>
             </Card>
 
@@ -584,7 +553,7 @@ export function CustomerDetailPage() {
         open={salesOpen}
         onClose={() => setSalesOpen(false)}
         title="編輯負責業務"
-        width={520}
+        width={720}
         footer={
           <>
             <button className="btn" onClick={() => setSalesOpen(false)}>
@@ -596,26 +565,7 @@ export function CustomerDetailPage() {
           </>
         }
       >
-        <p className="muted" style={{ marginTop: 0 }}>同一個客戶可以依產品、新約或續約指定不同業務。</p>
-        <div className="form-grid">
-          {(['GWS', 'GCP'] as const).flatMap((prod) =>
-            (['new', 'renewal'] as const).map((term) => {
-              const k = `${prod}-${term}`;
-              return (
-                <FormField key={k} label={`${prod} ${term === 'new' ? '新約' : '續約'}`}>
-                  {(p) => (
-                    <select {...p} className="select" value={salesForm[k] ?? ''} onChange={(e) => setSalesForm({ ...salesForm, [k]: e.target.value })}>
-                      <option value="">未指定</option>
-                      {(salesPeople.data ?? []).map((n) => (
-                        <option key={n}>{n}</option>
-                      ))}
-                    </select>
-                  )}
-                </FormField>
-              );
-            }),
-          )}
-        </div>
+        <SalesAssignmentEditor value={salesForm} onChange={setSalesForm} />
       </Modal>
 
       <Modal

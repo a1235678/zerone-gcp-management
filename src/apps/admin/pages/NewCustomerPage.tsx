@@ -5,7 +5,6 @@ import {
   createCustomer,
   createTransferInCustomer,
   getDealers,
-  getSalesPeople,
   emptyAddress,
   lookupTaxId,
   getWorkOrder,
@@ -18,7 +17,8 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useToast } from '@shared/components/Toast';
 import { useAsync } from '@shared/hooks/useAsync';
-import type { Address } from '@data/types';
+import type { Address, SalesAssignment } from '@data/types';
+import { SalesAssignmentEditor } from '../components/SalesAssignments';
 import { addressComplete } from '@data/api';
 import { AddressFields, TagInput } from '../components/CustomerFields';
 import { usePermission } from '../auth';
@@ -37,8 +37,6 @@ const empty = {
   adminName: '',
   adminEmail: '',
   transferMemo: '',
-  salesNew: '',
-  salesRenewal: '',
 };
 type Key = keyof typeof empty;
 
@@ -53,7 +51,6 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
   const navigate = useNavigate();
   const toast = useToast();
   const dealers = useAsync(getDealers);
-  const salesPeople = useAsync(getSalesPeople);
   const [params] = useSearchParams();
   const fromWo = params.get('fromWo');
   const wo = useAsync(() => (fromWo ? getWorkOrder(fromWo) : Promise.resolve(undefined)), [fromWo]);
@@ -79,6 +76,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     setPrefilled(true);
   }, [wo.data, prefilled]);
   const [shortNames, setShortNames] = useState<string[]>([]);
+  const [sales, setSales] = useState<SalesAssignment[]>([]);
   const [regAddr, setRegAddr] = useState<Address>(emptyAddress());
   const [conAddr, setConAddr] = useState<Address>(emptyAddress());
   const [sameAddr, setSameAddr] = useState(true);
@@ -144,11 +142,11 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     setSaving(true);
     try {
       if (isTransfer) {
-        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, shortNames, registeredAddress: regAddr, contactAddress: sameAddr ? regAddr : conAddr, contactSameAsRegistered: sameAddr, memo: form.transferMemo, workOrderId: fromWo ?? undefined });
+        const { customer, operation } = await createTransferInCustomer({ ...form, ...admin, shortNames, salesAssignments: sales, registeredAddress: regAddr, contactAddress: sameAddr ? regAddr : conAddr, contactSameAsRegistered: sameAddr, memo: form.transferMemo, workOrderId: fromWo ?? undefined });
         toast(`已建立「${customer.name}」，客戶轉入（${operation.id}）待後勤人工執行`);
         navigate(fromWo ? `/work-orders/${fromWo}` : `/customers/${customer.id}`);
       } else {
-        const c = await createCustomer({ ...form, primaryDomain: undefined, ...admin, shortNames, registeredAddress: regAddr, contactAddress: sameAddr ? regAddr : conAddr, contactSameAsRegistered: sameAddr });
+        const c = await createCustomer({ ...form, primaryDomain: undefined, ...admin, shortNames, salesAssignments: sales, registeredAddress: regAddr, contactAddress: sameAddr ? regAddr : conAddr, contactSameAsRegistered: sameAddr });
         if (fromWo) {
           await linkCustomerToWorkOrder(fromWo, c.id);
           toast(`已建立客戶「${c.name}」，回到執行單 ${fromWo} 繼續處理`);
@@ -365,19 +363,10 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             </FormField>
           </FormSection>
 
-          <FormSection title="負責業務" description="依產品、新約或續約指定，同一個客戶可以是不同業務。建立後可以在客戶詳情修改，也可以指定 GCP 的業務。">
-            {(['salesNew', 'salesRenewal'] as const).map((k) => (
-              <FormField key={k} label={k === 'salesNew' ? 'GWS 新約業務' : 'GWS 續約業務'} help={k === 'salesRenewal' ? 'GWS 到期通知會寄給續約業務。' : undefined}>
-                {(p) => (
-                  <select {...p} className="select" value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}>
-                    <option value="">未指定</option>
-                    {(salesPeople.data ?? []).map((n) => (
-                      <option key={n}>{n}</option>
-                    ))}
-                  </select>
-                )}
-              </FormField>
-            ))}
+          <FormSection title="負責業務" description="一列一位業務，只列有設定的；一個客戶可以有多位業務。建立後也可以在客戶詳情修改。">
+            <div className="is-full">
+              <SalesAssignmentEditor value={sales} onChange={setSales} />
+            </div>
           </FormSection>
 
           {isTransfer && (

@@ -96,11 +96,11 @@ export const customers: Customer[] = base.map((c, i) => {
   const newSales = SALES.includes(c.createdBy) ? c.createdBy : '李冠霖';
   const renewalSales = SALES[i % 2];
   const assignments: Customer['salesAssignments'] = [
-    { product: 'GWS', term: 'new', salesName: newSales },
-    { product: 'GWS', term: 'renewal', salesName: renewalSales },
+    { brand: 'Google', product: 'GWS', term: 'new', salesName: newSales },
+    { brand: 'Google', product: 'GWS', term: 'renewal', salesName: renewalSales },
   ];
-  if (gcpCustomers.has(c.id)) {
-    assignments.push({ product: 'GCP', term: 'new', salesName: '黃柏翰' }, { product: 'GCP', term: 'renewal', salesName: '黃柏翰' });
-  }
+  if (gcpCustomers.has(c.id)) assignments.push({ brand: 'Google', product: 'GCP', term: 'new', salesName: '黃柏翰' });
+  // 示意一個客戶對多位業務：和光醫療器材的 GWS 續約由兩位業務一起負責
+  if (c.id === 'C0011') assignments.push({ brand: 'Google', product: 'GWS', term: 'renewal', salesName: '蔡明峰' });
   return { ...c, otherDomains: otherDomains[c.id] ?? [], salesAssignments: assignments };
 });

@@ -213,13 +213,18 @@ export function SubscriptionDetailPage() {
 
           <div className="stack">
             <Card title="負責業務">
-              <DescriptionList
-                columns={1}
-                items={[
-                  { label: '新約', value: s.salesNew ?? <span className="muted">未指定</span> },
-                  { label: '續約', value: s.salesRenewal ?? <span className="text-warning">未指定，到期通知只會寄給後勤</span> },
-                ]}
-              />
+              {s.sales.length ? (
+                <ul className="bill-list" style={{ margin: 0 }}>
+                  {s.sales.map((a) => (
+                    <li key={`${a.term}-${a.salesName}`}>
+                      {a.salesName} <span className="muted">（{a.term === 'new' ? '新約' : '續約'}）</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">這個客戶的 {s.product} 還沒指定業務。</p>
+              )}
+              {!s.sales.some((a) => a.term === 'renewal') && <p className="text-warning" style={{ fontSize: 'var(--text-sm)' }}>沒有續約業務，到期通知只會寄給後勤。</p>}
             </Card>
             <Card title={"到期通知"}>
               {notice.data && live ? (

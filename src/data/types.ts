@@ -54,7 +54,9 @@ export interface CustomerContact {
   phone: string;
 }
 /** 負責業務：依「產品／新約或續約」指定，同一客戶可以不同（2026/11/10 會議） */
+/** 一筆負責業務：一個客戶可以有多筆（多位業務），只列有設定的 */
 export interface SalesAssignment {
+  brand: string;
   product: ProductCode;
   term: 'new' | 'renewal';
   salesName: string;
@@ -112,9 +114,8 @@ export interface NewCustomerInput {
   registeredAddress?: Address;
   contactAddress?: Address;
   contactSameAsRegistered?: boolean;
-  /** GWS 新約、續約的負責業務 */
-  salesNew?: string;
-  salesRenewal?: string;
+  /** 負責業務（條列：品牌、產品、新約／續約、業務） */
+  salesAssignments?: SalesAssignment[];
 }
 export type DomainCheck =
   | { ok: true }
