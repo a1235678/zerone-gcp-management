@@ -1941,3 +1941,52 @@ button.topbar__user:hover {
   gap: var(--space-3);
   flex-wrap: wrap;
 }
+.combobox {
+  position: relative;
+}
+.combobox__list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+.combobox__option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.combobox__option.is-active {
+  background: var(--color-surface-hover);
+}
+.combobox__option.is-selected {
+  color: var(--color-accent-text);
+  font-weight: var(--weight-medium);
+}
+.combobox__hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+.combobox__empty {
+  padding: var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+/* 對話框內不浮在上層，直接把清單展開在輸入框下方，避免被對話框的捲動範圍切掉 */
+.modal .combobox__list {
+  position: static;
+  margin-top: var(--space-1);
+  box-shadow: none;
+}

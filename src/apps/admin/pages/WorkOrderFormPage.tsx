@@ -4,6 +4,7 @@ import { analyzeOrder, getCustomers, getDealers, getPlanList, getSubscriptions, 
 import { domainModeLabel, executionModeLabel, workOrderTypeLabel } from '@data/labels';
 import type { DomainMode, NewCustomerDraft, WorkOrderInput, WorkOrderType } from '@data/types';
 import { StatusTag } from '@shared/components/StatusTag';
+import { Combobox } from '@shared/components/Combobox';
 import { ChangeTags } from '../components/OperationModal';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
@@ -163,19 +164,19 @@ export function WorkOrderFormPage() {
               <>
                 <FormField label="選擇客戶" required message={show('customerId')} state={st('customerId')}>
                   {(p) => (
-                    <select
+                    <Combobox
                       {...p}
-                      className="select"
                       value={input.customerId ?? ''}
-                      onChange={(e) => setInput((x) => ({ ...x, customerId: e.target.value || undefined, subscriptionId: undefined }))}
-                    >
-                      <option value="">請選擇</option>
-                      {(customers.data ?? []).map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}{c.primaryDomain ? `（${c.primaryDomain}）` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => setInput((x) => ({ ...x, customerId: v || undefined, subscriptionId: undefined }))}
+                      placeholder="輸入客戶名稱、網域或統編搜尋"
+                      emptyText="找不到符合的客戶"
+                      options={(customers.data ?? []).map((c) => ({
+                value: c.id,
+                label: c.name,
+                hint: [c.primaryDomain, `統編 ${c.taxId}`, c.dealerName].filter(Boolean).join(' · '),
+                keywords: [...c.shortNames, c.taxId, ...c.otherDomains],
+              }))}
+                    />
                   )}
                 </FormField>
                 {needsSubscription(input.type) ? (

@@ -15,6 +15,7 @@ import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
 import { Modal } from '@shared/components/Modal';
+import { Combobox } from '@shared/components/Combobox';
 import { FormField } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { OperationStatusTag } from '../tags';
@@ -204,7 +205,7 @@ export function GwsSubscriptionsPage() {
       <Card bodyless>
         <FilterBar onReset={hasFilter ? () => setParams({}, { replace: true }) : undefined}>
           <SearchField label="關鍵字" value={keyword} onChange={(v) => setParam('q', v)} placeholder="客戶、網域或方案" />
-          <SelectField label="經銷商" value={dealerId} onChange={(v) => setParam('dealer', v)} options={(dealers.data ?? []).map((d) => ({ value: d.id, label: d.name }))} />
+          <SelectField label="經銷商" value={dealerId} onChange={(v) => setParam('dealer', v)} options={(dealers.data ?? []).map((d) => ({ value: d.id, label: d.shortNames[0] ?? d.name }))} />
           <SelectField label="方案" value={plan} onChange={(v) => setParam('plan', v)} options={(plans.data ?? []).map((p) => ({ value: p, label: p }))} />
           <SelectField
             label="狀態"
@@ -270,14 +271,19 @@ export function GwsSubscriptionsPage() {
       >
         <FormField label="客戶" required help="還沒建檔的客戶，請先到「客戶管理」新增。從其他經銷商轉入的客戶，請到客戶管理用「轉入客戶」。">
           {(p) => (
-            <select {...p} className="select" value={pickId} onChange={(e) => setPickId(e.target.value)}>
-              <option value="">請選擇</option>
-              {(customers.data ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.primaryDomain ? `（${c.primaryDomain}）` : ''}
-                </option>
-              ))}
-            </select>
+            <Combobox
+              {...p}
+              value={pickId}
+              onChange={setPickId}
+              placeholder="輸入客戶名稱、網域或統編搜尋"
+              emptyText="找不到符合的客戶"
+              options={(customers.data ?? []).map((c) => ({
+                value: c.id,
+                label: c.name,
+                hint: [c.primaryDomain, `統編 ${c.taxId}`, c.dealerName].filter(Boolean).join(' · '),
+                keywords: [...c.shortNames, c.taxId, ...c.otherDomains],
+              }))}
+            />
           )}
         </FormField>
       </Modal>

@@ -126,7 +126,7 @@ export function WorkOrdersPage() {
             label="經銷商"
             value={dealerId}
             onChange={(v) => setParam('dealer', v)}
-            options={(dealers.data ?? []).map((d) => ({ value: d.id, label: d.name }))}
+            options={(dealers.data ?? []).map((d) => ({ value: d.id, label: d.shortNames[0] ?? d.name }))}
           />
         </FilterBar>
         <div className="result-meta">
