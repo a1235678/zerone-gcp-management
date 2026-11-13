@@ -466,7 +466,7 @@ function BillsTab({
               onChange={(v) => setParam("dealer", v)}
               options={(dealers.data ?? []).map((d) => ({
                 value: d.id,
-                label: d.name,
+                label: d.shortNames[0] ?? d.name,
               }))}
             />
             <SelectField

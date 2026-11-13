@@ -11,6 +11,7 @@ import { BrandsPage, PlansPage, ProductsPage } from './pages/CatalogPages';
 import { CustomerDetailPage } from './pages/CustomerDetailPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { DealersPage } from './pages/DealersPage';
+import { DealerDetailPage, NewDealerPage } from './pages/DealerPages';
 import { ExpiryNoticePage } from './pages/ExpiryNoticePage';
 import { GcpBillDetailPage } from './pages/GcpBillDetailPage';
 import { GcpBillingPage } from './pages/GcpBillingPage';
@@ -76,6 +77,8 @@ function Protected() {
             <Route path="/customers/transfer-in" element={<NewCustomerPage key="transfer" mode="transfer" />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/dealers" element={<DealersPage />} />
+            <Route path="/dealers/new" element={<NewDealerPage />} />
+            <Route path="/dealers/:id" element={<DealerDetailPage />} />
             <Route path="/work-orders" element={<WorkOrdersPage />} />
             <Route path="/work-orders/new" element={<WorkOrderFormPage key="new" />} />
             <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />

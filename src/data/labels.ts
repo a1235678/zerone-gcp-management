@@ -8,7 +8,6 @@ import type {
   OrgType,
   PermissionLevel,
   ResourceKey,
-  CustomerAttribute,
   ExecutionMode,
   TransferSource,
   BillDisplayStatus,
@@ -80,7 +79,7 @@ export const scheduleStatusLabel: Record<ScheduleStatus, string> = {
 };
 
 export const userStatusLabel: Record<UserStatus, string> = { active: '啟用', disabled: '停用', invited: '已邀請' };
-export const permissionLabel: Record<PermissionLevel, string> = { none: '禁止', read: '唯讀', write: '可編輯' };
+export const permissionLabel: Record<PermissionLevel, string> = { none: '禁止', read: '唯讀', write: '可編輯', create: '可新增與編輯' };
 export const resourceLabel: Record<ResourceKey, string> = {
   customers: '客戶',
   dealers: '經銷商',
@@ -109,7 +108,6 @@ export const logCategoryLabel: Record<LogCategory, string> = {
 };
 export const logResultLabel: Record<LogResult, string> = { success: '成功', failure: '失敗', warning: '警示' };
 
-export const customerAttributeLabel: Record<CustomerAttribute, string> = { enterprise: '一般企業', government: '政府機關', school: '學校', nonprofit: '非營利組織' };
 export const billStatusLabel: Record<BillDisplayStatus, string> = { pending: '待確認', billed: '已出帳', overdue: '逾期', paid: '已收款' };
 export const reconcileStateLabel: Record<ReconcileState, string> = { match: '一致', mismatch: '有差異', resolved: '已處理', noInvoice: '尚無 Google 帳單' };
 export const reconcileHowLabel: Record<ReconcileHow, string> = { adoptGoogle: '採用 Google 金額', keepOurs: '維持我方金額' };

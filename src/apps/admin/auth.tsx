@@ -36,9 +36,12 @@ export const useAuth = () => useContext(AuthContext);
  */
 export function usePermission() {
   useAuth();
-  const can = (resource: ResourceKey, level: 'read' | 'write' = 'read') => {
+  /** read：唯讀以上；write：可編輯以上（修改既有資料）；create：可新增（新增資料，也包含可編輯） */
+  const can = (resource: ResourceKey, level: 'read' | 'write' | 'create' = 'read') => {
     const p = getSession()?.permissions[resource] ?? 'none';
-    return level === 'read' ? p !== 'none' : p === 'write';
+    if (level === 'read') return p !== 'none';
+    if (level === 'write') return p === 'write' || p === 'create';
+    return p === 'create';
   };
   const canApprove = (status: WorkOrderStatus) => {
     const r = APPROVER_ROLE[status];

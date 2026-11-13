@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   TODAY,
   analyzeOrder,
+  checkDomain,
+  getCustomer,
   cancelSchedule,
   createOperation,
   getOperations,
@@ -29,6 +31,8 @@ export interface OperationTarget {
   seats?: number | null;
   startsAt?: string;
   expiresAt?: string;
+  /** 已取消續約（合約到期後不續約） */
+  renewalCancelled?: boolean;
 }
 
 const intOrUndef = (v: string) => (v === '' ? undefined : Number(v));
@@ -79,6 +83,11 @@ export function OperationModal({
     .filter((o) => o.subscriptionId === target.subscriptionId && ['scheduled', 'submitted', 'manual'].includes(o.status))
     .reduce((n, o) => n + (o.payload.addSeats ?? 0), 0);
   const [plan, setPlan] = useState('');
+  // 新訂的網域：選客戶已有的網域，或輸入網域
+  const cust = useAsync(() => (type === 'new' ? getCustomer(target.customerId) : Promise.resolve(undefined)), [type, target.customerId]);
+  const ownedDomains = cust.data ? [cust.data.primaryDomain, ...cust.data.otherDomains].filter(Boolean) : [];
+  const [domainPick, setDomainPick] = useState('');
+  const [newDomain, setNewDomain] = useState('');
   const [seats, setSeats] = useState('');
   const [addSeats, setAddSeats] = useState('');
   const [renewMonths, setRenewMonths] = useState('12');
@@ -91,6 +100,8 @@ export function OperationModal({
   useEffect(() => {
     if (!open) return;
     setPlan(initial?.plan ?? (type === 'renewal' ? target.plan ?? '' : ''));
+    setDomainPick('');
+    setNewDomain(initial?.domain ?? '');
     setSeats(initial?.seats ? String(initial.seats) : type === 'renewal' && target.seats ? String(target.seats + pendingAdd) : '');
     setAddSeats(initial?.addSeats ? String(initial.addSeats) : '');
     setRenewMonths(String(initial?.renewMonths ?? 12));
@@ -119,8 +130,12 @@ export function OperationModal({
   const date = type === 'renewal' ? analysis.defaultDate! : scheduledAt || analysis.defaultDate || TODAY;
   const maxDate = type === 'addSeats' || type === 'upgrade' ? target.expiresAt : undefined;
 
+  const usingOwned = domainPick !== '';
+  const chosenDomain = usingOwned ? domainPick : newDomain.trim();
+  const domainCheckResult = type === 'new' && !usingOwned ? checkDomain(newDomain) : undefined;
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
+    if (type === 'new' && !usingOwned && domainCheckResult && !domainCheckResult.ok) e.domain = domainCheckResult.message;
     if (type === 'new' || type === 'renewal' || type === 'upgrade') if (!plan) e.plan = type === 'upgrade' ? '請選擇升級後的方案' : '請選擇方案';
     if (type === 'new' || type === 'renewal') {
       const n = Number(seats);
@@ -142,7 +157,7 @@ export function OperationModal({
       if (!source) e.source = '請選擇轉入來源';
     }
     return e;
-  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution]);
+  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain]);
   const show = (k: string) => (tried ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
@@ -152,7 +167,7 @@ export function OperationModal({
     setTried(true);
     if (Object.keys(errors).length) return;
     const p: OperationPayload = { memo: memo.trim() || undefined };
-    if (type === 'new') Object.assign(p, { plan, seats: Number(seats) });
+    if (type === 'new') Object.assign(p, { plan, seats: Number(seats), domain: chosenDomain });
     if (type === 'renewal') Object.assign(p, { plan, seats: Number(seats), renewMonths: Number(renewMonths) });
     if (type === 'addSeats') p.addSeats = Number(addSeats);
     if (type === 'upgrade') Object.assign(p, { plan }, Number(addSeats) > 0 ? { addSeats: Number(addSeats) } : {});
@@ -231,11 +246,45 @@ export function OperationModal({
         </Callout>
 
         {type === 'new' && (
+          <div className="stack" style={{ gap: 'var(--space-3)' }}>
+            <fieldset className="plain-fieldset">
+              <legend className="form-field__label">
+                網域 <span className="form-field__req">必填</span>
+              </legend>
+              {ownedDomains.map((d) => (
+                <label key={d} className="radio-row">
+                  <input type="radio" name="domainPick" checked={domainPick === d} onChange={() => setDomainPick(d)} />
+                  <span>
+                    <span className="mono">{d}</span>
+                    <span className="muted">：客戶已有的網域{cust.data?.gwsDomains.includes(d) ? '（已開通 GWS）' : '（尚未開通 GWS）'}</span>
+                  </span>
+                </label>
+              ))}
+              <label className="radio-row">
+                <input type="radio" name="domainPick" checked={domainPick === ''} onChange={() => setDomainPick('')} />
+                <span>
+                  <strong>輸入網域</strong>
+                  <span className="muted">：客戶要用在 GWS 的網域</span>
+                </span>
+              </label>
+            </fieldset>
+            {domainPick === '' && (
+              <FormField
+                label="網域名稱"
+                required
+                message={show('domain') ?? (newDomain && domainCheckResult?.ok ? '可以使用' : undefined)}
+                state={show('domain') ? 'error' : newDomain && domainCheckResult?.ok ? 'success' : undefined}
+                help="訂閱成功後會寫回客戶主檔；客戶還沒有主網域時會成為主網域。"
+              >
+                {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" placeholder="company.example" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} />}
+              </FormField>
+            )}
           <div className="form-grid">
             {planSelect('方案')}
             <FormField label="人數" required message={show('seats')} state={st('seats')}>
               {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
             </FormField>
+          </div>
           </div>
         )}
 
@@ -271,6 +320,12 @@ export function OperationModal({
               續約不提供取消；要停止續約請不要建立，或取消已建立的排程。
             </p>
           </>
+        )}
+
+        {(type === 'addSeats' || type === 'upgrade') && target.renewalCancelled && (
+          <Callout tone="warning" title="這筆訂閱已取消續約">
+            客戶合約到 {formatDate(target.expiresAt ?? '')} 結束後不再續約。{type === 'addSeats' ? '加購' : '升版'}只到合約結束日，請先和客戶確認仍要{type === 'addSeats' ? '加購' : '升版'}。
+          </Callout>
         )}
 
         {type === 'addSeats' && (

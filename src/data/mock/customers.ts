@@ -1,5 +1,6 @@
 import type { Address, Customer } from '../types';
 import { TW_DISTRICTS } from './twAddress';
+import { subscriptions } from './subscriptions';
 
 // 名稱、統編、聯絡人皆為虛構；網域一律 .example
 const base: Customer[] = [
@@ -30,8 +31,6 @@ const base: Customer[] = [
   c('C0025', '一葉茶堂', '90010025', 'oneleaf-tea.example', 'D000', '林冠宇', '049-2900-1025', '林怡君', '2026-06-19'),
   c('C0026', '新創合作社', '90010026', 'coop-lab.example', 'D003', '施怡安', '02-2706-1026', '黃柏翰', '2026-09-08', 'active', '新客戶', 'pending'),
   c('C0027', '曉風出版社', '90010027', 'xiaofeng-press.example', 'D003', '馮靜宜', '02-2368-1027', '黃柏翰', '2026-10-19', 'active', '等客戶在 Google 申請轉移'),
-  // 經銷商本身也是零壹的客戶（自己公司用的 GWS）：名下已有客戶，所以不能取消「是否為經銷商」
-  { ...c('C0028', '北辰資訊股份有限公司', '90010028', 'beichen-info.example', 'D000', '周文彬', '02-2655-1028', '林怡君', '2024-02-15', 'active', '經銷商本身的帳號'), isDealer: true, dealerOrgId: 'D001' },
 ];
 
 function c(
@@ -62,13 +61,12 @@ function c(
     note,
     status,
     domainVerification,
-    attribute: /基金會|協會/.test(name) ? 'nonprofit' : 'enterprise',
     shortNames: /(股份)?有限公司$/.test(name) ? [name.replace(/(股份)?有限公司$/, '')] : [],
-    isDealer: false,
     registeredAddress: addressOf(contactPhone, Number(id.slice(1))),
     contactAddress: addressOf(contactPhone, Number(id.slice(1))),
     contactSameAsRegistered: true,
     otherDomains: [],
+    gwsDomains: [],
     salesAssignments: [],
     contacts: [{ name: contactName, title: '主要聯絡人', email: `admin@${primaryDomain}`, phone: contactPhone }],
   };
@@ -100,11 +98,13 @@ export const customers: Customer[] = base.map((c, i) => {
   const newSales = SALES.includes(c.createdBy) ? c.createdBy : '李冠霖';
   const renewalSales = SALES[i % 2];
   const assignments: Customer['salesAssignments'] = [
-    { product: 'GWS', term: 'new', salesName: newSales },
-    { product: 'GWS', term: 'renewal', salesName: renewalSales },
+    { brand: 'Google', product: 'GWS', term: 'new', salesName: newSales },
+    { brand: 'Google', product: 'GWS', term: 'renewal', salesName: renewalSales },
   ];
-  if (gcpCustomers.has(c.id)) {
-    assignments.push({ product: 'GCP', term: 'new', salesName: '黃柏翰' }, { product: 'GCP', term: 'renewal', salesName: '黃柏翰' });
-  }
-  return { ...c, otherDomains: otherDomains[c.id] ?? [], salesAssignments: assignments };
+  if (gcpCustomers.has(c.id)) assignments.push({ brand: 'Google', product: 'GCP', term: 'new', salesName: '黃柏翰' });
+  // 示意一個客戶對多位業務：和光醫療器材的 GWS 續約由兩位業務一起負責
+  if (c.id === 'C0011') assignments.push({ brand: 'Google', product: 'GWS', term: 'renewal', salesName: '蔡明峰' });
+  // 有 GWS 訂閱的客戶，主網域就是已開通 GWS 的網域；其他網域先當作尚未開通
+  const hasGws = subscriptions.some((s) => s.customerId === c.id && s.product === 'GWS');
+  return { ...c, otherDomains: otherDomains[c.id] ?? [], gwsDomains: hasGws ? [c.primaryDomain] : [], salesAssignments: assignments };
 });

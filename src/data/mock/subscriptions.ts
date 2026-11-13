@@ -46,6 +46,15 @@ export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, s
   lastSyncedAt: lastSyncedAt ?? '2026-11-05 06:00',
 }));
 
+/**
+ * GWS 訂閱主檔裡、還沒掛到任何客戶的網域（從 Google 同步回來，例如客戶先前自己向 Google 購買）。
+ * 客戶主檔「綁定已開通 GWS 的網域」時，網域必須在 GWS 訂閱主檔裡。
+ */
+export const unlinkedGwsDomains = ['hefeng-shop.example', 'galaxy-esports.example', 'oneleaf-cafe.example'];
+
+// 示意：客戶表示合約到期後不再續約
+subscriptions.find((s) => s.id === 'S014')!.renewalCancelled = { at: '2026-11-03 15:20', by: '李冠霖', note: '客戶改用其他方案，到期後不續約' };
+
 /** 假資料的合約都是一年：迄日往前推一年再加一天 */
 function contractStart(expiresAt: string) {
   const d = new Date(`${expiresAt}T00:00:00Z`);

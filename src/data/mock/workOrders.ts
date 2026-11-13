@@ -60,7 +60,7 @@ function wo(
 const newClinic: NewCustomerDraft = {
   name: '青松診所',
   taxId: '90010031',
-  primaryDomain: 'qingsong-clinic.example',
+  primaryDomain: '',
   contactName: '駱婉君',
   contactEmail: 'admin@qingsong-clinic.example',
   contactPhone: '02-2758-1031',
@@ -70,7 +70,7 @@ const newClinic: NewCustomerDraft = {
 const newFarm: NewCustomerDraft = {
   name: '霧峰農創',
   taxId: '90010032',
-  primaryDomain: 'wufeng-agri.example',
+  primaryDomain: '',
   contactName: '林郁婷',
   contactEmail: 'admin@wufeng-agri.example',
   contactPhone: '04-2330-1032',
@@ -80,7 +80,7 @@ const newFarm: NewCustomerDraft = {
 export const workOrders: WorkOrder[] = [
   wo('WO-1105-002', 'renewal', { customerId: 'C0019' }, 'D001', 'S020', { plan: 'Business Plus', seats: 16, renewMonths: 12, memo: '客戶要升級到 Business Plus' }, '李冠霖', '2026-11-05 09:40', [['2026-11-05 09:44', 'salesReview']]),
   wo('WO-1105-001', 'addSeats', { customerId: 'C0016' }, 'D002', 'S017', { addSeats: 6, memo: '新進人員 6 名' }, '黃柏翰', '2026-11-05 09:12', []),
-  wo('WO-1104-001', 'new', { newCustomer: newClinic }, 'D000', undefined, { plan: 'Business Starter', seats: 10 }, '黃柏翰', '2026-11-04 15:10', [
+  wo('WO-1104-001', 'new', { newCustomer: newClinic }, 'D000', undefined, { domain: 'qingsong-clinic.example', plan: 'Business Starter', seats: 10 }, '黃柏翰', '2026-11-04 15:10', [
     ['2026-11-04 15:12', 'salesReview'],
     ['2026-11-04 16:30', 'techReview'],
     ['2026-11-05 09:05', 'approved'],
@@ -91,7 +91,7 @@ export const workOrders: WorkOrder[] = [
     ['2026-11-05 09:00', 'approved'],
     ['2026-11-05 10:15', 'processing'],
   ], { operationId: 'OP-1105-001' }),
-  wo('WO-1103-003', 'new', { newCustomer: newFarm }, 'D003', undefined, { plan: 'Business Standard', seats: 12 }, '李冠霖', '2026-11-03 16:20', [
+  wo('WO-1103-003', 'new', { newCustomer: newFarm }, 'D003', undefined, { domain: 'wufeng-agri.example', plan: 'Business Standard', seats: 12 }, '李冠霖', '2026-11-03 16:20', [
     ['2026-11-03 16:31', 'salesReview'],
     ['2026-11-04 11:00', 'techReview'],
   ]),

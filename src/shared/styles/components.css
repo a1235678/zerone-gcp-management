@@ -925,6 +925,8 @@
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   border-bottom: 1px solid var(--color-border);
   padding: 0 var(--space-5);
 }
@@ -948,12 +950,15 @@
 .tabs__tab.is-active {
   color: var(--color-accent-text);
 }
+.tabs::-webkit-scrollbar {
+  display: none;
+}
 .tabs__tab.is-active::after {
   content: '';
   position: absolute;
   left: var(--space-2);
   right: var(--space-2);
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   border-radius: 2px;
   background: var(--color-accent);
@@ -1933,4 +1938,100 @@ button.topbar__user:hover {
 .checkbox-row {
   align-self: center;
   cursor: pointer;
+}
+.section-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.combobox {
+  position: relative;
+}
+.combobox__list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+.combobox__option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.combobox__option.is-active {
+  background: var(--color-surface-hover);
+}
+.combobox__option.is-selected {
+  color: var(--color-accent-text);
+  font-weight: var(--weight-medium);
+}
+.combobox__hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+.combobox__empty {
+  padding: var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+/* 對話框內不浮在上層，直接把清單展開在輸入框下方，避免被對話框的捲動範圍切掉 */
+.modal .combobox__list {
+  position: static;
+  margin-top: var(--space-1);
+  box-shadow: none;
+}
+.sales-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.sales-editor__head,
+.sales-editor__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1.4fr 38px;
+  gap: var(--space-2);
+  width: 100%;
+  align-items: center;
+}
+.sales-editor__head {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-semibold);
+}
+@media (max-width: 640px) {
+  .sales-editor__head {
+    display: none;
+  }
+  .sales-editor__row {
+    grid-template-columns: 1fr 1fr 38px;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+.domain-list > li {
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
+}
+.domain-list > li > .mono {
+  white-space: nowrap;
+}
+.domain-list .op-chips {
+  flex-wrap: nowrap;
+  margin-left: auto;
 }

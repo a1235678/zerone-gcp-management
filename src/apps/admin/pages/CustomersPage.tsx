@@ -13,6 +13,7 @@ import { CustomerStatusTag } from "../tags";
 import { formatDate } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
+import { groupSalesAssignments } from '../components/SalesAssignments';
 
 const PAGE_SIZE = 12;
 
@@ -53,15 +54,19 @@ const columns: Column<CustomerListItem>[] = [
   },
   {
     key: 'sales',
-    header: '負責業務（GWS）',
+    header: '負責業務',
     render: (c) => {
-      const n = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'new')?.salesName;
-      const r = c.salesAssignments.find((a) => a.product === 'GWS' && a.term === 'renewal')?.salesName;
-      return (
+      const groups = groupSalesAssignments(c.salesAssignments);
+      return groups.length ? (
         <div>
-          <div>新約 {n ?? '—'}</div>
-          <div className="table__secondary">續約 {r ?? '—'}</div>
+          {groups.map((g) => (
+            <div key={`${g.brand}-${g.product}`}>
+              <span className="table__secondary">{g.product}</span> 新約 {g.newSales.join('、') || '—'}・續約 {g.renewalSales.join('、') || '—'}
+            </div>
+          ))}
         </div>
+      ) : (
+        <span className="muted">—</span>
       );
     },
   },
@@ -120,12 +125,12 @@ export function CustomersPage() {
         actions={
           <>
             <PendingTag id={1} hint="客戶由誰建立" />
-            {can('customers', 'write') && can('subscriptions', 'write') && (
+            {can('customers', 'create') && can('subscriptions', 'write') && (
               <Link to="/customers/transfer-in" className="btn">
                 轉入客戶
               </Link>
             )}
-            {can('customers', 'write') && (
+            {can('customers', 'create') && (
               <Link to="/customers/new" className="btn btn--primary">
                 <Icon name="plus" size={16} />
                 新增客戶
@@ -142,7 +147,7 @@ export function CustomersPage() {
             label="經銷商"
             value={dealerId}
             onChange={(v) => setParam('dealer', v)}
-            options={(dealers.data ?? []).map((d) => ({ value: d.id, label: d.name }))}
+            options={(dealers.data ?? []).map((d) => ({ value: d.id, label: d.shortNames[0] ?? d.name }))}
           />
           <SelectField
             label="客戶狀態"

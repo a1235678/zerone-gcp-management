@@ -5,12 +5,24 @@ export type OrgType = 'internal' | 'dealer' | 'customer';
 
 // ── 經銷商 ─────────────────────────────
 export type DealerStatus = 'active' | 'suspended';
+/** 經銷商主檔（2026/11/12 第一版，欄位待 Connie 確認 #29） */
 export interface Dealer {
+  /** 經銷商 ID：建立時自動產生，客戶主檔選經銷商後會帶出 */
   id: string;
+  /** 經銷商名稱（公司全名） */
   name: string;
+  shortNames: string[];
+  taxId: string;
   /** 「直銷（零壹）」也當作一個經銷商 */
   isDirect: boolean;
   status: DealerStatus;
+  registeredAddress: Address;
+  contactAddress: Address;
+  contactSameAsRegistered: boolean;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  note: string;
   createdAt: string;
 }
 export interface DealerListItem extends Dealer {
@@ -24,8 +36,6 @@ export interface DealerListItem extends Dealer {
 export type CustomerStatus = 'active' | 'disabled';
 /** Google 網域驗證：建立客戶後才檢查 */
 export type DomainVerification = 'verified' | 'pending' | 'failed';
-/** 客戶屬性（選項待確認） */
-export type CustomerAttribute = 'enterprise' | 'government' | 'school' | 'nonprofit';
 export interface Address {
   /** 國家／地區 */
   country: string;
@@ -44,31 +54,31 @@ export interface CustomerContact {
   phone: string;
 }
 /** 負責業務：依「產品／新約或續約」指定，同一客戶可以不同（2026/11/10 會議） */
+/** 一筆負責業務：一個客戶可以有多筆（多位業務），只列有設定的 */
 export interface SalesAssignment {
+  brand: string;
   product: ProductCode;
   term: 'new' | 'renewal';
   salesName: string;
 }
 export interface Customer {
   id: string;
-  attribute: CustomerAttribute;
   /** 公司全名 */
   name: string;
   /** 公司簡稱，可以有多個別名 */
   shortNames: string[];
-  /** 這個客戶本身也是經銷商 */
-  isDealer: boolean;
-  /** 是經銷商時，對應「經銷商管理」裡的經銷商；名下有客戶就不能取消「是否為經銷商」 */
-  dealerOrgId?: string;
   /** 登記地址（公司法定登記地） */
   registeredAddress: Address;
   contactAddress: Address;
   contactSameAsRegistered: boolean;
   /** 統一編號（8 碼） */
   taxId: string;
+  /** 主網域：建立客戶時不填，GWS 新訂時填寫，訂閱成功後寫回（2026/11/12） */
   primaryDomain: string;
   /** 主網域以外的其他網域（一個客戶可以有多個網域） */
   otherDomains: string[];
+  /** 已開通 GWS 的網域（其餘是客戶有、但還沒開通 GWS 的網域） */
+  gwsDomains: string[];
   salesAssignments: SalesAssignment[];
   /** 一般聯絡人（不一定有系統帳號） */
   contacts: CustomerContact[];
@@ -84,8 +94,6 @@ export interface Customer {
 }
 export interface CustomerListItem extends Customer {
   dealerName: string;
-  /** 是經銷商時，名下的客戶數 */
-  downstreamCount: number;
 }
 export interface CustomerQuery {
   keyword?: string;
@@ -95,7 +103,8 @@ export interface CustomerQuery {
 export interface NewCustomerInput {
   name: string;
   taxId: string;
-  primaryDomain: string;
+  /** 只有客戶轉入要填（既有的 GWS 客戶） */
+  primaryDomain?: string;
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -103,15 +112,12 @@ export interface NewCustomerInput {
   note: string;
   adminName: string;
   adminEmail: string;
-  attribute?: CustomerAttribute;
   shortNames?: string[];
-  isDealer?: boolean;
   registeredAddress?: Address;
   contactAddress?: Address;
   contactSameAsRegistered?: boolean;
-  /** GWS 新約、續約的負責業務 */
-  salesNew?: string;
-  salesRenewal?: string;
+  /** 負責業務（條列：品牌、產品、新約／續約、業務） */
+  salesAssignments?: SalesAssignment[];
 }
 export type DomainCheck =
   | { ok: true }
@@ -132,6 +138,8 @@ export interface Subscription {
   startsAt: string;
   /** 目前合約迄日（到期日） */
   expiresAt: string;
+  /** 已取消續約：客戶合約到期後不再續約（不寄到期通知） */
+  renewalCancelled?: { at: string; by: string; note: string };
   lastSyncedAt: string;
 }
 export interface SubscriptionListItem extends Subscription {
@@ -173,6 +181,8 @@ export type TransferSource = 'selfPaid' | 'otherDealer';
  */
 export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'completed' | 'failed' | 'manual' | 'cancelled';
 export interface OperationPayload {
+  /** 新訂的網域；訂閱成功後寫回客戶主檔 */
+  domain?: string;
   /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
   /** 新訂的席次，或續約後的席次 */
@@ -254,6 +264,7 @@ export type WorkOrderStatus = 'draft' | 'salesReview' | 'techReview' | 'approved
 export interface NewCustomerDraft {
   name: string;
   taxId: string;
+  /** 客戶轉入才填 */
   primaryDomain: string;
   contactName: string;
   contactEmail: string;
@@ -261,6 +272,7 @@ export interface NewCustomerDraft {
   note: string;
 }
 export interface WorkOrderPayload {
+  domain?: string;
   plan?: string;
   seats?: number;
   addSeats?: number;
@@ -490,6 +502,8 @@ export interface User {
   status: UserStatus;
   /** 零壹建立的第一個組織管理員 */
   isFirstAdmin: boolean;
+  /** 客戶帳號使用的產品（2026/11/12：使用者帳號新增「產品」欄） */
+  products?: ProductCode[];
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -512,7 +526,8 @@ export interface NewUserInput {
   roleId: string;
 }
 
-export type PermissionLevel = 'none' | 'read' | 'write';
+/** 禁止 < 唯讀 < 可編輯 < 可新增（可新增包含可編輯，2026/11/12） */
+export type PermissionLevel = 'none' | 'read' | 'write' | 'create';
 export type ResourceKey =
   | 'customers'
   | 'dealers'

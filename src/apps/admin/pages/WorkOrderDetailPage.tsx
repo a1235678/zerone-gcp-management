@@ -100,6 +100,8 @@ export function WorkOrderDetailPage() {
     : undefined;
 
   const p = w.payload;
+  // 新訂、客戶轉入會新增訂閱，需要「可新增與編輯」；續約、加購、升版只要「可編輯」
+  const opLevel = w.type === 'new' || w.type === 'transfer' ? ('create' as const) : ('write' as const);
   const analysis = analyzeOrder(w.type, sub, p);
   const items = [
     { label: '類型', value: workOrderTypeLabel[w.type] },
@@ -120,6 +122,7 @@ export function WorkOrderDetailPage() {
     },
     { label: '經銷商', value: w.dealerName },
     ...(sub ? [{ label: '訂閱', value: `${sub.plan} · 目前 ${sub.seats} 席 · 合約 ${sub.startsAt.replace(/-/g, '/')} – ${sub.expiresAt.replace(/-/g, '/')}` }] : []),
+    ...(p.domain ? [{ label: '網域', value: <span className="mono">{p.domain}</span> }] : []),
     ...(p.plan ? [{ label: w.type === 'upgrade' ? '升級後方案' : w.type === 'renewal' ? '續約方案' : '方案', value: <span className="inline">{p.plan} <PendingTag id={3} /></span> }] : []),
     ...(p.seats !== undefined ? [{ label: w.type === 'renewal' ? '續約人數' : '人數', value: `${p.seats} 席` }] : []),
     ...(p.addSeats !== undefined ? [{ label: w.type === 'upgrade' ? '同時加購人數' : '加購人數', value: `${p.addSeats} 席${sub ? `（${sub.seats} → ${(sub.seats ?? 0) + p.addSeats}）` : ''}` }] : []),
@@ -222,23 +225,23 @@ export function WorkOrderDetailPage() {
                       <StatusTag tone={stepTag[s.state].tone}>{stepTag[s.state].text}</StatusTag>
                     </div>
                     {s.detail && <div className="table__secondary mono">{s.detail}</div>}
-                    {s.key === 'createCustomer' && s.state === 'todo' && !can('customers', 'write') && <div className="table__secondary">由後勤處理（需要「客戶」可編輯權限）</div>}
-                    {s.key === 'createCustomer' && s.state === 'todo' && can('customers', 'write') && (
+                    {s.key === 'createCustomer' && s.state === 'todo' && !can('customers', 'create') && <div className="table__secondary">由後勤處理（需要「客戶」可編輯權限）</div>}
+                    {s.key === 'createCustomer' && s.state === 'todo' && can('customers', 'create') && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
                         <Link className="btn btn--primary btn--sm" to={`/customers/${w.type === 'transfer' ? 'transfer-in' : 'new'}?fromWo=${w.id}`}>
                           {w.type === 'transfer' ? '轉入客戶' : '建立客戶'}（帶入執行單資料）
                         </Link>
                       </div>
                     )}
-                    {s.key === 'google' && s.state === 'failed' && can('subscriptions', 'write') && (
+                    {s.key === 'google' && s.state === 'failed' && can('subscriptions', opLevel) && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
                         <button className="btn btn--sm" disabled={!target} onClick={() => setOpOpen(true)}>
                           重新填寫並建立
                         </button>
                       </div>
                     )}
-                    {s.key === 'google' && s.state === 'todo' && !can('subscriptions', 'write') && <div className="table__secondary">由後勤處理（需要「訂閱」可編輯權限）</div>}
-                    {s.key === 'google' && s.state === 'todo' && can('subscriptions', 'write') && (
+                    {s.key === 'google' && s.state === 'todo' && !can('subscriptions', opLevel) && <div className="table__secondary">由後勤處理（需要「訂閱」可編輯權限）</div>}
+                    {s.key === 'google' && s.state === 'todo' && can('subscriptions', opLevel) && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
                         <button className="btn btn--primary btn--sm" disabled={!target} onClick={() => setOpOpen(true)}>
                           {workOrderTypeLabel[w.type]}（帶入執行單資料）
@@ -287,7 +290,7 @@ export function WorkOrderDetailPage() {
           type={w.type}
           target={target}
           workOrderId={w.id}
-          initial={{ plan: p.plan, seats: p.seats, addSeats: p.addSeats, renewMonths: p.renewMonths, transferSource: p.transferSource, memo: p.memo }}
+          initial={{ domain: p.domain, plan: p.plan, seats: p.seats, addSeats: p.addSeats, renewMonths: p.renewMonths, transferSource: p.transferSource, memo: p.memo }}
           onClose={() => setOpOpen(false)}
           onSubmitted={() => {
             setOpOpen(false);
