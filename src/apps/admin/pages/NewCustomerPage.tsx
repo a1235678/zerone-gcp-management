@@ -223,7 +223,6 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         titleAddon={
           <>
             <PendingTag id={1} hint="客戶由誰建立" />
-            {isTransfer && <PendingTag id={4} hint="是否使用 Cloud Channel API" />}
           </>
         }
         description={

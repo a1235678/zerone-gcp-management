@@ -118,7 +118,7 @@ export function WorkOrderFormPage() {
       </Link>
       <PageHeader
         title={id ? `修改執行單 ${id}` : '開立執行單'}
-        titleAddon={<PendingTag id={6} hint="是否列入第一階段上線" />}
+        titleAddon={<StatusTag tone="neutral">第二階段</StatusTag>}
         description="業務接到客戶需求後開立。送出後依序由業務主管、技術主管簽核，核准後由後勤處理。"
       />
       {existing.data?.status === 'returned' && (

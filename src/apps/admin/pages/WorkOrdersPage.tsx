@@ -8,7 +8,7 @@ import { FilterBar, SearchField, SelectField } from '@shared/components/FilterBa
 import { Icon } from '@shared/components/Icon';
 import { PageHeader } from '@shared/components/PageHeader';
 import { Pagination, paginate } from '@shared/components/Pagination';
-import { PendingTag } from '@shared/components/PendingTag';
+import { StatusTag } from '@shared/components/StatusTag';
 import { formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { WorkOrderStatusTag } from '../tags';
@@ -80,7 +80,7 @@ export function WorkOrdersPage() {
     <>
       <PageHeader
         title="執行單"
-        titleAddon={<PendingTag id={6} hint="是否列入第一階段上線" />}
+        titleAddon={<StatusTag tone="neutral">第二階段</StatusTag>}
         description="業務接到客戶需求後開立，依序由業務主管、技術主管簽核，核准後由後勤處理。後勤也可以不經執行單，直接在「產品 › GWS」操作訂閱。"
         actions={
           can('workOrders', 'create') ? (
