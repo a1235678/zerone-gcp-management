@@ -51,6 +51,7 @@ export function GwsSubscriptionsPage() {
     seats: s.seats,
     startsAt: s.startsAt,
     expiresAt: s.expiresAt,
+    renewalCancelled: Boolean(s.renewalCancelled),
   });
 
   const setParam = (key: string, value: string) => {

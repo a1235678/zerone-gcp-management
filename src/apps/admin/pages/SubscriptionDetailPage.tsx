@@ -79,6 +79,7 @@ export function SubscriptionDetailPage() {
     seats: s.seats,
     startsAt: s.startsAt,
     expiresAt: s.expiresAt,
+    renewalCancelled: Boolean(s.renewalCancelled),
   };
 
   const historyColumns: Column<OperationListItem>[] = [

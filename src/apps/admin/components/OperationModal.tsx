@@ -31,6 +31,8 @@ export interface OperationTarget {
   seats?: number | null;
   startsAt?: string;
   expiresAt?: string;
+  /** 已取消續約（合約到期後不續約） */
+  renewalCancelled?: boolean;
 }
 
 const intOrUndef = (v: string) => (v === '' ? undefined : Number(v));
@@ -318,6 +320,12 @@ export function OperationModal({
               續約不提供取消；要停止續約請不要建立，或取消已建立的排程。
             </p>
           </>
+        )}
+
+        {(type === 'addSeats' || type === 'upgrade') && target.renewalCancelled && (
+          <Callout tone="warning" title="這筆訂閱已取消續約">
+            客戶合約到 {formatDate(target.expiresAt ?? '')} 結束後不再續約。{type === 'addSeats' ? '加購' : '升版'}只到合約結束日，請先和客戶確認仍要{type === 'addSeats' ? '加購' : '升版'}。
+          </Callout>
         )}
 
         {type === 'addSeats' && (
