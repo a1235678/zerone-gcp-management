@@ -260,6 +260,22 @@ Prototype 階段的目標是「讓使用者點得動、看得懂」，之後要�
 - **之後上線需要的技術提醒**：GWS 排程需要真的排程器與失敗重試；GWS 整合預計用 Admin SDK 與 Cloud Channel API（待 Ray、Terry 確認）；GCP 費用預計從 Billing 匯出（BigQuery）取得。這些不在 Prototype 範圍內，只是讓 Claude Code 了解方向。
 - **程式碼品質**：每頁寫完自己開起來看過（桌面 1440 寬，也要確認窄螢幕不會破版）。
 
+## API 串接（2026/11/17 開始）
+
+Terry 提供另一個網站的 Swagger 文件（格式會跟這個系統一樣），先用它試接登入。
+
+- **切換資料來源**：登入頁有「使用真資料（API）」開關，記在這個瀏覽器（localStorage `zerone-data-source`）。關閉時用 Prototype 假資料和測試帳號；開啟時登入改呼叫 API。
+- **API 網址**：先用 Terry 的測試站 `https://stageapi.wingwill.com.tw`，之後用建置時的環境變數 `VITE_API_BASE` 換掉（`src/data/dataSource.ts`）。
+- **目前串接的範圍**：只有登入、兩步驟驗證（TOTP 或 Email 驗證碼）、帳號驗證信、忘記密碼、登出（`src/data/remote/auth.ts`）。登入後其他畫面仍是假資料，登入者暫時一律給「後台管理員」權限，畫面標示「API 登入」。
+- **API 格式**：參數用 formData（前端用 `application/x-www-form-urlencoded` 送出），回應是 `{ data, error }`（`src/data/remote/http.ts`）。`/api/auth/login` 回傳的 token 依用途（audience）決定下一步：2FA 登入、使用者驗證，或直接完成。另有 `login-without-2fa` 測試用登入，登入頁可勾選「略過兩步驟驗證」，API 移除後要拿掉。
+- **要跟 Terry 確認**：
+  1. CORS 要允許管理端網址（GitHub Pages：`https://a1235678.github.io`；本機開發：`http://localhost:5173`），並開啟 `Access-Control-Allow-Credentials`。
+  2. `login-2fa` 成功後，存取 token 放在哪裡（回應欄位名稱，或改用 cookie）；目前前端接受 `data.accessToken`、`access_token`、`token`、`jwt` 或 Authorization 標頭。
+  3. 需要授權的 API（`ApiKeyAuth`）是不是用 `Authorization: Bearer <token>`。
+  4. 取得「目前登入者與權限」的 API，之後要用它取代暫時的「後台管理員」權限。
+  5. 錯誤回應 `error` 的格式（字串或物件），目前兩種都能顯示。
+- **測試站的連線限制**：從雲端環境連 `stageapi.wingwill.com.tw` 在 TLS 握手時就被斷線，可能有 IP 限制；請在公司網路的瀏覽器測試。
+
 ## 給 Claude Code 的第一個任務
 
 請先讀完本文件，再開始。範圍只有管理端，每一步完成後請讓使用者看過再繼續。
