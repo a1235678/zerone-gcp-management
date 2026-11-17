@@ -1,16 +1,22 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { APPROVER_ROLE, getSession, login as apiLogin, logout as apiLogout, type Session } from '@data/api';
+import { APPROVER_ROLE, getSession, login as apiLogin, logout as apiLogout, startApiSession, type Session } from '@data/api';
+import type { ApiAuth } from '@data/remote/auth';
 import type { ResourceKey, WorkOrderStatus } from '@data/types';
 
 interface Auth {
   session: Session | undefined;
   login: (email: string, password: string) => Promise<Session>;
+  /** 用真資料（API）登入完成後，把登入者交給畫面 */
+  loginWithApi: (auth: ApiAuth) => Session;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<Auth>({
   session: undefined,
   login: () => Promise.reject(new Error('AuthProvider 未設定')),
+  loginWithApi: () => {
+    throw new Error('AuthProvider 未設定');
+  },
   logout: () => Promise.resolve(),
 });
 
@@ -21,11 +27,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(s);
     return s;
   }, []);
+  const loginWithApi = useCallback((auth: ApiAuth) => {
+    const s = startApiSession(auth);
+    setSession(s);
+    return s;
+  }, []);
   const logout = useCallback(async () => {
     await apiLogout();
     setSession(undefined);
   }, []);
-  return <AuthContext.Provider value={{ session, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, login, loginWithApi, logout }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

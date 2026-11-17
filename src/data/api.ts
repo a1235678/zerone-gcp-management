@@ -84,6 +84,7 @@ import type {
   WorkOrderListItem,
   WorkOrderQuery,
 } from './types';
+import { apiLogout, type ApiAuth } from './remote/auth';
 
 // ═════════ 共用 ═════════
 
@@ -176,16 +177,49 @@ function setCurrent(s: Session | undefined) {
   Object.assign(currentUser, s ? { id: s.id, name: s.name, role: s.role, roleId: s.roleId, email: s.email } : { id: '', name: '', role: '', roleId: '', email: '' });
 }
 
+// ── 用真資料（API）登入時的登入狀態 ──
+// 目前 API 還沒有「目前登入者與權限」，先一律給「後台管理員」的權限，畫面上標示「API 登入」。
+const API_SESSION_KEY = 'zerone-admin-api-session';
+let apiAuth: ApiAuth | undefined;
+
+function apiSessionOf(a: ApiAuth): Session {
+  const r = db.roles.find((x) => x.id === 'R01')!;
+  return { id: 'api', name: a.name, email: a.email, roleId: r.id, role: `${r.name}（API 登入）`, permissions: r.permissions };
+}
+
+/** API 登入成功後呼叫：記住 token，之後的畫面用這個登入者 */
+export function startApiSession(a: ApiAuth): Session {
+  apiAuth = a;
+  const s = apiSessionOf(a);
+  setCurrent(s);
+  try {
+    sessionStorage.setItem(API_SESSION_KEY, JSON.stringify(a));
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // 忽略：只是重新整理後要重新登入
+  }
+  log('login', a.email, '登入管理端（API）');
+  return s;
+}
+
+/** 目前 API 登入的 token，之後串接其他 API 時使用 */
+export const getApiToken = () => apiAuth?.accessToken;
+
 /** 重新整理頁面後恢復登入狀態（只存在這個分頁） */
 export function getSession(): Session | undefined {
   if (!currentUser.id) {
     try {
+      const raw = sessionStorage.getItem(API_SESSION_KEY);
       const id = sessionStorage.getItem(SESSION_KEY);
-      if (id) setCurrent(sessionOf(id));
+      if (raw) {
+        apiAuth = JSON.parse(raw) as ApiAuth;
+        setCurrent(apiSessionOf(apiAuth));
+      } else if (id) setCurrent(sessionOf(id));
     } catch {
       // 瀏覽器不允許存取 sessionStorage 時，就當作沒有登入
     }
   }
+  if (currentUser.id === 'api') return apiAuth ? apiSessionOf(apiAuth) : undefined;
   return currentUser.id ? sessionOf(currentUser.id) : undefined;
 }
 
@@ -215,11 +249,17 @@ export function login(email: string, password: string): Promise<Session> {
   return delay(s);
 }
 
-export function logout(): Promise<void> {
+export async function logout(): Promise<void> {
   if (currentUser.id) log('login', currentUser.email, '登出');
+  if (currentUser.id === 'api') {
+    // 通知後端登出；失敗（例如 token 已過期）也照樣在畫面上登出
+    await apiLogout(apiAuth?.accessToken).catch(() => undefined);
+    apiAuth = undefined;
+  }
   setCurrent(undefined);
   try {
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(API_SESSION_KEY);
   } catch {
     // 忽略
   }
