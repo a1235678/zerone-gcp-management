@@ -6,12 +6,13 @@ import {
   getCustomer,
   cancelSchedule,
   createOperation,
+  createNewOrderWithCustomer,
   getOperations,
   getPendingSchedules,
   getPlanList,
 } from '@data/api';
 import { executionModeLabel, operationTypeLabel, scheduleActionLabel, transferSourceLabel } from '@data/labels';
-import type { OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
+import type { NewCustomerInput, OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
 import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
@@ -62,6 +63,9 @@ export function OperationModal({
   target,
   workOrderId,
   initial,
+  newCustomer,
+  onBack,
+  layout = 'modal',
   onClose,
   onSubmitted,
 }: {
@@ -70,6 +74,12 @@ export function OperationModal({
   target: OperationTarget;
   workOrderId?: string;
   initial?: OperationPayload;
+  /** 新客戶的新訂：送出時一併建立客戶主檔 */
+  newCustomer?: NewCustomerInput;
+  /** 有值時顯示「上一步」（回到填客戶資料） */
+  onBack?: () => void;
+  /** modal：彈窗（預設）；page：整頁表單 */
+  layout?: 'modal' | 'page';
   onClose: () => void;
   onSubmitted: (op: OperationListItem) => void;
 }) {
@@ -84,7 +94,7 @@ export function OperationModal({
     .reduce((n, o) => n + (o.payload.addSeats ?? 0), 0);
   const [plan, setPlan] = useState('');
   // 新訂的網域：選客戶已有的網域，或輸入網域
-  const cust = useAsync(() => (type === 'new' ? getCustomer(target.customerId) : Promise.resolve(undefined)), [type, target.customerId]);
+  const cust = useAsync(() => (type === 'new' && target.customerId ? getCustomer(target.customerId) : Promise.resolve(undefined)), [type, target.customerId]);
   const ownedDomains = cust.data ? [cust.data.primaryDomain, ...cust.data.otherDomains].filter(Boolean) : [];
   const [domainPick, setDomainPick] = useState('');
   const [newDomain, setNewDomain] = useState('');
@@ -175,6 +185,12 @@ export function OperationModal({
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
     setSaving(true);
     try {
+      if (newCustomer) {
+        const { customer, operation } = await createNewOrderWithCustomer(newCustomer, { type, payload: p });
+        toast(`已建立客戶「${customer.name}」與新訂（${operation.id}）${operation.execution === 'schedule' ? `，${formatDate(operation.payload.scheduledAt ?? TODAY)} 執行` : '，待後勤人工執行'}`);
+        onSubmitted(operation);
+        return;
+      }
       const op = await createOperation({ type, customerId: target.customerId, subscriptionId: target.subscriptionId, workOrderId, payload: p });
       toast(op.execution === 'schedule' ? `已建立排程（${op.id}），${formatDate(op.payload.scheduledAt ?? TODAY)} 執行` : `已建立（${op.id}），待後勤人工執行`);
       onSubmitted(op);
@@ -209,228 +225,253 @@ export function OperationModal({
     </FormField>
   );
 
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      width={600}
-      title={operationTypeLabel[type]}
-      footer={
-        <>
-          <button type="button" className="btn" onClick={onClose}>
-            取消
-          </button>
-          <button type="button" className="btn btn--primary" disabled={saving} onClick={submit}>
-            {saving ? '送出中…' : analysis.execution === 'schedule' ? '建立排程' : '建立人工執行'}
-          </button>
-        </>
-      }
-    >
-      <div className="stack" style={{ gap: 'var(--space-4)' }}>
-        <Callout tone="neutral">
-          <strong>{target.customerName}</strong>
-          <span className="mono"> · {target.primaryDomain}</span>
-          {target.plan && (
-            <>
-              <br />
-              目前：{target.plan} · {target.seats} 席 · 合約 <span className="mono">{formatDate(target.startsAt ?? '')}</span> –{' '}
-              <span className="mono">{formatDate(target.expiresAt ?? '')}</span>
-            </>
-          )}
-          {workOrderId && (
-            <>
-              <br />
-              依執行單 <span className="mono">{workOrderId}</span> 處理，欄位已帶入執行單內容
-            </>
-          )}
-        </Callout>
+  const footerEl = (
+    <>
+      <button type="button" className="btn" onClick={onClose}>
+        取消
+      </button>
+      {onBack && (
+        <button type="button" className="btn" onClick={onBack} disabled={saving}>
+          上一步
+        </button>
+      )}
+      <button type="button" className="btn btn--primary" disabled={saving} onClick={submit}>
+        {saving ? '送出中…' : analysis.execution === 'schedule' ? '建立排程' : '建立人工執行'}
+      </button>
+    </>
+  );
+  const bodyEl = (
+    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      {onBack && layout === 'modal' && (
+        <ol className="step-indicator" aria-label="新訂步驟">
+          <li>1. 客戶資料</li>
+          <li aria-current="step">2. 訂閱內容</li>
+        </ol>
+      )}
+      <Callout tone="neutral">
+        <strong>{target.customerName}</strong>
+        {target.primaryDomain && <span className="mono"> · {target.primaryDomain}</span>}
+        {newCustomer && (
+          <>
+            <br />
+            新客戶：送出後會同時建立客戶主檔，並寄邀請信給組織管理員 {newCustomer.adminName}（{newCustomer.adminEmail}）
+          </>
+        )}
+        {target.plan && (
+          <>
+            <br />
+            目前：{target.plan} · {target.seats} 席 · 合約 <span className="mono">{formatDate(target.startsAt ?? '')}</span> –{' '}
+            <span className="mono">{formatDate(target.expiresAt ?? '')}</span>
+          </>
+        )}
+        {workOrderId && (
+          <>
+            <br />
+            依執行單 <span className="mono">{workOrderId}</span> 處理，欄位已帶入執行單內容
+          </>
+        )}
+      </Callout>
 
-        {type === 'new' && (
-          <div className="stack" style={{ gap: 'var(--space-3)' }}>
-            <fieldset className="plain-fieldset">
-              <legend className="form-field__label">
-                網域 <span className="form-field__req">必填</span>
-              </legend>
-              {ownedDomains.map((d) => (
-                <label key={d} className="radio-row">
-                  <input type="radio" name="domainPick" checked={domainPick === d} onChange={() => setDomainPick(d)} />
-                  <span>
-                    <span className="mono">{d}</span>
-                    <span className="muted">：客戶已有的網域{cust.data?.gwsDomains.includes(d) ? '（已開通 GWS）' : '（尚未開通 GWS）'}</span>
-                  </span>
-                </label>
-              ))}
-              <label className="radio-row">
-                <input type="radio" name="domainPick" checked={domainPick === ''} onChange={() => setDomainPick('')} />
+      {type === 'new' && (
+        <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          <fieldset className="plain-fieldset">
+            <legend className="form-field__label">
+              網域 <span className="form-field__req">必填</span>
+            </legend>
+            {ownedDomains.map((d) => (
+              <label key={d} className="radio-row">
+                <input type="radio" name="domainPick" checked={domainPick === d} onChange={() => setDomainPick(d)} />
                 <span>
-                  <strong>輸入網域</strong>
-                  <span className="muted">：客戶要用在 GWS 的網域</span>
+                  <span className="mono">{d}</span>
+                  <span className="muted">：客戶已有的網域{cust.data?.gwsDomains.includes(d) ? '（已開通 GWS）' : '（尚未開通 GWS）'}</span>
                 </span>
               </label>
-            </fieldset>
-            {domainPick === '' && (
-              <FormField
-                label="網域名稱"
-                required
-                message={show('domain') ?? (newDomain && domainCheckResult?.ok ? '可以使用' : undefined)}
-                state={show('domain') ? 'error' : newDomain && domainCheckResult?.ok ? 'success' : undefined}
-                help="訂閱成功後會寫回客戶主檔；客戶還沒有主網域時會成為主網域。"
-              >
-                {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" placeholder="company.example" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} />}
-              </FormField>
-            )}
+            ))}
+            <label className="radio-row">
+              <input type="radio" name="domainPick" checked={domainPick === ''} onChange={() => setDomainPick('')} />
+              <span>
+                <strong>輸入網域</strong>
+                <span className="muted">：客戶要用在 GWS 的網域</span>
+              </span>
+            </label>
+          </fieldset>
+          {domainPick === '' && (
+            <FormField
+              label="網域名稱"
+              required
+              message={show('domain') ?? (newDomain && domainCheckResult?.ok ? '可以使用' : undefined)}
+              state={show('domain') ? 'error' : newDomain && domainCheckResult?.ok ? 'success' : undefined}
+              help="訂閱成功後會寫回客戶主檔；客戶還沒有主網域時會成為主網域。"
+            >
+              {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" placeholder="company.example" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} />}
+            </FormField>
+          )}
+        <div className="form-grid">
+          {planSelect('方案')}
+          <FormField label="人數" required message={show('seats')} state={st('seats')}>
+            {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
+          </FormField>
+        </div>
+        </div>
+      )}
+
+      {type === 'renewal' && (
+        <>
           <div className="form-grid">
-            {planSelect('方案')}
-            <FormField label="人數" required message={show('seats')} state={st('seats')}>
+            {planSelect('續約方案（版本）')}
+            <FormField label="續約人數" required message={show('seats')} state={st('seats')} help={pendingAdd ? `目前 ${target.seats} 席，另有尚未生效的加購 ${pendingAdd} 席，已一併帶入` : `目前 ${target.seats} 席`}>
               {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
             </FormField>
-          </div>
-          </div>
-        )}
-
-        {type === 'renewal' && (
-          <>
-            <div className="form-grid">
-              {planSelect('續約方案（版本）')}
-              <FormField label="續約人數" required message={show('seats')} state={st('seats')} help={pendingAdd ? `目前 ${target.seats} 席，另有尚未生效的加購 ${pendingAdd} 席，已一併帶入` : `目前 ${target.seats} 席`}>
-                {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
-              </FormField>
-              <FormField label="續約期間" required>
-                {(p) => (
-                  <select {...p} className="select" value={renewMonths} onChange={(e) => setRenewMonths(e.target.value)}>
-                    <option value="12">12 個月</option>
-                    <option value="24">24 個月</option>
-                    <option value="36">36 個月</option>
-                  </select>
-                )}
-              </FormField>
-              <FormField label="新合約期間">
-                {(p) => (
-                  <input {...p} className="input mono" readOnly value={`${formatDate(analysis.newStartsAt ?? '')} – ${formatDate(analysis.newExpiresAt ?? '')}`} />
-                )}
-              </FormField>
-            </div>
-            {plan && Number(seats) > 0 && (
-              <div className="inline">
-                <span className="muted">這次續約：</span>
-                <ChangeTags planChange={analysis.planChange} seatChange={analysis.seatChange} />
-              </div>
-            )}
-            <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-              續約不提供取消；要停止續約請不要建立，或取消已建立的排程。
-            </p>
-          </>
-        )}
-
-        {(type === 'addSeats' || type === 'upgrade') && target.renewalCancelled && (
-          <Callout tone="warning" title="這筆訂閱已取消續約">
-            客戶合約到 {formatDate(target.expiresAt ?? '')} 結束後不再續約。{type === 'addSeats' ? '加購' : '升版'}只到合約結束日，請先和客戶確認仍要{type === 'addSeats' ? '加購' : '升版'}。
-          </Callout>
-        )}
-
-        {type === 'addSeats' && (
-          <>
-            {renewConflict && (
-              <Callout tone="warning" title="這個網域已經排了續約">
-                續約排程在加購之後才生效，排程裡的人數不會跟著加購改變。請先取消原本的續約排程，加購建立後再重新按一次「續約」。
-                <ul className="bill-list">
-                  {(pendingSchedules.data ?? []).map((s) => (
-                    <li key={s.id}>
-                      <span className="inline" style={{ justifyContent: 'space-between', width: '100%' }}>
-                        <span>
-                          <span className="mono">{s.id}</span> {scheduleActionLabel[s.action]} · <span className="mono">{formatDateTime(s.enabledAt)}</span> · {s.detail}
-                        </span>
-                        <button type="button" className="btn btn--sm" onClick={() => cancelOne(s.id)}>
-                          取消排程
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Callout>
-            )}
-            <div className="form-grid">
-              <FormField
-                label="加購人數"
-                required
-                message={show('addSeats') ?? (Number(addSeats) > 0 ? `加購後 ${(target.seats ?? 0) + Number(addSeats)} 席` : undefined)}
-                state={st('addSeats')}
-                help={`目前 ${target.seats} 席。加購只能加人，不能減人。`}
-              >
-                {(p) => <input {...p} className="input tnum" type="number" min={1} value={addSeats} onChange={(e) => setAddSeats(e.target.value)} />}
-              </FormField>
-              <FormField label="加購期間" help="加購的期間一律到舊合約結束日，不能改。">
-                {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
-              </FormField>
-            </div>
-          </>
-        )}
-
-        {type === 'upgrade' && (
-          <div className="form-grid">
-            {planSelect('升級後的方案')}
-            <FormField
-              label="同時加購人數"
-              message={show('addSeats') ?? (Number(addSeats) > 0 ? `升版後 ${(target.seats ?? 0) + Number(addSeats)} 席` : undefined)}
-              state={st('addSeats')}
-              help={`選填。目前 ${target.seats} 席，只能加人，不能減人。`}
-            >
-              {(p) => <input {...p} className="input tnum" type="number" min={0} placeholder="0" value={addSeats} onChange={(e) => setAddSeats(e.target.value)} />}
+            <FormField label="續約期間" required>
+              {(p) => (
+                <select {...p} className="select" value={renewMonths} onChange={(e) => setRenewMonths(e.target.value)}>
+                  <option value="12">12 個月</option>
+                  <option value="24">24 個月</option>
+                  <option value="36">36 個月</option>
+                </select>
+              )}
             </FormField>
-            <FormField label="期間" help="升版後仍沿用目前合約，到期日不變。" className="is-full">
+            <FormField label="新合約期間">
+              {(p) => (
+                <input {...p} className="input mono" readOnly value={`${formatDate(analysis.newStartsAt ?? '')} – ${formatDate(analysis.newExpiresAt ?? '')}`} />
+              )}
+            </FormField>
+          </div>
+          {plan && Number(seats) > 0 && (
+            <div className="inline">
+              <span className="muted">這次續約：</span>
+              <ChangeTags planChange={analysis.planChange} seatChange={analysis.seatChange} />
+            </div>
+          )}
+          <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+            續約不提供取消；要停止續約請不要建立，或取消已建立的排程。
+          </p>
+        </>
+      )}
+
+      {(type === 'addSeats' || type === 'upgrade') && target.renewalCancelled && (
+        <Callout tone="warning" title="這筆訂閱已取消續約">
+          客戶合約到 {formatDate(target.expiresAt ?? '')} 結束後不再續約。{type === 'addSeats' ? '加購' : '升版'}只到合約結束日，請先和客戶確認仍要{type === 'addSeats' ? '加購' : '升版'}。
+        </Callout>
+      )}
+
+      {type === 'addSeats' && (
+        <>
+          {renewConflict && (
+            <Callout tone="warning" title="這個網域已經排了續約">
+              續約排程在加購之後才生效，排程裡的人數不會跟著加購改變。請先取消原本的續約排程，加購建立後再重新按一次「續約」。
+              <ul className="bill-list">
+                {(pendingSchedules.data ?? []).map((s) => (
+                  <li key={s.id}>
+                    <span className="inline" style={{ justifyContent: 'space-between', width: '100%' }}>
+                      <span>
+                        <span className="mono">{s.id}</span> {scheduleActionLabel[s.action]} · <span className="mono">{formatDateTime(s.enabledAt)}</span> · {s.detail}
+                      </span>
+                      <button type="button" className="btn btn--sm" onClick={() => cancelOne(s.id)}>
+                        取消排程
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Callout>
+          )}
+          <div className="form-grid">
+            <FormField
+              label="加購人數"
+              required
+              message={show('addSeats') ?? (Number(addSeats) > 0 ? `加購後 ${(target.seats ?? 0) + Number(addSeats)} 席` : undefined)}
+              state={st('addSeats')}
+              help={`目前 ${target.seats} 席。加購只能加人，不能減人。`}
+            >
+              {(p) => <input {...p} className="input tnum" type="number" min={1} value={addSeats} onChange={(e) => setAddSeats(e.target.value)} />}
+            </FormField>
+            <FormField label="加購期間" help="加購的期間一律到舊合約結束日，不能改。">
               {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
             </FormField>
           </div>
-        )}
+        </>
+      )}
 
-
-        {type === 'transfer' && (
-          <>
-            <fieldset className="plain-fieldset">
-              <legend className="form-field__label">
-                轉入來源 <span className="form-field__req">必填</span>
-              </legend>
-              {(['selfPaid', 'otherDealer'] as TransferSource[]).map((s) => (
-                <label key={s} className="radio-row">
-                  <input type="radio" name="source" checked={source === s} onChange={() => setSource(s)} />
-                  <span>
-                    <strong>{transferSourceLabel[s]}</strong>
-                    <span className="muted">{s === 'selfPaid' ? '：客戶原本直接向 Google 付款。' : '：客戶原本向其他經銷商購買。'}</span>
-                  </span>
-                </label>
-              ))}
-              {show('source') && <div className="form-field__msg form-field__msg--error">{show('source')}</div>}
-            </fieldset>
-            <Callout tone="neutral">客戶已經在 Google 申請完轉移。建立後狀態為「待人工執行」，後勤到 Google 後台接受轉入後，回來標記完成。</Callout>
-          </>
-        )}
-
-        <FormField label="備註">
-          {(p) => <textarea {...p} className="textarea" value={memo} onChange={(e) => setMemo(e.target.value)} />}
-        </FormField>
-
-        <div className={`exec-box exec-box--${analysis.execution}`}>
-          <div className="exec-box__head">
-            <StatusTag tone={analysis.execution === 'schedule' ? 'info' : 'warning'}>{executionModeLabel[analysis.execution]}</StatusTag>
-            {analysis.pendingId && <PendingTag id={analysis.pendingId} />}
-          </div>
-          <ul className="exec-box__reasons">
-            {analysis.reasons.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-          {analysis.execution === 'schedule' && type !== 'renewal' && (
-            <FormField label="啟用日" required message={show('scheduledAt')} state={st('scheduledAt')} help="排程在這天由系統送 Google，可以到「GWS 排程中心」查看或取消。">
-              {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={date} onChange={(e) => setScheduledAt(e.target.value)} />}
-            </FormField>
-          )}
-          {analysis.execution === 'manual' && (
-            <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-              建立後狀態為「待人工執行」。請在 Google 後台完成後，回到這筆操作標記完成並寫下處理內容，下次同步時系統會比對確認。
-            </p>
-          )}
+      {type === 'upgrade' && (
+        <div className="form-grid">
+          {planSelect('升級後的方案')}
+          <FormField
+            label="同時加購人數"
+            message={show('addSeats') ?? (Number(addSeats) > 0 ? `升版後 ${(target.seats ?? 0) + Number(addSeats)} 席` : undefined)}
+            state={st('addSeats')}
+            help={`選填。目前 ${target.seats} 席，只能加人，不能減人。`}
+          >
+            {(p) => <input {...p} className="input tnum" type="number" min={0} placeholder="0" value={addSeats} onChange={(e) => setAddSeats(e.target.value)} />}
+          </FormField>
+          <FormField label="期間" help="升版後仍沿用目前合約，到期日不變。" className="is-full">
+            {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
+          </FormField>
         </div>
+      )}
+
+
+      {type === 'transfer' && (
+        <>
+          <fieldset className="plain-fieldset">
+            <legend className="form-field__label">
+              轉入來源 <span className="form-field__req">必填</span>
+            </legend>
+            {(['selfPaid', 'otherDealer'] as TransferSource[]).map((s) => (
+              <label key={s} className="radio-row">
+                <input type="radio" name="source" checked={source === s} onChange={() => setSource(s)} />
+                <span>
+                  <strong>{transferSourceLabel[s]}</strong>
+                  <span className="muted">{s === 'selfPaid' ? '：客戶原本直接向 Google 付款。' : '：客戶原本向其他經銷商購買。'}</span>
+                </span>
+              </label>
+            ))}
+            {show('source') && <div className="form-field__msg form-field__msg--error">{show('source')}</div>}
+          </fieldset>
+          <Callout tone="neutral">客戶已經在 Google 申請完轉移。建立後狀態為「待人工執行」，後勤到 Google 後台接受轉入後，回來標記完成。</Callout>
+        </>
+      )}
+
+      <FormField label="備註">
+        {(p) => <textarea {...p} className="textarea" value={memo} onChange={(e) => setMemo(e.target.value)} />}
+      </FormField>
+
+      <div className={`exec-box exec-box--${analysis.execution}`}>
+        <div className="exec-box__head">
+          <StatusTag tone={analysis.execution === 'schedule' ? 'info' : 'warning'}>{executionModeLabel[analysis.execution]}</StatusTag>
+          {analysis.pendingId && <PendingTag id={analysis.pendingId} />}
+        </div>
+        <ul className="exec-box__reasons">
+          {analysis.reasons.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+        {analysis.execution === 'schedule' && type !== 'renewal' && (
+          <FormField label="啟用日" required message={show('scheduledAt')} state={st('scheduledAt')} help="排程在這天由系統送 Google，可以到「GWS 排程中心」查看或取消。">
+            {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={date} onChange={(e) => setScheduledAt(e.target.value)} />}
+          </FormField>
+        )}
+        {analysis.execution === 'manual' && (
+          <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+            建立後狀態為「待人工執行」。請在 Google 後台完成後，回到這筆操作標記完成並寫下處理內容，下次同步時系統會比對確認。
+          </p>
+        )}
       </div>
+    </div>
+  );
+
+  // 整頁模式（GWS 新訂頁）：不用彈窗，內容放在卡片裡，按鈕在卡片底部
+  if (layout === 'page')
+    return (
+      <div className="card form-card">
+        <div className="card__body">{bodyEl}</div>
+        <div className="form-actions">{footerEl}</div>
+      </div>
+    );
+
+  return (
+    <Modal open={open} onClose={onClose} width={600} title={operationTypeLabel[type]} footer={footerEl}>
+      {bodyEl}
     </Modal>
   );
 }

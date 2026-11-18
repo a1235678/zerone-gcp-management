@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { EXPIRING_DAYS, daysUntil, getCustomers, getDealers, getPlans, getSubscriptions } from '@data/api';
+import { EXPIRING_DAYS, daysUntil, getDealers, getPlans, getSubscriptions } from '@data/api';
 import { operationTypeLabel, subscriptionStatusLabel } from '@data/labels';
 import type { OperationType, SubscriptionListItem, SubscriptionStatus } from '@data/types';
 import { Card } from '@shared/components/Card';
@@ -14,9 +14,6 @@ import { formatDate, formatDateTime, formatNumber } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
-import { Modal } from '@shared/components/Modal';
-import { Combobox } from '@shared/components/Combobox';
-import { FormField } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { OperationStatusTag } from '../tags';
 import { SubscriptionStatusTag } from '../tags';
@@ -37,10 +34,8 @@ export function GwsSubscriptionsPage() {
   const page = Number(params.get('page') ?? '1');
   const [version, setVersion] = useState(0);
   const [action, setAction] = useState<{ type: OperationType; target: OperationTarget } | null>(null);
-  const [panelId, setPanelId] = useState<string | null>(null);
-  const [pickOpen, setPickOpen] = useState(false);
-  const [pickId, setPickId] = useState('');
-  const customers = useAsync(() => getCustomers({ status: 'active' }));
+  // 從新訂頁送出後回到這裡，直接打開那筆的處理狀態
+  const [panelId, setPanelId] = useState<string | null>(() => params.get('op'));
   const toTarget = (s: SubscriptionListItem): OperationTarget => ({
     customerId: s.customerId,
     customerName: s.customerName,
@@ -171,7 +166,7 @@ export function GwsSubscriptionsPage() {
         title="GWS 訂閱"
         actions={
           can('subscriptions', 'create') ? (
-            <button className="btn btn--primary" onClick={() => setPickOpen(true)}>
+            <button className="btn btn--primary" onClick={() => navigate('/products/gws/new')}>
               <Icon name="plus" size={16} />
               新訂
             </button>
@@ -243,51 +238,12 @@ export function GwsSubscriptionsPage() {
           }}
         />
       )}
-      <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={() => setVersion((v) => v + 1)} />
-      <Modal
-        open={pickOpen}
-        onClose={() => setPickOpen(false)}
-        title="新訂"
-        width={480}
-        footer={
-          <>
-            <button className="btn" onClick={() => setPickOpen(false)}>
-              取消
-            </button>
-            <button
-              className="btn btn--primary"
-              disabled={!pickId}
-              onClick={() => {
-                const c = customers.data?.find((x) => x.id === pickId);
-                if (!c) return;
-                setPickOpen(false);
-                setPickId('');
-                setAction({ type: 'new', target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId } });
-              }}
-            >
-              下一步
-            </button>
-          </>
-        }
-      >
-        <FormField label="客戶" required help="還沒建檔的客戶，請先到「客戶管理」新增。從其他經銷商轉入的客戶，請到客戶管理用「轉入客戶」。">
-          {(p) => (
-            <Combobox
-              {...p}
-              value={pickId}
-              onChange={setPickId}
-              placeholder="輸入客戶名稱、網域或統編搜尋"
-              emptyText="找不到符合的客戶"
-              options={(customers.data ?? []).map((c) => ({
-                value: c.id,
-                label: c.name,
-                hint: [c.primaryDomain, `統編 ${c.taxId}`, c.dealerName].filter(Boolean).join(' · '),
-                keywords: [...c.shortNames, c.taxId, ...c.otherDomains],
-              }))}
-            />
-          )}
-        </FormField>
-      </Modal>
+      <OperationPanel
+        id={panelId}
+        onClose={() => {
+          setPanelId(null);
+          if (params.get('op')) setParam('op', '');
+        }} onChanged={() => setVersion((v) => v + 1)} />
     </>
   );
 }

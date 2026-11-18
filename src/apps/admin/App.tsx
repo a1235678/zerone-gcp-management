@@ -16,6 +16,7 @@ import { ExpiryNoticePage } from './pages/ExpiryNoticePage';
 import { GcpBillDetailPage } from './pages/GcpBillDetailPage';
 import { GcpBillingPage } from './pages/GcpBillingPage';
 import { GcpUsagePage } from './pages/GcpUsagePage';
+import { GwsNewOrderPage } from './pages/GwsNewOrderPage';
 import { GwsSubscriptionsPage } from './pages/GwsSubscriptionsPage';
 import { HomePage } from './pages/HomePage';
 import { NewCustomerPage } from './pages/NewCustomerPage';
@@ -87,6 +88,7 @@ function Protected() {
             <Route path="/catalog" element={<ProductsPage />} />
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
+            <Route path="/products/gws/new" element={<GwsNewOrderPage />} />
             <Route path="/products/gws/:id" element={<SubscriptionDetailPage />} />
             <Route path="/products/gcp" element={<GcpIndex />} />
             <Route path="/products/gcp/usage" element={<GcpUsagePage />} />
