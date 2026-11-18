@@ -6,12 +6,13 @@ import {
   getCustomer,
   cancelSchedule,
   createOperation,
+  createNewOrderWithCustomer,
   getOperations,
   getPendingSchedules,
   getPlanList,
 } from '@data/api';
 import { executionModeLabel, operationTypeLabel, scheduleActionLabel, transferSourceLabel } from '@data/labels';
-import type { OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
+import type { NewCustomerInput, OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
 import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
@@ -62,6 +63,8 @@ export function OperationModal({
   target,
   workOrderId,
   initial,
+  newCustomer,
+  onBack,
   onClose,
   onSubmitted,
 }: {
@@ -70,6 +73,10 @@ export function OperationModal({
   target: OperationTarget;
   workOrderId?: string;
   initial?: OperationPayload;
+  /** 新客戶的新訂：送出時一併建立客戶主檔 */
+  newCustomer?: NewCustomerInput;
+  /** 有值時顯示「上一步」（回到填客戶資料） */
+  onBack?: () => void;
   onClose: () => void;
   onSubmitted: (op: OperationListItem) => void;
 }) {
@@ -84,7 +91,7 @@ export function OperationModal({
     .reduce((n, o) => n + (o.payload.addSeats ?? 0), 0);
   const [plan, setPlan] = useState('');
   // 新訂的網域：選客戶已有的網域，或輸入網域
-  const cust = useAsync(() => (type === 'new' ? getCustomer(target.customerId) : Promise.resolve(undefined)), [type, target.customerId]);
+  const cust = useAsync(() => (type === 'new' && target.customerId ? getCustomer(target.customerId) : Promise.resolve(undefined)), [type, target.customerId]);
   const ownedDomains = cust.data ? [cust.data.primaryDomain, ...cust.data.otherDomains].filter(Boolean) : [];
   const [domainPick, setDomainPick] = useState('');
   const [newDomain, setNewDomain] = useState('');
@@ -175,6 +182,12 @@ export function OperationModal({
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
     setSaving(true);
     try {
+      if (newCustomer) {
+        const { customer, operation } = await createNewOrderWithCustomer(newCustomer, { type, payload: p });
+        toast(`已建立客戶「${customer.name}」與新訂（${operation.id}）${operation.execution === 'schedule' ? `，${formatDate(operation.payload.scheduledAt ?? TODAY)} 執行` : '，待後勤人工執行'}`);
+        onSubmitted(operation);
+        return;
+      }
       const op = await createOperation({ type, customerId: target.customerId, subscriptionId: target.subscriptionId, workOrderId, payload: p });
       toast(op.execution === 'schedule' ? `已建立排程（${op.id}），${formatDate(op.payload.scheduledAt ?? TODAY)} 執行` : `已建立（${op.id}），待後勤人工執行`);
       onSubmitted(op);
@@ -220,6 +233,11 @@ export function OperationModal({
           <button type="button" className="btn" onClick={onClose}>
             取消
           </button>
+          {onBack && (
+            <button type="button" className="btn" onClick={onBack} disabled={saving}>
+              上一步
+            </button>
+          )}
           <button type="button" className="btn btn--primary" disabled={saving} onClick={submit}>
             {saving ? '送出中…' : analysis.execution === 'schedule' ? '建立排程' : '建立人工執行'}
           </button>
@@ -227,9 +245,21 @@ export function OperationModal({
       }
     >
       <div className="stack" style={{ gap: 'var(--space-4)' }}>
+        {onBack && (
+          <ol className="step-indicator" aria-label="新訂步驟">
+            <li>1. 客戶資料</li>
+            <li aria-current="step">2. 訂閱內容</li>
+          </ol>
+        )}
         <Callout tone="neutral">
           <strong>{target.customerName}</strong>
-          <span className="mono"> · {target.primaryDomain}</span>
+          {target.primaryDomain && <span className="mono"> · {target.primaryDomain}</span>}
+          {newCustomer && (
+            <>
+              <br />
+              新客戶：送出後會同時建立客戶主檔，並寄邀請信給組織管理員 {newCustomer.adminName}（{newCustomer.adminEmail}）
+            </>
+          )}
           {target.plan && (
             <>
               <br />

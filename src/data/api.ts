@@ -981,6 +981,22 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
   return delay(operationListItem(op));
 }
 
+/**
+ * GWS 新訂給新客戶：同一個步驟建立客戶主檔（含第一個組織管理員帳號）和新訂（2026/11/18：第一階段沒有獨立的客戶建檔畫面）。
+ * 先檢查訂單內容，通過才建立客戶，避免留下只有客戶、沒有訂單的資料。
+ */
+export async function createNewOrderWithCustomer(customer: NewCustomerInput, order: Omit<NewOperationInput, 'customerId'>): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
+  if (order.type !== 'new') return fail('新客戶只能新訂');
+  const orderError = validateOperation({ ...order, customerId: '' });
+  if (orderError) return fail(orderError);
+  if (!customer.name.trim()) return fail('請輸入公司全名');
+  if (!/^\d{8}$/.test(customer.taxId.trim())) return fail('統一編號為 8 位數字');
+  if (db.customers.some((c) => c.taxId === customer.taxId.trim())) return fail('這個統一編號已經有客戶，請改選「原有客戶」');
+  const c = await createCustomer(customer);
+  const operation = await createOperation({ ...order, customerId: c.id });
+  return { customer: c, operation };
+}
+
 const operationTransitions: Record<OperationAction, { from: OperationStatus[]; to: OperationStatus; label: string; system?: boolean }> = {
   runSchedule: { from: ['scheduled'], to: 'submitted', label: '排程啟動，送出 Google', system: true },
   cancelSchedule: { from: ['scheduled'], to: 'cancelled', label: '取消排程' },
