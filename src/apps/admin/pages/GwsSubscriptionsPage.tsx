@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { EXPIRING_DAYS, daysUntil, getCustomers, getDealers, getPlans, getSubscriptions } from '@data/api';
+import { EXPIRING_DAYS, daysUntil, getDealers, getPlans, getSubscriptions } from '@data/api';
 import { operationTypeLabel, subscriptionStatusLabel } from '@data/labels';
-import type { NewCustomerInput, OperationType, SubscriptionListItem, SubscriptionStatus } from '@data/types';
+import type { OperationType, SubscriptionListItem, SubscriptionStatus } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState, type Column } from '@shared/components/DataTable';
 import { FilterBar, SearchField, SelectField } from '@shared/components/FilterBar';
@@ -13,11 +13,7 @@ import { Stat, StatGrid } from '@shared/components/Stat';
 import { formatDate, formatDateTime, formatNumber } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
-import { QuickCustomerForm, emptyQuickCustomer, quickCustomerErrors, toNewCustomerInput, type QuickCustomer } from '../components/QuickCustomerForm';
 import { OperationPanel } from '../components/OperationPanel';
-import { Modal } from '@shared/components/Modal';
-import { Combobox } from '@shared/components/Combobox';
-import { Callout, FormField } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { OperationStatusTag } from '../tags';
 import { SubscriptionStatusTag } from '../tags';
@@ -38,40 +34,8 @@ export function GwsSubscriptionsPage() {
   const page = Number(params.get('page') ?? '1');
   const [version, setVersion] = useState(0);
   const [action, setAction] = useState<{ type: OperationType; target: OperationTarget } | null>(null);
-  const [panelId, setPanelId] = useState<string | null>(null);
-  const [pickOpen, setPickOpen] = useState(false);
-  const [pickId, setPickId] = useState('');
-  // 新訂第一步：原有客戶（選客戶）或新客戶（直接填客戶資料）
-  const [who, setWho] = useState<'existing' | 'new'>('existing');
-  const [newCust, setNewCust] = useState<QuickCustomer>(emptyQuickCustomer);
-  const [newCustTried, setNewCustTried] = useState(false);
-  const [newCustInput, setNewCustInput] = useState<NewCustomerInput | null>(null);
-  const canCreateCustomer = can('customers', 'create');
-  const openNewOrder = () => {
-    setWho('existing');
-    setPickId('');
-    setNewCust(emptyQuickCustomer());
-    setNewCustTried(false);
-    setNewCustInput(null);
-    setPickOpen(true);
-  };
-  const nextFromPick = () => {
-    if (who === 'existing') {
-      const c = customers.data?.find((x) => x.id === pickId);
-      if (!c) return;
-      setPickOpen(false);
-      setNewCustInput(null);
-      setAction({ type: 'new', target: { customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId } });
-      return;
-    }
-    setNewCustTried(true);
-    if (Object.keys(quickCustomerErrors(newCust)).length) return;
-    const input = toNewCustomerInput(newCust);
-    setNewCustInput(input);
-    setPickOpen(false);
-    setAction({ type: 'new', target: { customerId: '', customerName: input.name, primaryDomain: '', dealerId: input.dealerId } });
-  };
-  const customers = useAsync(() => getCustomers({ status: 'active' }));
+  // 從新訂頁送出後回到這裡，直接打開那筆的處理狀態
+  const [panelId, setPanelId] = useState<string | null>(() => params.get('op'));
   const toTarget = (s: SubscriptionListItem): OperationTarget => ({
     customerId: s.customerId,
     customerName: s.customerName,
@@ -202,7 +166,7 @@ export function GwsSubscriptionsPage() {
         title="GWS 訂閱"
         actions={
           can('subscriptions', 'create') ? (
-            <button className="btn btn--primary" onClick={openNewOrder}>
+            <button className="btn btn--primary" onClick={() => navigate('/products/gws/new')}>
               <Icon name="plus" size={16} />
               新訂
             </button>
@@ -266,15 +230,6 @@ export function GwsSubscriptionsPage() {
           open
           type={action.type}
           target={action.target}
-          newCustomer={action.type === 'new' && newCustInput ? newCustInput : undefined}
-          onBack={
-            action.type === 'new'
-              ? () => {
-                  setAction(null);
-                  setPickOpen(true);
-                }
-              : undefined
-          }
           onClose={() => setAction(null)}
           onSubmitted={(op) => {
             setAction(null);
@@ -283,73 +238,12 @@ export function GwsSubscriptionsPage() {
           }}
         />
       )}
-      <OperationPanel id={panelId} onClose={() => setPanelId(null)} onChanged={() => setVersion((v) => v + 1)} />
-      <Modal
-        open={pickOpen}
-        onClose={() => setPickOpen(false)}
-        title="新訂"
-        width={who === 'new' ? 680 : 480}
-        footer={
-          <>
-            <button className="btn" onClick={() => setPickOpen(false)}>
-              取消
-            </button>
-            <button className="btn btn--primary" disabled={who === 'existing' && !pickId} onClick={nextFromPick}>
-              下一步：訂閱內容
-            </button>
-          </>
-        }
-      >
-        <div className="stack" style={{ gap: 'var(--space-4)' }}>
-          <ol className="step-indicator" aria-label="新訂步驟">
-            <li aria-current="step">1. 客戶資料</li>
-            <li>2. 訂閱內容</li>
-          </ol>
-          <div>
-            <div className="segmented" role="group" aria-label="客戶">
-              <button type="button" aria-pressed={who === 'existing'} onClick={() => setWho('existing')}>
-                原有客戶
-              </button>
-              <button type="button" aria-pressed={who === 'new'} disabled={!canCreateCustomer} onClick={() => setWho('new')}>
-                新客戶
-              </button>
-            </div>
-            <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
-              {!canCreateCustomer
-                ? '你的角色不能建立客戶，只能選原有客戶。'
-                : who === 'existing'
-                  ? '客戶已經在系統裡（包含其他產品的客戶）。'
-                  : '客戶還不在系統裡：在這裡填客戶資料，下一步填訂閱內容，送出時一起建立。'}
-            </p>
-          </div>
-          {who === 'existing' ? (
-            <FormField label="客戶" required help="從其他經銷商轉入的客戶，請到客戶管理用「轉入客戶」。">
-              {(p) => (
-                <Combobox
-                  {...p}
-                  value={pickId}
-                  onChange={setPickId}
-                  placeholder="輸入客戶名稱、網域或統編搜尋"
-                  emptyText="找不到符合的客戶，可以改選「新客戶」"
-                  options={(customers.data ?? []).map((c) => ({
-                    value: c.id,
-                    label: c.name,
-                    hint: [c.primaryDomain, `統編 ${c.taxId}`, c.dealerName].filter(Boolean).join(' · '),
-                    keywords: [...c.shortNames, c.taxId, ...c.otherDomains],
-                  }))}
-                />
-              )}
-            </FormField>
-          ) : (
-            <>
-              {newCustTried && Object.keys(quickCustomerErrors(newCust)).length > 0 && (
-                <Callout tone="danger">還有 {Object.keys(quickCustomerErrors(newCust)).length} 個欄位要填寫或修正。</Callout>
-              )}
-              <QuickCustomerForm value={newCust} onChange={setNewCust} showErrors={newCustTried} />
-            </>
-          )}
-        </div>
-      </Modal>
+      <OperationPanel
+        id={panelId}
+        onClose={() => {
+          setPanelId(null);
+          if (params.get('op')) setParam('op', '');
+        }} onChanged={() => setVersion((v) => v + 1)} />
     </>
   );
 }
