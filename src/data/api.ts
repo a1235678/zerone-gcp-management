@@ -1638,7 +1638,13 @@ export function getSchedules(query: ScheduleQuery = {}): Promise<ScheduleListIte
       const c = customerOf(s.customerId)!;
       return { ...s, customerName: c.name, primaryDomain: c.primaryDomain, dealerName: dealerName(c.dealerId) };
     })
-    .sort((a, b) => b.enabledAt.localeCompare(a.enabledAt));
+    // 等待執行的排前面、由早到晚（最快要執行的在最上面）；其他狀態排後面、由晚到早（2026/11/18）
+    .sort((a, b) => {
+      const aw = a.status === 'waiting';
+      const bw = b.status === 'waiting';
+      if (aw !== bw) return aw ? -1 : 1;
+      return aw ? a.enabledAt.localeCompare(b.enabledAt) : b.enabledAt.localeCompare(a.enabledAt);
+    });
   return delay(rows);
 }
 

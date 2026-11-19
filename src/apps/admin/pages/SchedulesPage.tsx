@@ -131,7 +131,7 @@ export function SchedulesPage() {
           <DateRangeField label="啟用時間" from={from} to={to} onChange={(f, t) => setParam({ from: f, to: t })} />
         </FilterBar>
         <div className="result-meta">
-          <span>{hasFilter ? `符合條件 ${rows.length} 筆` : `共 ${rows.length} 筆`}，依啟用時間排序（新到舊）</span>
+          <span>{hasFilter ? `符合條件 ${rows.length} 筆` : `共 ${rows.length} 筆`}；等待執行的依啟用時間由早到晚排在前面，其他由晚到早</span>
         </div>
         <DataTable
           caption="GWS 排程清單"
