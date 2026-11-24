@@ -553,8 +553,15 @@ export function OperationModal({
           <div className="inline">
             <span className="muted">這次是：</span>
             <StatusTag tone="info">{operationTypeLabel[type]}</StatusTag>
+            {/* 升版同時加人時，兩件事都標出來 */}
+            {type === 'upgrade' && Number(addSeats) > 0 && <StatusTag tone="info">加購 {Number(addSeats)} 席</StatusTag>}
             <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-              {type === 'upgrade' ? `${target.plan} → ${plan}` : '版本不變，只加人數'}
+              {[
+                type === 'upgrade' ? `${target.plan} → ${plan}` : '版本不變',
+                Number(addSeats) > 0 ? `${target.seats} 席 → ${(target.seats ?? 0) + Number(addSeats)} 席` : type === 'upgrade' ? '人數不變' : '',
+              ]
+                .filter(Boolean)
+                .join('，')}
             </span>
           </div>
           {type === 'upgrade' && (
