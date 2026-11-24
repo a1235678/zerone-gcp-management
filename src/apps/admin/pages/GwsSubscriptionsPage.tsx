@@ -33,7 +33,7 @@ export function GwsSubscriptionsPage() {
   const plan = params.get('plan') ?? '';
   const page = Number(params.get('page') ?? '1');
   const [version, setVersion] = useState(0);
-  const [action, setAction] = useState<{ type: OperationType; target: OperationTarget } | null>(null);
+  const [action, setAction] = useState<{ type: OperationType; target: OperationTarget; combined?: boolean } | null>(null);
   // 從新訂頁送出後回到這裡，直接打開那筆的處理狀態
   const [panelId, setPanelId] = useState<string | null>(() => params.get('op'));
   const toTarget = (s: SubscriptionListItem): OperationTarget => ({
@@ -60,7 +60,6 @@ export function GwsSubscriptionsPage() {
 
   const dealers = useAsync(getDealers);
   const plans = useAsync(getPlans);
-  const topPlan = plans.data?.[plans.data.length - 1];
   const all = useAsync(() => getSubscriptions({ product: 'GWS' }), [version]);
   const result = useAsync(() => getSubscriptions({ product: 'GWS', keyword, dealerId, status, plan }), [keyword, dealerId, status, plan, version]);
   const rows = result.data ?? [];
@@ -148,16 +147,9 @@ export function GwsSubscriptionsPage() {
             >
               續約
             </button>
-            <button className="btn btn--sm" onClick={() => setAction({ type: 'addSeats', target: toTarget(s) })}>
-              加購
-            </button>
-            <button
-              className="btn btn--sm"
-              disabled={topPlan === s.plan}
-              title={topPlan === s.plan ? '已經是最高的版本' : undefined}
-              onClick={() => setAction({ type: 'upgrade', target: toTarget(s) })}
-            >
-              中途升版
+            {/* 加購與中途升版合併成一個按鈕（2026/11/24） */}
+            <button className="btn btn--sm" onClick={() => setAction({ type: 'addSeats', target: toTarget(s), combined: true })}>
+              加購／升版
             </button>
           </div>
         ),
@@ -239,6 +231,7 @@ export function GwsSubscriptionsPage() {
         <OperationModal
           open
           type={action.type}
+          combined={action.combined}
           target={action.target}
           onClose={() => setAction(null)}
           onSubmitted={(op) => {

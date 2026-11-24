@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { EXPIRING_DAYS, cancelSchedule, daysUntil, offerSummary, getExpiryNoticeFor, getOperations, setRenewalCancelled, getPlans, getSchedules, getSubscription, getWorkOrders } from '@data/api';
+import { EXPIRING_DAYS, cancelSchedule, daysUntil, offerSummary, getExpiryNoticeFor, getOperations, setRenewalCancelled, getSchedules, getSubscription, getWorkOrders } from '@data/api';
 import { contractTermLabel, executionModeLabel, operationTypeLabel, scheduleActionLabel, workOrderTypeLabel } from '@data/labels';
 import type { OperationListItem, OperationType, ScheduleListItem, WorkOrderListItem } from '@data/types';
 import { Card } from '@shared/components/Card';
@@ -48,7 +48,6 @@ export function SubscriptionDetailPage() {
   };
 
   const sub = useAsync(() => getSubscription(id), [id, version]);
-  const plans = useAsync(getPlans);
   const ops = useAsync(() => getOperations({ subscriptionId: id }), [id, version]);
   const schedules = useAsync(() => getSchedules({ subscriptionId: id }), [id, version]);
   const orders = useAsync(() => (can('workOrders') ? getWorkOrders({ subscriptionId: id }) : Promise.resolve([])), [id, version]);
@@ -81,7 +80,6 @@ export function SubscriptionDetailPage() {
     );
 
   const days = daysUntil(s.expiresAt);
-  const topPlan = plans.data?.[plans.data.length - 1];
   const live = s.status !== 'cancelled';
   const openOps = (ops.data ?? []).filter((o) => OPEN.includes(o.status));
   const pastOps = (ops.data ?? []).filter((o) => !OPEN.includes(o.status));
@@ -157,11 +155,9 @@ export function SubscriptionDetailPage() {
         actions={
           canOperate && live ? (
             <>
+              {/* 加購與中途升版合併成一個按鈕（2026/11/24） */}
               <button className="btn" onClick={() => setAction('addSeats')}>
-                加購
-              </button>
-              <button className="btn" disabled={topPlan === s.plan} title={topPlan === s.plan ? '已經是最高的版本' : undefined} onClick={() => setAction('upgrade')}>
-                中途升版
+                加購／升版
               </button>
               {s.term === 'flexible' && renewSchedule && (
                 <button className="btn" onClick={() => setCancelRenewSchedOpen(true)}>
@@ -323,6 +319,7 @@ export function SubscriptionDetailPage() {
         <OperationModal
           open
           type={action}
+          combined={action === 'addSeats'}
           target={target}
           onClose={() => setAction(null)}
           onSubmitted={() => {

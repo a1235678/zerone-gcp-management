@@ -67,7 +67,8 @@ export function ChangeTags({ planChange, seatChange }: { planChange?: 'up' | 'do
  */
 export function OperationModal({
   open,
-  type,
+  type: typeProp,
+  combined = false,
   target,
   workOrderId,
   initial,
@@ -80,6 +81,11 @@ export function OperationModal({
 }: {
   open: boolean;
   type: OperationType;
+  /**
+   * 加購／升版合併成一個視窗（2026/11/24）：選版本與加購人數，
+   * 版本不變就是「加購」，選了比目前高的版本就是「中途升版」（可同時加人）。
+   */
+  combined?: boolean;
   target: OperationTarget;
   workOrderId?: string;
   initial?: OperationPayload;
@@ -97,13 +103,21 @@ export function OperationModal({
   const toast = useToast();
   const plans = useAsync(getPlanList);
   const [version, setVersion] = useState(0);
-  const pendingSchedules = useAsync(() => (type === 'addSeats' ? getPendingSchedules(target.customerId) : Promise.resolve([])), [type, target.customerId, version]);
+  const pendingSchedules = useAsync(
+    () => (typeProp === 'addSeats' || combined ? getPendingSchedules(target.customerId) : Promise.resolve([])),
+    [typeProp, combined, target.customerId, version],
+  );
   // 續約時，把還沒生效的加購算進預設人數（會議：加購後要重新按一次續約）
-  const subOps = useAsync(() => (type === 'renewal' && target.subscriptionId ? getOperations({ customerId: target.customerId, type: 'addSeats' }) : Promise.resolve([])), [type, target.subscriptionId]);
+  const subOps = useAsync(
+    () => (typeProp === 'renewal' && target.subscriptionId ? getOperations({ customerId: target.customerId, type: 'addSeats' }) : Promise.resolve([])),
+    [typeProp, target.subscriptionId],
+  );
   const pendingAdd = (subOps.data ?? [])
     .filter((o) => o.subscriptionId === target.subscriptionId && ['scheduled', 'submitted', 'manual'].includes(o.status))
     .reduce((n, o) => n + (o.payload.addSeats ?? 0), 0);
   const [plan, setPlan] = useState('');
+  // 合併模式：版本不變是加購，選了更高的版本是中途升版
+  const type: OperationType = combined ? (plan && plan !== target.plan ? 'upgrade' : 'addSeats') : typeProp;
   // 新訂的網域：選客戶已有的網域，或輸入網域
   const cust = useAsync(() => (type === 'new' && target.customerId ? getCustomer(target.customerId) : Promise.resolve(undefined)), [type, target.customerId]);
   const ownedDomains = cust.data ? [cust.data.primaryDomain, ...cust.data.otherDomains].filter(Boolean) : [];
@@ -131,7 +145,7 @@ export function OperationModal({
 
   useEffect(() => {
     if (!open) return;
-    setPlan(initial?.plan ?? (type === 'renewal' ? target.plan ?? '' : ''));
+    setPlan(initial?.plan ?? (typeProp === 'renewal' || combined ? target.plan ?? '' : ''));
     setDomainPick('');
     setNewDomain(initial?.domain ?? '');
     setFirstUserLocal((initial?.firstUserEmail ?? '').split('@')[0]);
@@ -152,11 +166,15 @@ export function OperationModal({
     setSaving(false);
     // initial 用內容比較，避免父元件每次重繪都重設欄位
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, JSON.stringify(initial), target.subscriptionId, type, pendingAdd]);
+  }, [open, JSON.stringify(initial), target.subscriptionId, typeProp, combined, pendingAdd]);
 
   const activePlans = (plans.data ?? []).filter((p) => p.productId === 'P01');
   const currentTier = activePlans.find((p) => p.name === target.plan)?.tier ?? plans.data?.find((p) => p.name === target.plan)?.tier ?? 0;
-  const planOptions = type === 'upgrade' ? activePlans.filter((p) => p.tier > currentTier) : activePlans;
+  const planOptions = combined
+    ? activePlans.filter((p) => p.tier >= currentTier)
+    : type === 'upgrade'
+      ? activePlans.filter((p) => p.tier > currentTier)
+      : activePlans;
 
   const payload: OperationPayload = {
     plan: plan || undefined,
@@ -208,7 +226,8 @@ export function OperationModal({
     }
     if (type === 'addSeats') {
       const n = Number(addSeats);
-      if (!Number.isInteger(n) || n < 1) e.addSeats = '加購人數需為大於 0 的整數（加購不能減人）';
+      if (!Number.isInteger(n) || n < 1)
+        e.addSeats = combined ? '版本不變時，加購人數要大於 0；要升版請選更高的版本' : '加購人數需為大於 0 的整數（加購不能減人）';
     }
     if (needsOffer && plan && offerError) e.offerId = offerError;
     if (type === 'renewal' && renewMonths === 'custom') {
@@ -224,7 +243,7 @@ export function OperationModal({
       if (!source) e.source = '請選擇轉入來源';
     }
     return e;
-  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon, needsOffer, offerError, firstName, lastName]);
+  }, [type, combined, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon, needsOffer, offerError, firstName, lastName]);
   const show = (k: string) => (tried ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
@@ -514,7 +533,42 @@ export function OperationModal({
         </Callout>
       )}
 
-      {type === 'addSeats' && (
+      {combined && (
+        <>
+          <div className="form-grid">
+            {planSelect('版本')}
+            <FormField
+              label="加購人數"
+              required={type === 'addSeats'}
+              message={show('addSeats') ?? (Number(addSeats) > 0 ? `之後 ${(target.seats ?? 0) + Number(addSeats)} 席` : undefined)}
+              state={st('addSeats')}
+              help={`目前 ${target.seats} 席，只能加人，不能減人。${type === 'upgrade' ? '升版時可以不加人。' : ''}`}
+            >
+              {(p) => <input {...p} className="input tnum" type="number" min={type === 'upgrade' ? 0 : 1} placeholder={type === 'upgrade' ? '0' : undefined} value={addSeats} onChange={(e) => setAddSeats(e.target.value)} />}
+            </FormField>
+            <FormField label="期間" help="加購、升版都沿用目前合約，到期日不變。" className="is-full">
+              {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
+            </FormField>
+          </div>
+          <div className="inline">
+            <span className="muted">這次是：</span>
+            <StatusTag tone="info">{operationTypeLabel[type]}</StatusTag>
+            <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+              {type === 'upgrade' ? `${target.plan} → ${plan}` : '版本不變，只加人數'}
+            </span>
+          </div>
+          {type === 'upgrade' && (
+            <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+          )}
+          {renewConflict && Number(addSeats) > 0 && (
+            <Callout tone="warning" title="這個網域已經排了續約">
+              續約排程在加購之後才生效，排程裡的人數不會跟著加購改變。請先取消原本的續約排程，建立後再重新按一次「續約」。
+            </Callout>
+          )}
+        </>
+      )}
+
+      {!combined && type === 'addSeats' && (
         <>
           {renewConflict && (
             <Callout tone="warning" title="這個網域已經排了續約">
@@ -552,7 +606,7 @@ export function OperationModal({
         </>
       )}
 
-      {type === 'upgrade' && (
+      {!combined && type === 'upgrade' && (
         <div className="form-grid">
           {planSelect('升級後的版本')}
           <FormField
@@ -643,7 +697,7 @@ export function OperationModal({
     );
 
   return (
-    <Modal open={open} onClose={onClose} width={600} title={operationTypeLabel[type]} footer={footerEl}>
+    <Modal open={open} onClose={onClose} width={600} title={combined ? '加購／升版' : operationTypeLabel[type]} footer={footerEl}>
       {bodyEl}
     </Modal>
   );
