@@ -110,7 +110,8 @@ export function OperationModal({
   const [domainPick, setDomainPick] = useState('');
   const [newDomain, setNewDomain] = useState('');
   // 新訂：第一個使用者的帳號（公司網域信箱）與驗證信箱（非公司網域）
-  const [firstUserEmail, setFirstUserEmail] = useState('');
+  // 第一個使用者帳號：只輸入 @ 前面的帳號，後面固定接選好的網域（2026/11/24）
+  const [firstUserLocal, setFirstUserLocal] = useState('');
   const [verifyEmail, setVerifyEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -133,7 +134,7 @@ export function OperationModal({
     setPlan(initial?.plan ?? (type === 'renewal' ? target.plan ?? '' : ''));
     setDomainPick('');
     setNewDomain(initial?.domain ?? '');
-    setFirstUserEmail(initial?.firstUserEmail ?? '');
+    setFirstUserLocal((initial?.firstUserEmail ?? '').split('@')[0]);
     setVerifyEmail(initial?.verifyEmail ?? '');
     setFirstName(initial?.firstUserFirstName ?? '');
     setLastName(initial?.firstUserLastName ?? '');
@@ -181,7 +182,15 @@ export function OperationModal({
   const usingOwned = Boolean(fixedDomain) || domainPick !== '';
   const chosenDomain = fixedDomain ?? (usingOwned ? domainPick : newDomain.trim());
   const domainCheckResult = type === 'new' && !usingOwned ? checkDomain(newDomain) : undefined;
-  const userErr = type === 'new' ? firstUserError(chosenDomain, firstUserEmail, verifyEmail) : undefined;
+  const firstUserEmail = firstUserLocal.trim() && chosenDomain ? `${firstUserLocal.trim()}@${chosenDomain}` : '';
+  const localError = !firstUserLocal.trim()
+    ? '請輸入帳號'
+    : !/^[A-Za-z0-9._%+-]+$/.test(firstUserLocal.trim())
+      ? '帳號只能有英文、數字和 . _ % + -，不用輸入 @ 和網域'
+      : !chosenDomain
+        ? '先選擇或輸入網域'
+        : undefined;
+  const userErr = type === 'new' ? localError ?? firstUserError(chosenDomain, firstUserEmail, verifyEmail) : undefined;
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
     if (type === 'new' && !usingOwned && domainCheckResult && !domainCheckResult.ok) e.domain = domainCheckResult.message;
@@ -402,19 +411,24 @@ export function OperationModal({
                 required
                 message={show('firstUserEmail')}
                 state={st('firstUserEmail')}
-                help={chosenDomain ? `要用 @${chosenDomain}，例如 admin@${chosenDomain}` : '先選擇或輸入網域'}
+                help={chosenDomain ? `只要輸入 @ 前面的帳號，後面固定是 @${chosenDomain}` : '先選擇或輸入網域'}
               >
                 {(p) => (
-                  <input
-                    {...p}
-                    className="input mono"
-                    type="email"
-                    spellCheck={false}
-                    autoCapitalize="off"
-                    placeholder={chosenDomain ? `admin@${chosenDomain}` : 'admin@company.example'}
-                    value={firstUserEmail}
-                    onChange={(e) => setFirstUserEmail(e.target.value)}
-                  />
+                  <div className="input-suffix">
+                    <input
+                      {...p}
+                      className="input mono"
+                      spellCheck={false}
+                      autoCapitalize="off"
+                      autoComplete="off"
+                      placeholder="admin"
+                      value={firstUserLocal}
+                      onChange={(e) => setFirstUserLocal(e.target.value.replace(/@.*$/, ''))}
+                    />
+                    <span className="input-suffix__text mono" aria-hidden="true">
+                      @{chosenDomain || '網域'}
+                    </span>
+                  </div>
                 )}
               </FormField>
               <FormField label="驗證信箱" required message={show('verifyEmail')} state={st('verifyEmail')} help="不能是公司網域的信箱，例如個人 Gmail；用來收驗證信。">
