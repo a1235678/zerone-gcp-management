@@ -248,6 +248,8 @@ export interface OperationPayload {
   domain?: string;
   /** 選擇的 Google 方案快照（SKU ID、Offer ID、方案內容）：新訂、續約、中途升版要選（2026/11/24） */
   offer?: OfferSnapshot;
+  /** 客戶轉入用 Cloud Identity ID 找客戶（和網域二選一，跟 Google 轉入畫面一樣，2026/11/24） */
+  cloudIdentityId?: string;
   /** 新訂：第一個使用者的帳號（公司網域的信箱）與驗證信箱（不是公司網域，2026/11/24） */
   firstUserEmail?: string;
   verifyEmail?: string;

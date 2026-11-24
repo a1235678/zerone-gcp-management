@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { checkDomain, createCustomer, createTransferInCustomer, createTransferForExisting, getCustomers, getWorkOrder, linkCustomerToWorkOrder } from '@data/api';
+import { CLOUD_IDENTITY_ID, checkDomain, createCustomer, createTransferInCustomer, createTransferForExisting, getCustomers, getWorkOrder, linkCustomerToWorkOrder } from '@data/api';
 import type { DomainCheck } from '@data/types';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
@@ -31,6 +31,8 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
   const wo = useAsync(() => (fromWo ? getWorkOrder(fromWo) : Promise.resolve(undefined)), [fromWo]);
   const [form, setForm] = useState<CustomerFormValue>(emptyQuickCustomer);
   const [primaryDomain, setPrimaryDomain] = useState('');
+  const [transferBy, setTransferBy] = useState<TransferBy>('domain');
+  const [cloudId, setCloudId] = useState('');
   const [transferMemo, setTransferMemo] = useState('');
   const [prefilled, setPrefilled] = useState(false);
   const [tried, setTried] = useState(false);
@@ -59,17 +61,18 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
 
   // 主網域（只有客戶轉入要填）：停止輸入 300ms 後檢查格式與是否重複
   useEffect(() => {
-    if (!isTransfer || !primaryDomain) {
+    if (!isTransfer || transferBy !== 'domain' || !primaryDomain) {
       setDomain({ checking: false });
       return;
     }
     setDomain({ checking: true });
     const t = setTimeout(() => setDomain({ checking: false, result: checkDomain(primaryDomain) }), 300);
     return () => clearTimeout(t);
-  }, [primaryDomain, isTransfer]);
+  }, [primaryDomain, isTransfer, transferBy]);
 
   const errors = quickCustomerErrors(form);
-  const domainOk = !isTransfer || (!domain.checking && domain.result?.ok === true);
+  const cloudIdError = !cloudId.trim() ? '請輸入 Cloud Identity ID' : !CLOUD_IDENTITY_ID.test(cloudId.trim()) ? 'Cloud Identity ID 格式不正確（例如 C01abc23d）' : undefined;
+  const domainOk = !isTransfer || (transferBy === 'cloudIdentity' ? !cloudIdError : !domain.checking && domain.result?.ok === true);
   const canSubmit = domainOk && Object.keys(errors).length === 0 && !saving;
 
   const submit = async () => {
@@ -82,7 +85,13 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     const input = toNewCustomerInput(form);
     try {
       if (isTransfer) {
-        const { customer, operation } = await createTransferInCustomer({ ...input, primaryDomain, memo: transferMemo, workOrderId: fromWo ?? undefined });
+        const { customer, operation } = await createTransferInCustomer({
+          ...input,
+          primaryDomain: transferBy === 'domain' ? primaryDomain : undefined,
+          cloudIdentityId: transferBy === 'cloudIdentity' ? cloudId.trim() : undefined,
+          memo: transferMemo,
+          workOrderId: fromWo ?? undefined,
+        });
         toast(operation.status === 'failed' ? `已建立「${customer.name}」，但 Google 轉入失敗（${operation.id}），請重新送出或改為手動處理` : `已建立「${customer.name}」，客戶轉入完成（${operation.id}）`, operation.status === 'failed' ? 'danger' : 'success');
         navigate(fromWo ? `/work-orders/${fromWo}` : `/products/gws?op=${operation.id}`);
       } else {
@@ -132,7 +141,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     };
   })();
 
-  const missing = [!domainOk && '有效的主網域', Object.keys(errors).length > 0 && `${Object.keys(errors).length} 個必填欄位`].filter(Boolean);
+  const missing = [!domainOk && (transferBy === 'cloudIdentity' ? '有效的 Cloud Identity ID' : '有效的主網域'), Object.keys(errors).length > 0 && `${Object.keys(errors).length} 個必填欄位`].filter(Boolean);
 
   if (isTransfer ? !can('subscriptions', 'write') : !canCreateCustomer)
     return (
@@ -214,7 +223,11 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
                 }
               >
                 {isTransfer && (
-                  <FormSection title="GWS 主網域">
+                  <FormSection title="轉入方式" description="跟 Google 轉入畫面一樣，用網域或 Cloud Identity ID 找到要轉入的客戶。">
+                    <TransferByRadios value={transferBy} onChange={setTransferBy} name="transfer-by-new" />
+                    {transferBy === 'cloudIdentity' ? (
+                      <CloudIdentityField value={cloudId} onChange={setCloudId} error={tried ? cloudIdError : undefined} />
+                    ) : (
                     <FormField
                       className="is-full"
                       label="主網域"
@@ -236,11 +249,12 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
                         />
                       )}
                     </FormField>
+                    )}
                   </FormSection>
                 )}
               </QuickCustomerForm>
               {isTransfer && (
-                <FormSection title="轉移資訊" description="客戶已經在 Google 申請完轉移。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域含「fail」會模擬失敗。">
+                <FormSection title="轉移資訊" description="客戶已經在 Google 申請完轉移。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域或 Cloud Identity ID 含「fail」會模擬失敗。">
                   <FormField label="轉移備註" className="is-full">
                     {(p) => <textarea {...p} className="textarea" value={transferMemo} onChange={(e) => setTransferMemo(e.target.value)} />}
                   </FormField>
@@ -272,6 +286,8 @@ function ExistingTransferForm() {
   const [customerId, setCustomerId] = useState('');
   const [domainPick, setDomainPick] = useState('');
   const [newDomain, setNewDomain] = useState('');
+  const [transferBy, setTransferBy] = useState<TransferBy>('domain');
+  const [cloudId, setCloudId] = useState('');
   const [memo, setMemo] = useState('');
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -279,14 +295,23 @@ function ExistingTransferForm() {
   const owned = c ? [c.primaryDomain, ...c.otherDomains].filter(Boolean) : [];
   const domain = domainPick || newDomain.trim();
   const check = !domainPick && newDomain ? checkDomain(newDomain) : undefined;
-  const errors = { customer: !customerId ? '請選擇客戶' : undefined, domain: !domain ? '請選擇或輸入網域' : check && !check.ok ? check.message : undefined };
+  const cloudIdError = !cloudId.trim() ? '請輸入 Cloud Identity ID' : !CLOUD_IDENTITY_ID.test(cloudId.trim()) ? 'Cloud Identity ID 格式不正確（例如 C01abc23d）' : undefined;
+  const errors = {
+    customer: !customerId ? '請選擇客戶' : undefined,
+    domain: transferBy === 'cloudIdentity' ? cloudIdError : !domain ? '請選擇或輸入網域' : check && !check.ok ? check.message : undefined,
+  };
 
   const submit = async () => {
     setTried(true);
     if (errors.customer || errors.domain) return;
     setSaving(true);
     try {
-      const op = await createTransferForExisting({ customerId, domain, memo });
+      const op = await createTransferForExisting({
+        customerId,
+        domain: transferBy === 'domain' ? domain : '',
+        cloudIdentityId: transferBy === 'cloudIdentity' ? cloudId.trim() : undefined,
+        memo,
+      });
       toast(op.status === 'failed' ? `Google 轉入失敗（${op.id}），請重新送出或改為手動處理` : `客戶轉入完成（${op.id}）`, op.status === 'failed' ? 'danger' : 'success');
       navigate(`/products/gws?op=${op.id}`);
     } catch (e) {
@@ -320,7 +345,11 @@ function ExistingTransferForm() {
             )}
           </FormField>
         </FormSection>
-        <FormSection title="轉入資訊" description="客戶已經在 Google 申請完轉移，不需要轉移碼。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域含「fail」會模擬失敗。完成後網域會寫回客戶主檔。">
+        <FormSection title="轉入資訊" description="客戶已經在 Google 申請完轉移，不需要轉移碼。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域或 Cloud Identity ID 含「fail」會模擬失敗。完成後網域會寫回客戶主檔。">
+          <TransferByRadios value={transferBy} onChange={setTransferBy} name="transfer-by-existing" />
+          {transferBy === 'cloudIdentity' ? (
+            <CloudIdentityField value={cloudId} onChange={setCloudId} error={tried ? cloudIdError : undefined} />
+          ) : (
           <fieldset className="plain-fieldset is-full">
             <legend className="form-field__label">
               GWS 網域 <span className="form-field__req">必填</span>
@@ -348,6 +377,7 @@ function ExistingTransferForm() {
               </FormField>
             )}
           </fieldset>
+          )}
           <FormField label="轉移備註" className="is-full">
             {(p) => <textarea {...p} className="textarea" value={memo} onChange={(e) => setMemo(e.target.value)} />}
           </FormField>
@@ -362,5 +392,39 @@ function ExistingTransferForm() {
         </button>
       </div>
     </form>
+  );
+}
+
+/** 轉入方式：跟 Google 轉入畫面一樣，用網域或 Cloud Identity ID 二選一（2026/11/24） */
+type TransferBy = 'domain' | 'cloudIdentity';
+function TransferByRadios({ value, onChange, name }: { value: TransferBy; onChange: (v: TransferBy) => void; name: string }) {
+  return (
+    <div className="inline is-full" role="radiogroup" aria-label="轉入方式" style={{ gap: 'var(--space-5)' }}>
+      <label className="radio-row">
+        <input type="radio" name={name} checked={value === 'domain'} onChange={() => onChange('domain')} />
+        <span>用網域轉入</span>
+      </label>
+      <label className="radio-row">
+        <input type="radio" name={name} checked={value === 'cloudIdentity'} onChange={() => onChange('cloudIdentity')} />
+        <span>用 Cloud Identity ID 轉入</span>
+      </label>
+    </div>
+  );
+}
+
+function CloudIdentityField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
+  return (
+    <FormField
+      className="is-full"
+      label="Cloud Identity ID"
+      required
+      message={error}
+      state={error ? 'error' : undefined}
+      help="客戶在 Google 的客戶 ID（例如 C01abc23d），可以在客戶的 Google 管理控制台「帳戶設定」看到。網域會在轉入成功後由 Google 回傳並寫回客戶主檔。"
+    >
+      {(p) => (
+        <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" placeholder="C01abc23d" value={value} onChange={(e) => onChange(e.target.value)} />
+      )}
+    </FormField>
   );
 }

@@ -664,25 +664,37 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
 }
 
 /** 轉入客戶：從其他經銷商轉進來的新客戶，建立客戶主檔後建立一筆移轉，由後勤人工執行（客戶已在 Google 申請完移轉，不需要轉移碼） */
+/** Cloud Identity ID 的格式（Google 的客戶 ID，例如 C01abc23d） */
+export const CLOUD_IDENTITY_ID = /^C[0-9a-z]{6,}$/i;
+
 export async function createTransferInCustomer(
-  input: NewCustomerInput & { memo: string; workOrderId?: string },
+  input: NewCustomerInput & { memo: string; workOrderId?: string; cloudIdentityId?: string },
 ): Promise<{ customer: CustomerListItem; operation: OperationListItem }> {
-  const customer = await createCustomer({ ...input, note: input.note || '由其他經銷商轉入' });
+  // 轉入方式二選一：網域（主網域）或 Cloud Identity ID
+  const cloudIdentityId = input.cloudIdentityId?.trim();
+  if (cloudIdentityId ? !CLOUD_IDENTITY_ID.test(cloudIdentityId) : !input.primaryDomain?.trim())
+    return fail(cloudIdentityId ? 'Cloud Identity ID 格式不正確（例如 C01abc23d）' : '請輸入網域');
+  const customer = await createCustomer({ ...input, primaryDomain: cloudIdentityId ? undefined : input.primaryDomain, note: input.note || '由其他經銷商轉入' });
   // 依執行單轉入時，先把客戶接回執行單，再建立移轉（記錄來源單號）
   if (input.workOrderId) await linkCustomerToWorkOrder(input.workOrderId, customer.id);
   const operation = await createOperation({
     type: 'transfer',
     customerId: customer.id,
     workOrderId: input.workOrderId,
-    payload: { transferSource: 'otherDealer', memo: input.memo.trim() || undefined },
+    payload: { transferSource: 'otherDealer', cloudIdentityId: cloudIdentityId || undefined, memo: input.memo.trim() || undefined },
   });
   return { customer, operation };
 }
 
 /** 現有客戶的客戶轉入：客戶已經在系統裡（例如其他產品的客戶），GWS 從其他經銷商轉進來 */
-export async function createTransferForExisting(input: { customerId: string; domain: string; memo: string }): Promise<OperationListItem> {
+export async function createTransferForExisting(input: { customerId: string; domain: string; cloudIdentityId?: string; memo: string }): Promise<OperationListItem> {
   const c = customerOf(input.customerId);
   if (!c) return fail('請選擇客戶');
+  const cloudIdentityId = input.cloudIdentityId?.trim();
+  if (cloudIdentityId) {
+    if (!CLOUD_IDENTITY_ID.test(cloudIdentityId)) return fail('Cloud Identity ID 格式不正確（例如 C01abc23d）');
+    return createOperation({ type: 'transfer', customerId: c.id, payload: { transferSource: 'otherDealer', cloudIdentityId, memo: input.memo.trim() || undefined } });
+  }
   const domain = input.domain.trim();
   const owned = c.primaryDomain === domain || c.otherDomains.includes(domain);
   if (!owned) {
@@ -845,7 +857,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
     case 'new':
       return `${p.plan} ${p.seats} 席${offerText(p)}${p.domain ? `，${p.domain}` : ''}${p.firstUserEmail ? `，第一個使用者 ${p.firstUserEmail}` : ''}`;
     case 'transfer':
-      return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.domain ? `，${p.domain}` : ''}`;
+      return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.domain ? `，${p.domain}` : ''}${p.cloudIdentityId ? `，Cloud Identity ID ${p.cloudIdentityId}` : ''}`;
     case 'renewal': {
       const plan = p.plan ?? fromPlan;
       const seats = p.seats ?? fromSeats;
@@ -1096,7 +1108,7 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
  */
 function respondImmediately(op: GwsOperation) {
   const at = now();
-  const failed = (op.payload.domain ?? customerOf(op.customerId)?.primaryDomain ?? '').includes('fail');
+  const failed = (op.payload.cloudIdentityId ?? op.payload.domain ?? customerOf(op.customerId)?.primaryDomain ?? '').toLowerCase().includes('fail');
   if (failed) {
     op.status = 'failed';
     op.failureReason = 'Google 回應：轉入失敗（客戶尚未在 Google 核准轉移）';
@@ -1221,6 +1233,7 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
     }
     case 'transfer':
       // 現有客戶轉入時帶的網域，完成後寫回客戶主檔
+      // 用 Cloud Identity ID 轉入時，網域由 Google 回傳後寫回（正式版由後端處理；Prototype 等下次同步）
       if (p.domain) attachDomain(c, p.domain, true);
       else if (c.primaryDomain) attachDomain(c, c.primaryDomain, true);
       log('customer', c.name, `客戶轉入完成（${op.id}），訂閱將於下次同步時出現在 GWS 訂閱清單`, 'success', c.id, '系統');
