@@ -22,7 +22,7 @@ import { PageHeader } from "@shared/components/PageHeader";
 import { PendingTag } from "@shared/components/PendingTag";
 import { StatusFlow } from "@shared/components/StatusFlow";
 import { useToast } from "@shared/components/Toast";
-import { formatDate, formatDateTime, formatUsd } from "@shared/format";
+import { HIDDEN_PRICE, formatDate, formatDateTime, formatUsd, isPriceVisible } from "@shared/format";
 import { useAsync } from "@shared/hooks/useAsync";
 import { ProjectCostTable } from "../components/ProjectCostTable";
 import { usePermission } from "../auth";
@@ -31,7 +31,8 @@ import { BillStatusTag, ReconcileStateTag } from "../tags";
 const usd = (cents: number) => formatUsd(cents).slice(1);
 const signedUsd = (cents: number) =>
   `${cents > 0 ? "+" : "−"}${usd(Math.abs(cents))}`;
-const twd = (n: number) => n.toLocaleString("en-US");
+// 看不到價格的角色，台幣金額也隱藏（2026/11/24）
+const twd = (n: number) => (isPriceVisible() ? n.toLocaleString("en-US") : HIDDEN_PRICE);
 
 
 export function GcpBillDetailPage() {

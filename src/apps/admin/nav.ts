@@ -12,13 +12,21 @@ export const adminNav: NavGroup[] = [
       { to: '/work-orders', label: '執行單', icon: 'workOrders' },
       { to: '/brands', label: '品牌管理', icon: 'brand' },
       { to: '/catalog', label: '產品管理', icon: 'product' },
-      { to: '/plans', label: '方案管理', icon: 'layers' },
     ],
   },
   {
     label: '產品',
     items: [
-      { to: '/products/gws', label: 'GWS', icon: 'workspace' },
+      {
+        to: '/products/gws',
+        label: 'GWS',
+        icon: 'workspace',
+        // 「方案」改名「版本」，放在 GWS 底下（2026/11/24）
+        children: [
+          { to: '/products/gws', label: '訂閱' },
+          { to: '/products/gws/versions', label: '版本' },
+        ],
+      },
       {
         to: '/products/gcp',
         label: 'GCP',
@@ -54,8 +62,8 @@ export const pageResource: Record<string, ResourceKey> = {
   '/work-orders': 'workOrders',
   '/brands': 'catalog',
   '/catalog': 'catalog',
-  '/plans': 'catalog',
   '/products/gws': 'subscriptions',
+  '/products/gws/versions': 'catalog',
   '/products/gcp/usage': 'gcpUsage',
   '/products/gcp/billing': 'billing',
   '/schedules/gws': 'schedules',

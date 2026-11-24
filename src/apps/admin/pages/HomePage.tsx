@@ -6,7 +6,7 @@ import { LineChart } from '@shared/components/LineChart';
 import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
-import { formatDate, formatDateTime, formatNumber, formatPct, formatUsd } from '@shared/format';
+import { formatDate, formatDateTime, formatNumber, formatPct, formatUsd, HIDDEN_PRICE, isPriceVisible } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
 import { SubscriptionStatusTag, WorkOrderStatusTag } from '../tags';
@@ -152,7 +152,7 @@ export function HomePage() {
               ariaLabel="近 30 天每日 GCP 費用"
               data={d.gcp.daily.map((x) => ({ label: x.date, value: x.costCents }))}
               formatValue={(v) => `${formatUsd(v)} USD`}
-              formatAxis={(v) => `$${formatNumber(Math.round(v / 100))}`}
+              formatAxis={(v) => (isPriceVisible() ? `$${formatNumber(Math.round(v / 100))}` : HIDDEN_PRICE)}
               formatLabel={(x) => x.slice(5).replace('-', '/')}
             />
             <div>

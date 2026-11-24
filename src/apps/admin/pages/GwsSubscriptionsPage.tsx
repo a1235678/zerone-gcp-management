@@ -10,7 +10,7 @@ import { PageHeader } from '@shared/components/PageHeader';
 import { Pagination, paginate } from '@shared/components/Pagination';
 import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
-import { formatDate, formatDateTime, formatNumber } from '@shared/format';
+import { formatContractPeriod, formatDateTime, formatNumber } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
 import { OperationPanel } from '../components/OperationPanel';
@@ -45,6 +45,7 @@ export function GwsSubscriptionsPage() {
     plan: s.plan,
     seats: s.seats,
     startsAt: s.startsAt,
+    contractTime: s.contractTime,
     expiresAt: s.expiresAt,
     renewalCancelled: Boolean(s.renewalCancelled),
   });
@@ -83,7 +84,7 @@ export function GwsSubscriptionsPage() {
       ),
     },
     { key: 'dealer', header: '經銷商', render: (s) => s.dealerName },
-    { key: 'plan', header: '方案', render: (s) => s.plan },
+    { key: 'plan', header: '版本', render: (s) => s.plan },
     { key: 'seats', header: '席次', align: 'right', render: (s) => <span className="tnum">{s.seats}</span> },
     {
       key: 'status',
@@ -91,7 +92,7 @@ export function GwsSubscriptionsPage() {
       render: (s) => (
         <div className="op-chips">
           <SubscriptionStatusTag value={s.status} />
-          {s.renewalCancelled && <StatusTag tone="warning">已取消續約</StatusTag>}
+          {s.renewalCancelled && <StatusTag tone="warning">不續約</StatusTag>}
         </div>
       ),
     },
@@ -103,10 +104,13 @@ export function GwsSubscriptionsPage() {
         return (
           <div>
             <div className="mono">
-              {formatDate(s.startsAt)} – {formatDate(s.expiresAt)}
+              {formatContractPeriod(s.startsAt, s.expiresAt, s.contractTime)}
             </div>
             {s.status !== 'cancelled' && (
-              <div className={`table__secondary ${d <= EXPIRING_DAYS ? 'text-warning' : ''}`}>{d >= 0 ? `剩 ${d} 天` : `已過 ${-d} 天`}</div>
+              <div className={`table__secondary ${d <= EXPIRING_DAYS ? 'text-warning' : ''}`}>
+                {d >= 0 ? `剩 ${d} 天` : `已過 ${-d} 天`}
+                {s.term === 'flexible' && ' · 彈性合約'}
+              </div>
             )}
           </div>
         );
@@ -139,7 +143,7 @@ export function GwsSubscriptionsPage() {
             <button
               className="btn btn--sm"
               disabled={Boolean(s.renewalCancelled)}
-              title={s.renewalCancelled ? '已取消續約，要續約請到訂閱詳情恢復續約' : undefined}
+              title={s.renewalCancelled ? '已設定不續約，要續約請到訂閱詳情恢復續約' : undefined}
               onClick={() => setAction({ type: 'renewal', target: toTarget(s) })}
             >
               續約
@@ -150,7 +154,7 @@ export function GwsSubscriptionsPage() {
             <button
               className="btn btn--sm"
               disabled={topPlan === s.plan}
-              title={topPlan === s.plan ? '已經是最高等級的方案' : undefined}
+              title={topPlan === s.plan ? '已經是最高的版本' : undefined}
               onClick={() => setAction({ type: 'upgrade', target: toTarget(s) })}
             >
               中途升版
@@ -176,7 +180,7 @@ export function GwsSubscriptionsPage() {
         description={
           <span className="inline">
             以訂閱為單位，資料由 Google 同步回來；點一列可以看訂閱詳情。{canOperate ? '可以直接在這裡新訂、續約、加購、中途升版，依類型排程執行或人工執行。' : '你的角色只能查看；需要變更請開立執行單。'}
-            <PendingTag id={3} hint="能否抓到已購買方案" />
+            <PendingTag id={3} hint="能否抓到已購買版本" />
           </span>
         }
       />
@@ -200,9 +204,9 @@ export function GwsSubscriptionsPage() {
 
       <Card bodyless>
         <FilterBar onReset={hasFilter ? () => setParams({}, { replace: true }) : undefined}>
-          <SearchField label="關鍵字" value={keyword} onChange={(v) => setParam('q', v)} placeholder="客戶、網域或方案" />
+          <SearchField label="關鍵字" value={keyword} onChange={(v) => setParam('q', v)} placeholder="客戶、網域或版本" />
           <SelectField label="經銷商" value={dealerId} onChange={(v) => setParam('dealer', v)} options={(dealers.data ?? []).map((d) => ({ value: d.id, label: d.shortNames[0] ?? d.name }))} />
-          <SelectField label="方案" value={plan} onChange={(v) => setParam('plan', v)} options={(plans.data ?? []).map((p) => ({ value: p, label: p }))} />
+          <SelectField label="版本" value={plan} onChange={(v) => setParam('plan', v)} options={(plans.data ?? []).map((p) => ({ value: p, label: p }))} />
           <SelectField
             label="狀態"
             value={status}

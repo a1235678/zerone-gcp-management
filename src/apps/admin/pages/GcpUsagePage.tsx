@@ -8,7 +8,7 @@ import { LineChart } from '@shared/components/LineChart';
 import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
-import { formatDate, formatNumber, formatPct, formatUsd } from '@shared/format';
+import { formatDate, formatNumber, formatPct, formatUsd, HIDDEN_PRICE, isPriceVisible } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { ProjectCostTable } from '../components/ProjectCostTable';
 
@@ -92,7 +92,7 @@ export function GcpUsagePage() {
             ariaLabel={`近 30 天每日 GCP 費用，合計 ${formatUsd(u.totalCostCents)}`}
             data={u.daily.map((d) => ({ label: d.date, value: d.costCents }))}
             formatValue={(v) => `${formatUsd(v)} USD`}
-            formatAxis={(v) => `$${formatNumber(Math.round(v / 100))}`}
+            formatAxis={(v) => (isPriceVisible() ? `$${formatNumber(Math.round(v / 100))}` : HIDDEN_PRICE)}
             formatLabel={(d) => d.slice(5).replace('-', '/')}
           />
         </Card>

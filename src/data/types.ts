@@ -22,6 +22,8 @@ export interface Dealer {
   contactName: string;
   contactPhone: string;
   contactEmail: string;
+  /** 一般聯絡人（不一定有系統帳號；2026/11/24 客戶主檔不需要、經銷商要有） */
+  contacts: CustomerContact[];
   note: string;
   createdAt: string;
 }
@@ -61,9 +63,12 @@ export interface SalesAssignment {
   term: 'new' | 'renewal';
   salesName: string;
 }
+/** 客戶類型：公司或個人（個人不用統編，2026/11/24） */
+export type CustomerKind = 'company' | 'individual';
 export interface Customer {
   id: string;
-  /** 公司全名 */
+  kind: CustomerKind;
+  /** 公司全名；個人客戶是姓名 */
   name: string;
   /** 公司簡稱，可以有多個別名 */
   shortNames: string[];
@@ -71,7 +76,7 @@ export interface Customer {
   registeredAddress: Address;
   contactAddress: Address;
   contactSameAsRegistered: boolean;
-  /** 統一編號（8 碼） */
+  /** 統一編號（8 碼）；個人客戶是空字串 */
   taxId: string;
   /** 主網域：建立客戶時不填，GWS 新訂時填寫，訂閱成功後寫回（2026/11/12） */
   primaryDomain: string;
@@ -80,8 +85,6 @@ export interface Customer {
   /** 已開通 GWS 的網域（其餘是客戶有、但還沒開通 GWS 的網域） */
   gwsDomains: string[];
   salesAssignments: SalesAssignment[];
-  /** 一般聯絡人（不一定有系統帳號） */
-  contacts: CustomerContact[];
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -101,6 +104,7 @@ export interface CustomerQuery {
   status?: CustomerStatus | '';
 }
 export interface NewCustomerInput {
+  kind: CustomerKind;
   name: string;
   taxId: string;
   /** 只有客戶轉入要填（既有的 GWS 客戶） */
@@ -110,8 +114,6 @@ export interface NewCustomerInput {
   contactEmail: string;
   contactPhone: string;
   note: string;
-  adminName: string;
-  adminEmail: string;
   shortNames?: string[];
   registeredAddress?: Address;
   contactAddress?: Address;
@@ -126,6 +128,7 @@ export type DomainCheck =
 // ── 訂閱 ───────────────────────────────
 export type ProductCode = 'GWS' | 'GCP';
 export type SubscriptionStatus = 'active' | 'expiring' | 'cancelled';
+export type ContractTerm = 'annual' | 'flexible';
 export interface Subscription {
   id: string;
   customerId: string;
@@ -138,7 +141,11 @@ export interface Subscription {
   startsAt: string;
   /** 目前合約迄日（到期日） */
   expiresAt: string;
-  /** 已取消續約：客戶合約到期後不再續約（不寄到期通知） */
+  /** 合約起迄的時間（時:分，GMT+0；2026/11/24 合約期間要顯示時、分） */
+  contractTime: string;
+  /** 合約期間：年約，或彈性（Flexible，可以取消續約排程） */
+  term: ContractTerm;
+  /** 不續約：客戶合約到期後不再續約（不寄到期通知） */
   renewalCancelled?: { at: string; by: string; note: string };
   lastSyncedAt: string;
 }
@@ -183,6 +190,9 @@ export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'com
 export interface OperationPayload {
   /** 新訂的網域；訂閱成功後寫回客戶主檔 */
   domain?: string;
+  /** 新訂：第一個使用者的帳號（公司網域的信箱）與驗證信箱（不是公司網域，2026/11/24） */
+  firstUserEmail?: string;
+  verifyEmail?: string;
   /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
   /** 新訂的席次，或續約後的席次 */
@@ -193,6 +203,10 @@ export interface OperationPayload {
   fromPlan?: string;
   fromSeats?: number;
   renewMonths?: number;
+  /** 續約期間選「自訂」時的新合約到期日 */
+  renewEndAt?: string;
+  /** 排程執行的啟用時間（時:分，GMT+8）；新購、加購要在 16:00 之後（2026/11/24） */
+  scheduledTime?: string;
   /** 續約後的新合約起迄 */
   newStartsAt?: string;
   newExpiresAt?: string;
@@ -518,6 +532,23 @@ export interface UserQuery {
   roleId?: string;
   status?: UserStatus | '';
 }
+/**
+ * 客戶帳號的邀請（2026/11/24）：零壹（代理商）或經銷商用 Email 邀請，對方點邀請信完成註冊後才能登入。
+ * Email 已經註冊過時改寄驗證信，對方驗證後把這個產品加到這個客戶。登入流程細節之後再討論。
+ */
+export type InviteStatus = 'sent' | 'verifying' | 'verified';
+export interface CustomerInvite {
+  id: string;
+  customerId: string;
+  email: string;
+  product: ProductCode;
+  status: InviteStatus;
+  /** Email 已經有帳號時，原本的帳號 */
+  existingUserId?: string;
+  sentAt: string;
+  sentBy: string;
+  verifiedAt?: string;
+}
 export interface NewUserInput {
   name: string;
   email: string;
@@ -549,6 +580,8 @@ export interface Role {
   description: string;
   isPreset: boolean;
   permissions: Record<ResourceKey, PermissionLevel>;
+  /** 是否能看到價格（金額）；看不到時畫面上的金額以「••••」顯示（2026/11/24） */
+  canSeePrice: boolean;
 }
 export interface RoleListItem extends Role {
   orgName: string;

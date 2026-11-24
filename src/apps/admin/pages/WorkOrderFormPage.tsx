@@ -55,7 +55,7 @@ export function WorkOrderFormPage() {
   const analysis = analyzeOrder(input.type, sub, input.payload);
   const ownedCustomer = (customers.data ?? []).find((c) => c.id === input.customerId);
   const ownedDomains = input.customerMode === 'existing' && ownedCustomer ? [ownedCustomer.primaryDomain, ...ownedCustomer.otherDomains].filter(Boolean) : [];
-  const planLabel = input.type === 'upgrade' ? '升級後的方案' : input.type === 'renewal' ? '續約方案（版本）' : '方案';
+  const planLabel = input.type === 'upgrade' ? '升級後的版本' : input.type === 'renewal' ? '續約版本' : '版本';
   const upgradeOnly = input.type === 'upgrade';
 
   const full: WorkOrderInput = { ...input, newCustomer: input.customerMode === 'new' ? nc : undefined };
@@ -173,7 +173,7 @@ export function WorkOrderFormPage() {
                       options={(customers.data ?? []).map((c) => ({
                 value: c.id,
                 label: c.name,
-                hint: [c.primaryDomain, `統編 ${c.taxId}`, c.dealerName].filter(Boolean).join(' · '),
+                hint: [c.primaryDomain, c.taxId ? `統編 ${c.taxId}` : '個人', c.dealerName].filter(Boolean).join(' · '),
                 keywords: [...c.shortNames, c.taxId, ...c.otherDomains],
               }))}
                     />
@@ -189,7 +189,7 @@ export function WorkOrderFormPage() {
                         disabled={!input.customerId}
                         onChange={(e) => {
                           const next = liveSubs.find((x) => x.id === e.target.value);
-                          // 續約預設帶入目前的方案與人數
+                          // 續約預設帶入目前的版本與人數
                           setInput((x) => ({
                             ...x,
                             subscriptionId: e.target.value || undefined,
@@ -271,7 +271,7 @@ export function WorkOrderFormPage() {
                 >
                   {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" value={input.payload.domain ?? ''} onChange={(e) => setPayload('domain', e.target.value)} />}
                 </FormField>
-                <FormField label={planLabel} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
+                <FormField label={planLabel} required addon={<PendingTag id={3} hint="版本清單來源" />} message={show('plan')} state={st('plan')}>
                   {(p) => (
                     <select {...p} className="select" value={input.payload.plan ?? ''} onChange={(e) => setPayload('plan', e.target.value || undefined)}>
                       <option value="">請選擇</option>
@@ -279,7 +279,7 @@ export function WorkOrderFormPage() {
                         .filter((pl) => !upgradeOnly || pl.tier > subTier)
                         .map((pl) => (
                           <option key={pl.id} value={pl.name}>
-                            {pl.name}（等級 {pl.tier}）{pl.name === sub?.plan ? '・目前' : ''}
+                            {pl.name}{pl.name === sub?.plan ? '・目前' : ''}
                           </option>
                         ))}
                     </select>
@@ -294,7 +294,7 @@ export function WorkOrderFormPage() {
             )}
             {input.type === 'renewal' && (
               <>
-                <FormField label={planLabel} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
+                <FormField label={planLabel} required addon={<PendingTag id={3} hint="版本清單來源" />} message={show('plan')} state={st('plan')}>
                   {(p) => (
                     <select {...p} className="select" value={input.payload.plan ?? ''} onChange={(e) => setPayload('plan', e.target.value || undefined)}>
                       <option value="">請選擇</option>
@@ -302,7 +302,7 @@ export function WorkOrderFormPage() {
                         .filter((pl) => !upgradeOnly || pl.tier > subTier)
                         .map((pl) => (
                           <option key={pl.id} value={pl.name}>
-                            {pl.name}（等級 {pl.tier}）{pl.name === sub?.plan ? '・目前' : ''}
+                            {pl.name}{pl.name === sub?.plan ? '・目前' : ''}
                           </option>
                         ))}
                     </select>
@@ -341,7 +341,7 @@ export function WorkOrderFormPage() {
             )}
             {input.type === 'upgrade' && (
               <>
-                <FormField label={planLabel} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
+                <FormField label={planLabel} required addon={<PendingTag id={3} hint="版本清單來源" />} message={show('plan')} state={st('plan')}>
                   {(p) => (
                     <select {...p} className="select" value={input.payload.plan ?? ''} onChange={(e) => setPayload('plan', e.target.value || undefined)}>
                       <option value="">請選擇</option>
@@ -349,7 +349,7 @@ export function WorkOrderFormPage() {
                         .filter((pl) => !upgradeOnly || pl.tier > subTier)
                         .map((pl) => (
                           <option key={pl.id} value={pl.name}>
-                            {pl.name}（等級 {pl.tier}）{pl.name === sub?.plan ? '・目前' : ''}
+                            {pl.name}{pl.name === sub?.plan ? '・目前' : ''}
                           </option>
                         ))}
                     </select>

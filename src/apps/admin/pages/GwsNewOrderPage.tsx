@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getCustomers } from '@data/api';
+import { checkDomain, getCustomers } from '@data/api';
 import type { NewCustomerInput } from '@data/types';
 import { Combobox } from '@shared/components/Combobox';
-import { Callout, FormField } from '@shared/components/Form';
+import { Callout, FormField, FormSection } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { PageHeader } from '@shared/components/PageHeader';
 import { useAsync } from '@shared/hooks/useAsync';
@@ -28,8 +28,12 @@ export function GwsNewOrderPage() {
   const [newCustTried, setNewCustTried] = useState(false);
   const [target, setTarget] = useState<OperationTarget | null>(null);
   const [newCustomerInput, setNewCustomerInput] = useState<NewCustomerInput | undefined>();
+  // 新客戶的 GWS 網域在第一步填（2026/11/24）
+  const [newDomain, setNewDomain] = useState('');
+  const domainCheck = newDomain.trim() ? checkDomain(newDomain) : undefined;
+  const domainError = !newDomain.trim() ? '請輸入網域' : domainCheck && !domainCheck.ok ? domainCheck.message : undefined;
 
-  const errorCount = Object.keys(quickCustomerErrors(newCust)).length;
+  const errorCount = Object.keys(quickCustomerErrors(newCust)).length + (domainError ? 1 : 0);
   const goList = () => navigate('/products/gws');
 
   const next = () => {
@@ -113,7 +117,7 @@ export function GwsNewOrderPage() {
                     options={(customers.data ?? []).map((c) => ({
                       value: c.id,
                       label: c.name,
-                      hint: [c.primaryDomain, `統編 ${c.taxId}`, c.dealerName].filter(Boolean).join(' · '),
+                      hint: [c.primaryDomain, c.taxId ? `統編 ${c.taxId}` : '個人', c.dealerName].filter(Boolean).join(' · '),
                       keywords: [...c.shortNames, c.taxId, ...c.otherDomains],
                     }))}
                   />
@@ -122,7 +126,30 @@ export function GwsNewOrderPage() {
             ) : (
               <>
                 {newCustTried && errorCount > 0 && <Callout tone="danger">還有 {errorCount} 個欄位要填寫或修正。</Callout>}
-                <QuickCustomerForm value={newCust} onChange={setNewCust} showErrors={newCustTried} />
+                <QuickCustomerForm value={newCust} onChange={setNewCust} showErrors={newCustTried} domainNote="">
+                  <FormSection title="GWS 網域">
+                    <FormField
+                      className="is-full"
+                      label="網域名稱"
+                      required
+                      message={newCustTried && domainError ? domainError : domainCheck?.ok ? '可以使用' : undefined}
+                      state={newCustTried && domainError ? 'error' : domainCheck?.ok ? 'success' : undefined}
+                      help="客戶要用在 GWS 的網域；訂閱成功後會寫回客戶主檔，成為主網域。"
+                    >
+                      {(p) => (
+                        <input
+                          {...p}
+                          className="input mono"
+                          spellCheck={false}
+                          autoCapitalize="off"
+                          placeholder="company.example"
+                          value={newDomain}
+                          onChange={(e) => setNewDomain(e.target.value)}
+                        />
+                      )}
+                    </FormField>
+                  </FormSection>
+                </QuickCustomerForm>
               </>
             )}
           </div>
@@ -143,6 +170,7 @@ export function GwsNewOrderPage() {
             type="new"
             target={target}
             newCustomer={newCustomerInput}
+            fixedDomain={newCustomerInput ? newDomain.trim().toLowerCase() : undefined}
             onBack={() => {
               setStep(1);
               window.scrollTo({ top: 0 });

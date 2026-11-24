@@ -43,6 +43,10 @@ export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, s
   status: cancelled ? 'cancelled' : 'active',
   startsAt: contractStart(expiresAt),
   expiresAt,
+  // 合約時間（GMT+0）：大多是 16:00（GMT+8）生效，也就是 08:00 GMT+0
+  contractTime: ['S004', 'S011'].includes(id) ? '02:30' : '08:00',
+  // 彈性合約（Flexible）：可以取消續約排程
+  term: ['S012', 'S020'].includes(id) ? 'flexible' : 'annual',
   lastSyncedAt: lastSyncedAt ?? '2026-11-05 06:00',
 }));
 

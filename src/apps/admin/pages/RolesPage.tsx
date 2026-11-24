@@ -53,6 +53,11 @@ export function RolesPage() {
       header: <ResourceHeader r={res} />,
       render: (r: RoleListItem) => <LevelTag level={r.permissions[res]} />,
     })),
+    {
+      key: 'price',
+      header: '看得到價格',
+      render: (r) => (r.canSeePrice ? <StatusTag tone="success">可以</StatusTag> : <StatusTag tone="neutral">不行</StatusTag>),
+    },
   ];
 
   const startNew = () =>
@@ -63,6 +68,7 @@ export function RolesPage() {
       description: '',
       isPreset: false,
       permissions: Object.fromEntries(resourceOrder.map((r) => [r, 'none'])) as Role['permissions'],
+      canSeePrice: false,
     });
 
   return (
@@ -238,6 +244,23 @@ function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => 
         </div>
         <p className="muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
           超過你自己權限的選項會停用（你目前的角色是「{session?.role}」）。
+        </p>
+      </div>
+      <div>
+        <div className="form-field__label" style={{ marginBottom: 'var(--space-2)' }}>
+          價格
+        </div>
+        <label className="inline checkbox-row">
+          <input
+            type="checkbox"
+            checked={role.canSeePrice}
+            disabled={!session?.canSeePrice && !role.canSeePrice}
+            onChange={(e) => setRole({ ...role, canSeePrice: e.target.checked })}
+          />
+          可以看到價格
+        </label>
+        <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 'var(--space-1) 0 0' }}>
+          不勾選時，這個角色在畫面上看不到任何金額（例如 GCP 費用、帳單），會以「••••」顯示。{!session?.canSeePrice && '你自己看不到價格，所以不能授予。'}
         </p>
       </div>
       </fieldset>

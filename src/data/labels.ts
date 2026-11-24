@@ -18,6 +18,8 @@ import type {
   ScheduleStatus,
   SubscriptionStatus,
   UserStatus,
+  InviteStatus,
+  ContractTerm,
   WorkOrderStatus,
   WorkOrderType,
   OperationStatus,
@@ -78,6 +80,8 @@ export const scheduleStatusLabel: Record<ScheduleStatus, string> = {
   cancelled: '已取消',
 };
 
+export const contractTermLabel: Record<ContractTerm, string> = { annual: '年約', flexible: '彈性' };
+export const inviteStatusLabel: Record<InviteStatus, string> = { sent: '已寄邀請，待註冊', verifying: '帳號已存在，已寄驗證信', verified: '已驗證，產品已加入' };
 export const userStatusLabel: Record<UserStatus, string> = { active: '啟用', disabled: '停用', invited: '已邀請' };
 export const permissionLabel: Record<PermissionLevel, string> = { none: '禁止', read: '唯讀', write: '可編輯', create: '可新增與編輯' };
 export const resourceLabel: Record<ResourceKey, string> = {

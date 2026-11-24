@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  AFTERNOON_START,
+  AFTERNOON_TYPES,
   TODAY,
   analyzeOrder,
   checkDomain,
+  firstUserError,
   getCustomer,
   cancelSchedule,
   createOperation,
@@ -18,7 +21,7 @@ import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
 import { StatusTag } from '@shared/components/StatusTag';
 import { useToast } from '@shared/components/Toast';
-import { formatDate, formatDateTime } from '@shared/format';
+import { formatContractPeriod, formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 
 export interface OperationTarget {
@@ -32,13 +35,15 @@ export interface OperationTarget {
   seats?: number | null;
   startsAt?: string;
   expiresAt?: string;
-  /** 已取消續約（合約到期後不續約） */
+  /** 合約時間（時:分，GMT+0） */
+  contractTime?: string;
+  /** 不續約（合約到期後不續約） */
   renewalCancelled?: boolean;
 }
 
 const intOrUndef = (v: string) => (v === '' ? undefined : Number(v));
 
-/** 方案變動、人數變動的標示（文字加符號，不只靠顏色） */
+/** 版本變動、人數變動的標示（文字加符號，不只靠顏色） */
 export function ChangeTags({ planChange, seatChange }: { planChange?: 'up' | 'down' | 'same'; seatChange?: number }) {
   return (
     <span className="inline">
@@ -64,6 +69,7 @@ export function OperationModal({
   workOrderId,
   initial,
   newCustomer,
+  fixedDomain,
   onBack,
   layout = 'modal',
   onClose,
@@ -76,6 +82,8 @@ export function OperationModal({
   initial?: OperationPayload;
   /** 新客戶的新訂：送出時一併建立客戶主檔 */
   newCustomer?: NewCustomerInput;
+  /** 新客戶在上一步已經填好網域（2026/11/24：新客的網域搬到前頁），這裡只顯示 */
+  fixedDomain?: string;
   /** 有值時顯示「上一步」（回到填客戶資料） */
   onBack?: () => void;
   /** modal：彈窗（預設）；page：整頁表單 */
@@ -98,10 +106,15 @@ export function OperationModal({
   const ownedDomains = cust.data ? [cust.data.primaryDomain, ...cust.data.otherDomains].filter(Boolean) : [];
   const [domainPick, setDomainPick] = useState('');
   const [newDomain, setNewDomain] = useState('');
+  // 新訂：第一個使用者的帳號（公司網域信箱）與驗證信箱（非公司網域）
+  const [firstUserEmail, setFirstUserEmail] = useState('');
+  const [verifyEmail, setVerifyEmail] = useState('');
   const [seats, setSeats] = useState('');
   const [addSeats, setAddSeats] = useState('');
   const [renewMonths, setRenewMonths] = useState('12');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledTime, setScheduledTime] = useState(AFTERNOON_START);
+  const [renewEndAt, setRenewEndAt] = useState('');
   const [source, setSource] = useState<TransferSource | ''>('');
   const [memo, setMemo] = useState('');
   const [tried, setTried] = useState(false);
@@ -112,10 +125,14 @@ export function OperationModal({
     setPlan(initial?.plan ?? (type === 'renewal' ? target.plan ?? '' : ''));
     setDomainPick('');
     setNewDomain(initial?.domain ?? '');
+    setFirstUserEmail(initial?.firstUserEmail ?? '');
+    setVerifyEmail(initial?.verifyEmail ?? '');
     setSeats(initial?.seats ? String(initial.seats) : type === 'renewal' && target.seats ? String(target.seats + pendingAdd) : '');
     setAddSeats(initial?.addSeats ? String(initial.addSeats) : '');
-    setRenewMonths(String(initial?.renewMonths ?? 12));
+    setRenewMonths(initial?.renewEndAt ? 'custom' : String(initial?.renewMonths ?? 12));
     setScheduledAt('');
+    setScheduledTime(initial?.scheduledTime ?? AFTERNOON_START);
+    setRenewEndAt(initial?.renewEndAt ?? '');
     setSource(initial?.transferSource ?? '');
     setMemo(initial?.memo ?? '');
     setTried(false);
@@ -132,21 +149,25 @@ export function OperationModal({
     plan: plan || undefined,
     seats: intOrUndef(seats),
     addSeats: intOrUndef(addSeats),
-    renewMonths: Number(renewMonths),
+    renewMonths: renewMonths === 'custom' ? undefined : Number(renewMonths),
+    renewEndAt: renewMonths === 'custom' ? renewEndAt || undefined : undefined,
     transferSource: source || undefined,
   };
+  const afternoon = AFTERNOON_TYPES.includes(type);
   const sub = target.subscriptionId ? { plan: target.plan ?? '', seats: target.seats ?? 0, expiresAt: target.expiresAt ?? TODAY } : undefined;
   const analysis = analyzeOrder(type, sub, payload);
   const date = type === 'renewal' ? analysis.defaultDate! : scheduledAt || analysis.defaultDate || TODAY;
   const maxDate = type === 'addSeats' || type === 'upgrade' ? target.expiresAt : undefined;
 
-  const usingOwned = domainPick !== '';
-  const chosenDomain = usingOwned ? domainPick : newDomain.trim();
+  const usingOwned = Boolean(fixedDomain) || domainPick !== '';
+  const chosenDomain = fixedDomain ?? (usingOwned ? domainPick : newDomain.trim());
   const domainCheckResult = type === 'new' && !usingOwned ? checkDomain(newDomain) : undefined;
+  const userErr = type === 'new' ? firstUserError(chosenDomain, firstUserEmail, verifyEmail) : undefined;
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
     if (type === 'new' && !usingOwned && domainCheckResult && !domainCheckResult.ok) e.domain = domainCheckResult.message;
-    if (type === 'new' || type === 'renewal' || type === 'upgrade') if (!plan) e.plan = type === 'upgrade' ? '請選擇升級後的方案' : '請選擇方案';
+    if (type === 'new' && userErr) e[userErr.includes('驗證信箱') ? 'verifyEmail' : 'firstUserEmail'] = userErr;
+    if (type === 'new' || type === 'renewal' || type === 'upgrade') if (!plan) e.plan = type === 'upgrade' ? '請選擇升級後的版本' : '請選擇版本';
     if (type === 'new' || type === 'renewal') {
       const n = Number(seats);
       if (!Number.isInteger(n) || n < 1) e.seats = '人數需為大於 0 的整數';
@@ -159,6 +180,11 @@ export function OperationModal({
       const n = Number(addSeats);
       if (!Number.isInteger(n) || n < 1) e.addSeats = '加購人數需為大於 0 的整數（加購不能減人）';
     }
+    if (type === 'renewal' && renewMonths === 'custom') {
+      if (!renewEndAt) e.renewEndAt = '請選擇新合約到期日';
+      else if (analysis.newStartsAt && renewEndAt <= analysis.newStartsAt) e.renewEndAt = '到期日要晚於新合約起日';
+    }
+    if (analysis.execution === 'schedule' && afternoon && (!scheduledTime || scheduledTime < AFTERNOON_START)) e.scheduledTime = '新購、加購要排在下午 4 點（GMT+8）之後';
     if (analysis.execution === 'schedule' && type !== 'renewal') {
       if (date < TODAY) e.scheduledAt = '啟用日不能早於今天';
       else if (maxDate && date > maxDate) e.scheduledAt = `啟用日不能晚於合約結束日 ${formatDate(maxDate)}`;
@@ -167,7 +193,7 @@ export function OperationModal({
       if (!source) e.source = '請選擇轉入來源';
     }
     return e;
-  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain]);
+  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon]);
   const show = (k: string) => (tried ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
@@ -177,12 +203,14 @@ export function OperationModal({
     setTried(true);
     if (Object.keys(errors).length) return;
     const p: OperationPayload = { memo: memo.trim() || undefined };
-    if (type === 'new') Object.assign(p, { plan, seats: Number(seats), domain: chosenDomain });
-    if (type === 'renewal') Object.assign(p, { plan, seats: Number(seats), renewMonths: Number(renewMonths) });
+    if (type === 'new') Object.assign(p, { plan, seats: Number(seats), domain: chosenDomain, firstUserEmail: firstUserEmail.trim(), verifyEmail: verifyEmail.trim() });
+    if (type === 'renewal')
+      Object.assign(p, { plan, seats: Number(seats) }, renewMonths === 'custom' ? { renewEndAt } : { renewMonths: Number(renewMonths) });
     if (type === 'addSeats') p.addSeats = Number(addSeats);
     if (type === 'upgrade') Object.assign(p, { plan }, Number(addSeats) > 0 ? { addSeats: Number(addSeats) } : {});
     if (type === 'transfer') p.transferSource = source || undefined;
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
+    if (analysis.execution === 'schedule' && afternoon) p.scheduledTime = scheduledTime;
     setSaving(true);
     try {
       if (newCustomer) {
@@ -211,13 +239,14 @@ export function OperationModal({
   };
 
   const planSelect = (label: string) => (
-    <FormField label={label} required addon={<PendingTag id={3} hint="方案清單來源" />} message={show('plan')} state={st('plan')}>
+    <FormField label={label} required addon={<PendingTag id={3} hint="版本清單來源" />} message={show('plan')} state={st('plan')}>
       {(p) => (
         <select {...p} className="select" value={plan} onChange={(e) => setPlan(e.target.value)}>
           <option value="">{type === 'upgrade' && !planOptions.length ? '已經是最高等級' : '請選擇'}</option>
           {planOptions.map((pl) => (
             <option key={pl.id} value={pl.name}>
-              {pl.name}（等級 {pl.tier}）{pl.name === target.plan ? '・目前' : ''}
+              {pl.name}
+              {pl.name === target.plan ? '・目前' : ''}
             </option>
           ))}
         </select>
@@ -254,14 +283,14 @@ export function OperationModal({
         {newCustomer && (
           <>
             <br />
-            新客戶：送出後會同時建立客戶主檔，並寄邀請信給組織管理員 {newCustomer.adminName}（{newCustomer.adminEmail}）
+            新客戶（{newCustomer.kind === 'individual' ? '個人' : '公司'}）：送出後會同時建立客戶主檔
           </>
         )}
         {target.plan && (
           <>
             <br />
-            目前：{target.plan} · {target.seats} 席 · 合約 <span className="mono">{formatDate(target.startsAt ?? '')}</span> –{' '}
-            <span className="mono">{formatDate(target.expiresAt ?? '')}</span>
+            目前：{target.plan} · {target.seats} 席 · 合約{' '}
+            <span className="mono">{formatContractPeriod(target.startsAt ?? '', target.expiresAt ?? '', target.contractTime)}</span>
           </>
         )}
         {workOrderId && (
@@ -274,6 +303,12 @@ export function OperationModal({
 
       {type === 'new' && (
         <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          {fixedDomain ? (
+            <FormField label="網域" help="在上一步填寫；訂閱成功後會寫回客戶主檔，成為主網域。">
+              {(p) => <input {...p} className="input mono" value={fixedDomain} readOnly disabled />}
+            </FormField>
+          ) : (
+          <>
           <fieldset className="plain-fieldset">
             <legend className="form-field__label">
               網域 <span className="form-field__req">必填</span>
@@ -306,8 +341,38 @@ export function OperationModal({
               {(p) => <input {...p} className="input mono" spellCheck={false} autoCapitalize="off" placeholder="company.example" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} />}
             </FormField>
           )}
+          </>
+          )}
+          <fieldset className="plain-fieldset">
+            <legend className="form-field__label">第一個使用者帳號</legend>
+            <div className="form-grid">
+              <FormField
+                label="帳號（公司網域的信箱）"
+                required
+                message={show('firstUserEmail')}
+                state={st('firstUserEmail')}
+                help={chosenDomain ? `要用 @${chosenDomain}，例如 admin@${chosenDomain}` : '先選擇或輸入網域'}
+              >
+                {(p) => (
+                  <input
+                    {...p}
+                    className="input mono"
+                    type="email"
+                    spellCheck={false}
+                    autoCapitalize="off"
+                    placeholder={chosenDomain ? `admin@${chosenDomain}` : 'admin@company.example'}
+                    value={firstUserEmail}
+                    onChange={(e) => setFirstUserEmail(e.target.value)}
+                  />
+                )}
+              </FormField>
+              <FormField label="驗證信箱" required message={show('verifyEmail')} state={st('verifyEmail')} help="不能是公司網域的信箱，例如個人 Gmail；用來收驗證信。">
+                {(p) => <input {...p} className="input mono" type="email" spellCheck={false} autoCapitalize="off" value={verifyEmail} onChange={(e) => setVerifyEmail(e.target.value)} />}
+              </FormField>
+            </div>
+          </fieldset>
         <div className="form-grid">
-          {planSelect('方案')}
+          {planSelect('版本')}
           <FormField label="人數" required message={show('seats')} state={st('seats')}>
             {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
           </FormField>
@@ -318,7 +383,7 @@ export function OperationModal({
       {type === 'renewal' && (
         <>
           <div className="form-grid">
-            {planSelect('續約方案（版本）')}
+            {planSelect('續約版本')}
             <FormField label="續約人數" required message={show('seats')} state={st('seats')} help={pendingAdd ? `目前 ${target.seats} 席，另有尚未生效的加購 ${pendingAdd} 席，已一併帶入` : `目前 ${target.seats} 席`}>
               {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
             </FormField>
@@ -328,12 +393,23 @@ export function OperationModal({
                   <option value="12">12 個月</option>
                   <option value="24">24 個月</option>
                   <option value="36">36 個月</option>
+                  <option value="custom">自訂</option>
                 </select>
               )}
             </FormField>
+            {renewMonths === 'custom' && (
+              <FormField label="新合約到期日" required message={show('renewEndAt')} state={st('renewEndAt')} help={`新合約從 ${formatDate(analysis.newStartsAt ?? '')} 開始`}>
+                {(p) => <input {...p} className="input" type="date" min={analysis.newStartsAt} value={renewEndAt} onChange={(e) => setRenewEndAt(e.target.value)} />}
+              </FormField>
+            )}
             <FormField label="新合約期間">
               {(p) => (
-                <input {...p} className="input mono" readOnly value={`${formatDate(analysis.newStartsAt ?? '')} – ${formatDate(analysis.newExpiresAt ?? '')}`} />
+                <input
+                  {...p}
+                  className="input mono"
+                  readOnly
+                  value={analysis.newExpiresAt ? formatContractPeriod(analysis.newStartsAt ?? '', analysis.newExpiresAt, target.contractTime) : '—'}
+                />
               )}
             </FormField>
           </div>
@@ -350,7 +426,7 @@ export function OperationModal({
       )}
 
       {(type === 'addSeats' || type === 'upgrade') && target.renewalCancelled && (
-        <Callout tone="warning" title="這筆訂閱已取消續約">
+        <Callout tone="warning" title="這筆訂閱已設定不續約">
           客戶合約到 {formatDate(target.expiresAt ?? '')} 結束後不再續約。{type === 'addSeats' ? '加購' : '升版'}只到合約結束日，請先和客戶確認仍要{type === 'addSeats' ? '加購' : '升版'}。
         </Callout>
       )}
@@ -395,7 +471,7 @@ export function OperationModal({
 
       {type === 'upgrade' && (
         <div className="form-grid">
-          {planSelect('升級後的方案')}
+          {planSelect('升級後的版本')}
           <FormField
             label="同時加購人數"
             message={show('addSeats') ?? (Number(addSeats) > 0 ? `升版後 ${(target.seats ?? 0) + Number(addSeats)} 席` : undefined)}
@@ -449,6 +525,17 @@ export function OperationModal({
         {analysis.execution === 'schedule' && type !== 'renewal' && (
           <FormField label="啟用日" required message={show('scheduledAt')} state={st('scheduledAt')} help="排程在這天由系統送 Google，可以到「GWS 排程中心」查看或取消。">
             {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={date} onChange={(e) => setScheduledAt(e.target.value)} />}
+          </FormField>
+        )}
+        {analysis.execution === 'schedule' && afternoon && (
+          <FormField
+            label="啟用時間（GMT+8）"
+            required
+            message={show('scheduledTime')}
+            state={st('scheduledTime')}
+            help="新購、加購一律排在下午 4 點（GMT+8）之後。"
+          >
+            {(p) => <input {...p} className="input" type="time" min={AFTERNOON_START} max="23:59" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />}
           </FormField>
         )}
         {analysis.execution === 'manual' && (

@@ -29,6 +29,7 @@ function d(
     contactName,
     contactPhone,
     contactEmail,
+    contacts: isDirect ? [] : [{ name: contactName, title: '主要聯絡人', email: contactEmail, phone: contactPhone }],
     note: '',
     createdAt,
   };

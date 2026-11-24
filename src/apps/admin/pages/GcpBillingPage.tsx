@@ -41,7 +41,7 @@ import { Stat, StatGrid } from "@shared/components/Stat";
 import { Tabs } from "@shared/components/Tabs";
 import { useToast } from "@shared/components/Toast";
 import { downloadCsv } from "@shared/csv";
-import { formatDate, formatDateTime, formatUsd } from "@shared/format";
+import { HIDDEN_PRICE, formatDate, formatDateTime, formatUsd, isPriceVisible } from "@shared/format";
 import { useAsync } from "@shared/hooks/useAsync";
 import { usePermission } from "../auth";
 import { BillStatusTag, ReconcileStateTag } from "../tags";
@@ -53,7 +53,8 @@ const statusOrder: BillDisplayStatus[] = [
   "overdue",
   "paid",
 ];
-const twd = (n: number) => n.toLocaleString("en-US");
+// 看不到價格的角色，台幣金額也隱藏（2026/11/24）
+const twd = (n: number) => (isPriceVisible() ? n.toLocaleString("en-US") : HIDDEN_PRICE);
 /** 美金（美分）帶正負號，差異欄用 */
 const signedUsd = (cents: number) =>
   cents === 0
@@ -313,10 +314,10 @@ function BillsTab({
         b.customerName,
         b.dealerName,
         b.projects,
-        (b.costCents / 100).toFixed(2),
+        isPriceVisible() ? (b.costCents / 100).toFixed(2) : HIDDEN_PRICE,
         b.markupPct,
         b.rate,
-        b.amountTwd,
+        isPriceVisible() ? b.amountTwd : HIDDEN_PRICE,
         billStatusLabel[b.displayStatus],
         b.issuedAt ?? "",
         b.dueDate ?? "",

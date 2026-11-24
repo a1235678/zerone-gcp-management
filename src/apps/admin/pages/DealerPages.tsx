@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+  addDealerContact,
   addressComplete,
   createDealer,
   emptyAddress,
@@ -14,6 +15,7 @@ import {
   updateDealer,
   type DealerInput,
 } from '@data/api';
+import type { CustomerContact } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { DescriptionList } from '@shared/components/DescriptionList';
@@ -223,7 +225,7 @@ export function NewDealerPage() {
   );
 }
 
-type DealerTab = 'info' | 'customers' | 'users' | 'logs';
+type DealerTab = 'info' | 'customers' | 'users' | 'contacts' | 'logs';
 
 export function DealerDetailPage() {
   const { id = '' } = useParams();
@@ -238,6 +240,18 @@ export function DealerDetailPage() {
   const users = useAsync(() => getUsers({ orgType: 'dealer', orgId: id }), [id, version]);
   const logs = useAsync(() => (dealer.data ? getAuditLogs({ keyword: dealer.data.shortNames[0] ?? dealer.data.name }) : Promise.resolve([])), [dealer.data?.name, version]);
   const [edit, setEdit] = useState<DealerInput | null>(null);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contact, setContact] = useState<CustomerContact>({ name: '', title: '', email: '', phone: '' });
+  const saveContact = async () => {
+    try {
+      await addDealerContact(id, contact);
+      toast(`已新增聯絡人 ${contact.name.trim()}`);
+      setContactOpen(false);
+      setVersion((v) => v + 1);
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    }
+  };
   const [tried, setTried] = useState(false);
 
   const d = dealer.data;
@@ -311,6 +325,7 @@ export function DealerDetailPage() {
             { value: 'info', label: '經銷商資訊' },
             { value: 'customers', label: '名下客戶', count: customers.data?.length },
             { value: 'users', label: '使用者帳號', count: users.data?.length },
+            { value: 'contacts', label: '一般聯絡人', count: d.contacts.length },
             { value: 'logs', label: '異動歷程' },
           ]}
         />
@@ -376,6 +391,63 @@ export function DealerDetailPage() {
           />
         </Card>
       )}
+
+      {tab === 'contacts' && (
+        <Card
+          bodyless
+          title="一般聯絡人"
+          actions={
+            can('dealers', 'write') && !d.isDirect ? (
+              <button
+                className="btn btn--sm"
+                onClick={() => {
+                  setContact({ name: '', title: '', email: '', phone: '' });
+                  setContactOpen(true);
+                }}
+              >
+                新增聯絡人
+              </button>
+            ) : undefined
+          }
+        >
+          <DataTable
+            caption="一般聯絡人"
+            rows={d.contacts}
+            rowKey={(x) => x.name + x.email}
+            columns={[
+              { key: 'name', header: '姓名', render: (x) => <span className="table__primary">{x.name}</span> },
+              { key: 'title', header: '職稱／用途', render: (x) => x.title || '—' },
+              { key: 'email', header: 'Email', render: (x) => <span className="mono">{x.email || '—'}</span> },
+              { key: 'phone', header: '電話', render: (x) => <span className="mono">{x.phone || '—'}</span> },
+            ]}
+            empty={<EmptyState title={d.isDirect ? '直銷由零壹內部處理' : '沒有聯絡人'} />}
+          />
+        </Card>
+      )}
+
+      <Modal
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        title="新增一般聯絡人"
+        width={480}
+        footer={
+          <>
+            <button className="btn" onClick={() => setContactOpen(false)}>
+              取消
+            </button>
+            <button className="btn btn--primary" disabled={!contact.name.trim()} onClick={saveContact}>
+              新增
+            </button>
+          </>
+        }
+      >
+        <div className="form-grid">
+          <FormField label="姓名" required>{(p) => <input {...p} className="input" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} />}</FormField>
+          <FormField label="職稱／用途" help="例如：業務窗口、帳務">{(p) => <input {...p} className="input" value={contact.title} onChange={(e) => setContact({ ...contact, title: e.target.value })} />}</FormField>
+          <FormField label="Email">{(p) => <input {...p} className="input" type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} />}</FormField>
+          <FormField label="電話">{(p) => <input {...p} className="input" type="tel" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} />}</FormField>
+        </div>
+      </Modal>
 
       {tab === 'logs' && (
         <Card bodyless title="異動歷程">

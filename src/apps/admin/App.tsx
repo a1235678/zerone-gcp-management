@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'r
 import type { ResourceKey } from '@data/types';
 import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
+import { setPriceVisible } from '@shared/format';
 import { AuthProvider, useAuth, usePermission } from './auth';
 import { resourceOf, visibleNav } from './nav';
 import { NoPermissionPage } from './pages/PlaceholderPage';
@@ -59,6 +60,8 @@ function Protected() {
   const location = useLocation();
   const navigate = useNavigate();
   if (!session) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  // 角色看不到價格時，畫面上的金額改顯示「••••」（2026/11/24）
+  setPriceVisible(session.canSeePrice);
   return (
     <AppShell
       siteName="零壹雲管家"
@@ -86,7 +89,8 @@ function Protected() {
             <Route path="/work-orders/:id/edit" element={<WorkOrderFormPage key="edit" />} />
             <Route path="/brands" element={<BrandsPage />} />
             <Route path="/catalog" element={<ProductsPage />} />
-            <Route path="/plans" element={<PlansPage />} />
+            <Route path="/plans" element={<Navigate to="/products/gws/versions" replace />} />
+            <Route path="/products/gws/versions" element={<PlansPage />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
             <Route path="/products/gws/new" element={<GwsNewOrderPage />} />
             <Route path="/products/gws/:id" element={<SubscriptionDetailPage />} />

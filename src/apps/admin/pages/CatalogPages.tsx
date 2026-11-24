@@ -14,7 +14,7 @@ import { formatDate } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
 
-// 品牌管理、產品管理：先做空殼（清單加新增），欄位待確認。方案管理：2026/11/10 會議加回來，方案有等級。
+// 品牌管理、產品管理：先做空殼（清單加新增），欄位待確認。版本管理（原「版本管理」，2026/11/10 會議加回來，2026/11/24 改名並移到 GWS 底下）：版本有等級。
 
 const statusTag = (s: 'active' | 'draft') => <StatusTag tone={s === 'active' ? 'success' : 'neutral'}>{s === 'active' ? '上架' : '草稿'}</StatusTag>;
 
@@ -218,7 +218,7 @@ export function PlansPage() {
         </span>
       ),
     },
-    { key: 'name', header: '方案名稱', render: (p) => <span className="table__primary">{p.name}</span> },
+    { key: 'name', header: '版本名稱', render: (p) => <span className="table__primary">{p.name}</span> },
     { key: 'product', header: '產品', render: (p) => `${p.brandName} › ${p.productName}` },
     { key: 'subs', header: '使用中訂閱', align: 'right', render: (p) => <span className="tnum">{p.subscriptionCount}</span> },
     { key: 'status', header: '狀態', render: (p) => statusTag(p.status) },
@@ -242,7 +242,7 @@ export function PlansPage() {
 
   const errors: Record<string, string> = {};
   if (form) {
-    if (!form.name.trim()) errors.name = '請輸入方案名稱';
+    if (!form.name.trim()) errors.name = '請輸入版本名稱';
     if (!/^[1-9]\d*$/.test(form.tier)) errors.tier = '等級請填 1 以上的整數';
   }
   const show = (k: string) => (tried ? errors[k] : undefined);
@@ -253,7 +253,7 @@ export function PlansPage() {
     setSaving(true);
     try {
       const p = await savePlan({ ...form, tier: Number(form.tier) });
-      toast(form.id ? `已更新方案「${p.name}」` : `已新增方案「${p.name}」`);
+      toast(form.id ? `已更新版本「${p.name}」` : `已新增版本「${p.name}」`);
       setForm(null);
       setVersion((v) => v + 1);
     } catch (e) {
@@ -266,8 +266,8 @@ export function PlansPage() {
   return (
     <>
       <PageHeader
-        title="方案管理"
-        description="方案依等級排序，數字越大版本越高。續約、中途升版時，系統用等級判斷是升版還是降版。"
+        title="GWS 版本"
+        description="版本依等級排序，數字越大版本越高。續約、中途升版時，系統用等級判斷是升版還是降版。"
         actions={
           can("catalog", "create") ? (
             <button
@@ -279,22 +279,22 @@ export function PlansPage() {
               }}
             >
               <Icon name="plus" size={16} />
-              新增方案
+              新增版本
             </button>
           ) : undefined
         }
       />
       <Card bodyless>
         <div className="result-meta">
-          <span>共 {plans.data?.length ?? 0} 個方案</span>
-          <PendingTag id={3} hint="能否從 API 取得方案清單" />
+          <span>共 {plans.data?.length ?? 0} 個版本</span>
+          <PendingTag id={3} hint="能否從 API 取得版本清單" />
         </div>
-        <DataTable caption="方案清單" columns={columns} rows={plans.data ?? []} rowKey={(p) => p.id} loading={plans.loading && !plans.data} />
+        <DataTable caption="版本清單" columns={columns} rows={plans.data ?? []} rowKey={(p) => p.id} loading={plans.loading && !plans.data} />
       </Card>
       <Modal
         open={Boolean(form)}
         onClose={() => setForm(null)}
-        title={form?.id ? '編輯方案' : '新增方案'}
+        title={form?.id ? '編輯版本' : '新增版本'}
         width={480}
         footer={
           <>
@@ -320,13 +320,13 @@ export function PlansPage() {
                 </select>
               )}
             </FormField>
-            <FormField label="方案名稱" required message={show('name')} state={show('name') ? 'error' : undefined} help={form.id && (plans.data?.find((x) => x.id === form.id)?.subscriptionCount ?? 0) > 0 ? '已有訂閱使用這個方案，不能改名。' : undefined}>
+            <FormField label="版本名稱" required message={show('name')} state={show('name') ? 'error' : undefined} help={form.id && (plans.data?.find((x) => x.id === form.id)?.subscriptionCount ?? 0) > 0 ? '已有訂閱使用這個版本，不能改名。' : undefined}>
               {(p) => <input {...p} className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />}
             </FormField>
             <FormField label="等級" required message={show('tier')} state={show('tier') ? 'error' : undefined} help="數字越大版本越高；同一個產品的等級不能重複。">
               {(p) => <input {...p} className="input tnum" type="number" min={1} value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} />}
             </FormField>
-            <FormField label="狀態" required help="只有上架的方案會出現在新訂、續約、升版的選單。">
+            <FormField label="狀態" required help="只有上架的版本會出現在新訂、續約、升版的選單。">
               {(p) => (
                 <select {...p} className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as PlanForm['status'] })}>
                   <option value="active">上架</option>
