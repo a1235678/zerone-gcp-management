@@ -855,7 +855,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
   const fromSeats = p.fromSeats ?? sub?.seats ?? 0;
   switch (op.type) {
     case 'new':
-      return `${p.plan} ${p.seats} 席${offerText(p)}${p.domain ? `，${p.domain}` : ''}${p.firstUserEmail ? `，第一個使用者 ${p.firstUserEmail}` : ''}`;
+      return `${p.plan} ${p.seats} 席${offerText(p)}${p.domain ? `，${p.domain}` : ''}${p.firstUserEmail ? `，第一個使用者 ${[p.firstUserLastName, p.firstUserFirstName].filter(Boolean).join('')} ${p.firstUserEmail}` : ''}`;
     case 'transfer':
       return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.domain ? `，${p.domain}` : ''}${p.cloudIdentityId ? `，Cloud Identity ID ${p.cloudIdentityId}` : ''}`;
     case 'renewal': {
@@ -997,8 +997,10 @@ export function validateOperation(input: NewOperationInput): string | undefined 
     }
     if (!p.plan || !activePlans.includes(p.plan)) return '請選擇版本';
     if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) return '席次至少 1';
+    if (!p.firstUserFirstName?.trim() || !p.firstUserLastName?.trim()) return '請輸入第一個使用者的名、姓';
     const userError = firstUserError(p.domain ?? '', p.firstUserEmail ?? '', p.verifyEmail ?? '');
     if (userError) return userError;
+    if (!p.languageCode) return '請選擇語言';
   }
   if (AFTERNOON_TYPES.includes(input.type) && p.scheduledTime && p.scheduledTime < AFTERNOON_START) return '新購、加購要排在下午 4 點（GMT+8）之後';
   if (OFFER_TYPES.includes(input.type)) {

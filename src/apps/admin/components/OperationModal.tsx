@@ -16,7 +16,7 @@ import {
   getPendingSchedules,
   getPlanList,
 } from '@data/api';
-import { executionModeLabel, operationTypeLabel, scheduleActionLabel, transferSourceLabel } from '@data/labels';
+import { executionModeLabel, languageOptions, operationTypeLabel, scheduleActionLabel, transferSourceLabel } from '@data/labels';
 import type { NewCustomerInput, OfferSnapshot, OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
 import { Modal } from '@shared/components/Modal';
@@ -112,6 +112,9 @@ export function OperationModal({
   // 新訂：第一個使用者的帳號（公司網域信箱）與驗證信箱（非公司網域）
   const [firstUserEmail, setFirstUserEmail] = useState('');
   const [verifyEmail, setVerifyEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [languageCode, setLanguageCode] = useState('zh-TW');
   const [seats, setSeats] = useState('');
   const [addSeats, setAddSeats] = useState('');
   const [renewMonths, setRenewMonths] = useState('12');
@@ -132,6 +135,9 @@ export function OperationModal({
     setNewDomain(initial?.domain ?? '');
     setFirstUserEmail(initial?.firstUserEmail ?? '');
     setVerifyEmail(initial?.verifyEmail ?? '');
+    setFirstName(initial?.firstUserFirstName ?? '');
+    setLastName(initial?.firstUserLastName ?? '');
+    setLanguageCode(initial?.languageCode ?? 'zh-TW');
     setSeats(initial?.seats ? String(initial.seats) : type === 'renewal' && target.seats ? String(target.seats + pendingAdd) : '');
     setAddSeats(initial?.addSeats ? String(initial.addSeats) : '');
     setRenewMonths(initial?.renewEndAt ? 'custom' : String(initial?.renewMonths ?? 12));
@@ -180,6 +186,8 @@ export function OperationModal({
     const e: Record<string, string> = {};
     if (type === 'new' && !usingOwned && domainCheckResult && !domainCheckResult.ok) e.domain = domainCheckResult.message;
     if (type === 'new' && userErr) e[userErr.includes('驗證信箱') ? 'verifyEmail' : 'firstUserEmail'] = userErr;
+    if (type === 'new' && !firstName.trim()) e.firstName = '請輸入名';
+    if (type === 'new' && !lastName.trim()) e.lastName = '請輸入姓';
     if (type === 'new' || type === 'renewal' || type === 'upgrade') if (!plan) e.plan = type === 'upgrade' ? '請選擇升級後的版本' : '請選擇版本';
     if (type === 'new' || type === 'renewal') {
       const n = Number(seats);
@@ -207,7 +215,7 @@ export function OperationModal({
       if (!source) e.source = '請選擇轉入來源';
     }
     return e;
-  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon, needsOffer, offerError]);
+  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon, needsOffer, offerError, firstName, lastName]);
   const show = (k: string) => (tried ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
@@ -217,7 +225,17 @@ export function OperationModal({
     setTried(true);
     if (Object.keys(errors).length) return;
     const p: OperationPayload = { memo: memo.trim() || undefined };
-    if (type === 'new') Object.assign(p, { plan, seats: Number(seats), domain: chosenDomain, firstUserEmail: firstUserEmail.trim(), verifyEmail: verifyEmail.trim() });
+    if (type === 'new')
+      Object.assign(p, {
+        plan,
+        seats: Number(seats),
+        domain: chosenDomain,
+        firstUserFirstName: firstName.trim(),
+        firstUserLastName: lastName.trim(),
+        firstUserEmail: firstUserEmail.trim(),
+        verifyEmail: verifyEmail.trim(),
+        languageCode,
+      });
     if (type === 'renewal')
       Object.assign(p, { plan, seats: Number(seats) }, renewMonths === 'custom' ? { renewEndAt } : { renewMonths: Number(renewMonths) });
     if (type === 'addSeats') p.addSeats = Number(addSeats);
@@ -369,7 +387,16 @@ export function OperationModal({
           )}
           <fieldset className="plain-fieldset">
             <legend className="form-field__label">第一個使用者帳號</legend>
+            <p className="muted" style={{ margin: '0 0 var(--space-3)', fontSize: 'var(--text-sm)' }}>
+              Google 會用這組姓名與信箱建立客戶的第一個管理員帳號。
+            </p>
             <div className="form-grid">
+              <FormField label="名" required message={show('firstName')} state={st('firstName')}>
+                {(p) => <input {...p} className="input" autoComplete="off" value={firstName} onChange={(e) => setFirstName(e.target.value)} />}
+              </FormField>
+              <FormField label="姓" required message={show('lastName')} state={st('lastName')}>
+                {(p) => <input {...p} className="input" autoComplete="off" value={lastName} onChange={(e) => setLastName(e.target.value)} />}
+              </FormField>
               <FormField
                 label="帳號（公司網域的信箱）"
                 required
@@ -395,6 +422,22 @@ export function OperationModal({
               </FormField>
             </div>
           </fieldset>
+          <div className="form-grid">
+            <FormField label="語言" required help="送給 Google 的 Language code。">
+              {(p) => (
+                <select {...p} className="select" value={languageCode} onChange={(e) => setLanguageCode(e.target.value)}>
+                  {languageOptions.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
+            <FormField label="CRM ID" help="自動帶我們的客戶編號，送給 Google 對照用，不用輸入。">
+              {(p) => <input {...p} className="input mono" readOnly value={target.customerId || '建立客戶後自動帶入'} />}
+            </FormField>
+          </div>
         <div className="form-grid">
           {planSelect('版本')}
           <FormField label="人數" required message={show('seats')} state={st('seats')}>

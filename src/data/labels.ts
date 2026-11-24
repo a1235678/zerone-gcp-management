@@ -82,6 +82,13 @@ export const scheduleStatusLabel: Record<ScheduleStatus, string> = {
   cancelled: '已取消',
 };
 
+/** 送給 Google 的語言（Language code） */
+export const languageOptions: { code: string; label: string }[] = [
+  { code: 'zh-TW', label: '中文（台灣）' },
+  { code: 'en-US', label: 'English (United States)' },
+  { code: 'zh-CN', label: '中文（中國）' },
+  { code: 'ja', label: '日本語' },
+];
 export const offerPlanTypeLabel: Record<OfferPlanType, string> = { annual: '年約', flexible: '彈性', trial: '試用' };
 export const billingCycleLabel: Record<BillingCycle, string> = { monthly: '每月計費', yearly: '每年計費' };
 export const contractTermLabel: Record<ContractTerm, string> = { annual: '年約', flexible: '彈性' };

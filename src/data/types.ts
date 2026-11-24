@@ -253,6 +253,11 @@ export interface OperationPayload {
   /** 新訂：第一個使用者的帳號（公司網域的信箱）與驗證信箱（不是公司網域，2026/11/24） */
   firstUserEmail?: string;
   verifyEmail?: string;
+  /** 第一個使用者的名、姓：Google 用來建立第一個管理員帳號（2026/11/24，對照 Google 建客戶畫面） */
+  firstUserFirstName?: string;
+  firstUserLastName?: string;
+  /** 送給 Google 的語言（Language code），預設 zh-TW */
+  languageCode?: string;
   /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
   /** 新訂的席次，或續約後的席次 */
