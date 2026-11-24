@@ -2229,26 +2229,17 @@ button.topbar__user:hover {
   }
 }
 
-/* 可訂閱方案清單 */
-.offer-table td {
-  vertical-align: top;
-}
-.offer-table__offers {
+/* 方案清單上方：取得時間與重新整理 */
+.offer-picker__meta {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.offer-table__row {
-  display: grid;
-  grid-template-columns: minmax(230px, 1.6fr) minmax(110px, 1fr) minmax(72px, 0.8fr) minmax(120px, 1fr) minmax(120px, 1fr);
-  gap: var(--space-3);
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
 }
-@media (max-width: 640px) {
-  .offer-table__row {
-    grid-template-columns: 1fr 1fr;
-    row-gap: var(--space-1);
-    padding-bottom: var(--space-2);
-    border-bottom: 1px dashed var(--color-border);
-  }
+.offer-picker__simulate {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
 }

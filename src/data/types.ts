@@ -148,6 +148,26 @@ export interface GwsOffer {
   /** 供應至（之後不能再選） */
   availableUntil?: string;
 }
+/**
+ * 下單時選到的方案快照：方案清單不存在系統裡（每次依客戶即時向 Google 查），
+ * 所以訂單與訂閱要把當時的 SKU 與方案內容存下來，之後查詢、對帳都看這份（2026/11/24）。
+ */
+export interface OfferSnapshot extends GwsOffer {
+  skuId: string;
+  skuName: string;
+  /** 對應的版本名稱 */
+  version: string;
+  /** 從 Google 取得的時間 */
+  fetchedAt: string;
+}
+/** 依客戶即時向 Google 查到的方案 */
+export interface OfferLookup {
+  skuId: string;
+  skuName: string;
+  version: string;
+  offers: GwsOffer[];
+  fetchedAt: string;
+}
 export interface GwsSku {
   skuId: string;
   name: string;
@@ -171,8 +191,8 @@ export interface Subscription {
   contractTime: string;
   /** 合約期間：年約，或彈性（Flexible，可以取消續約排程） */
   term: ContractTerm;
-  /** 目前使用的 Google 方案（Offer ID） */
-  offerId?: string;
+  /** 目前使用的 Google 方案（下單時的快照：SKU ID、Offer ID、方案內容） */
+  offer?: OfferSnapshot;
   /** 不續約：客戶合約到期後不再續約（不寄到期通知） */
   renewalCancelled?: { at: string; by: string; note: string };
   lastSyncedAt: string;
@@ -219,8 +239,8 @@ export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'com
 export interface OperationPayload {
   /** 新訂的網域；訂閱成功後寫回客戶主檔 */
   domain?: string;
-  /** 選擇的 Google 方案（Offer ID）：新訂、續約、中途升版要選（2026/11/24） */
-  offerId?: string;
+  /** 選擇的 Google 方案快照（SKU ID、Offer ID、方案內容）：新訂、續約、中途升版要選（2026/11/24） */
+  offer?: OfferSnapshot;
   /** 新訂：第一個使用者的帳號（公司網域的信箱）與驗證信箱（不是公司網域，2026/11/24） */
   firstUserEmail?: string;
   verifyEmail?: string;

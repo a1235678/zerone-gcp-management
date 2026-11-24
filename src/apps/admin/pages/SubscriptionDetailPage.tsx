@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { EXPIRING_DAYS, cancelSchedule, daysUntil, findOffer, offerSummary, getExpiryNoticeFor, getOperations, setRenewalCancelled, getPlans, getSchedules, getSubscription, getWorkOrders } from '@data/api';
+import { EXPIRING_DAYS, cancelSchedule, daysUntil, offerSummary, getExpiryNoticeFor, getOperations, setRenewalCancelled, getPlans, getSchedules, getSubscription, getWorkOrders } from '@data/api';
 import { contractTermLabel, executionModeLabel, operationTypeLabel, scheduleActionLabel, workOrderTypeLabel } from '@data/labels';
 import type { OperationListItem, OperationType, ScheduleListItem, WorkOrderListItem } from '@data/types';
 import { Card } from '@shared/components/Card';
@@ -13,7 +13,7 @@ import { Modal } from '@shared/components/Modal';
 import { useToast } from '@shared/components/Toast';
 import { NoticeStageTag } from './ExpiryNoticePage';
 import { StatusTag } from '@shared/components/StatusTag';
-import { formatContractPeriod, formatDate, formatDateTime } from '@shared/format';
+import { formatContractPeriod, formatDate, formatDateTime, formatUsd } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
 import { OfferPlanTag } from '../components/OfferPicker';
@@ -212,18 +212,22 @@ export function SubscriptionDetailPage() {
                 },
                 {
                   label: 'Google 方案',
-                  value: (() => {
-                    const f = findOffer(s.offerId);
-                    return f ? (
+                  full: true,
+                  value: s.offer ? (
+                    <div>
                       <span className="inline">
-                        <OfferPlanTag offer={f.offer} />
-                        {offerSummary(f.offer)}
-                        <span className="mono muted">{f.offer.offerId}</span>
+                        <OfferPlanTag offer={s.offer} />
+                        {offerSummary(s.offer)}
+                        <span className="tnum">· {formatUsd(s.offer.priceCents)} / 授權</span>
                       </span>
-                    ) : (
-                      <span className="muted">尚未同步（下次從 Google 同步時帶入）</span>
-                    );
-                  })(),
+                      <div className="table__secondary">
+                        {s.offer.skuName} · SKU <span className="mono">{s.offer.skuId}</span> · Offer <span className="mono">{s.offer.offerId}</span>
+                      </div>
+                      <div className="table__secondary">下單時的快照（{formatDateTime(s.offer.fetchedAt)} 從 Google 取得）</div>
+                    </div>
+                  ) : (
+                    <span className="muted">沒有下單時的方案紀錄</span>
+                  ),
                 },
                 { label: '人數', value: `${s.seats} 席` },
                 {

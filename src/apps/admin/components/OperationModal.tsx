@@ -3,7 +3,6 @@ import {
   AFTERNOON_START,
   AFTERNOON_TYPES,
   OFFER_TYPES,
-  findOffer,
   offerUnavailableReason,
   TODAY,
   analyzeOrder,
@@ -18,7 +17,7 @@ import {
   getPlanList,
 } from '@data/api';
 import { executionModeLabel, operationTypeLabel, scheduleActionLabel, transferSourceLabel } from '@data/labels';
-import type { NewCustomerInput, OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
+import type { NewCustomerInput, OfferSnapshot, OperationListItem, OperationPayload, OperationType, TransferSource } from '@data/types';
 import { Callout, FormField } from '@shared/components/Form';
 import { Modal } from '@shared/components/Modal';
 import { PendingTag } from '@shared/components/PendingTag';
@@ -119,8 +118,8 @@ export function OperationModal({
   const [scheduledAt, setScheduledAt] = useState('');
   const [scheduledTime, setScheduledTime] = useState(AFTERNOON_START);
   const [renewEndAt, setRenewEndAt] = useState('');
-  // Google 方案（Offer）：新訂、續約、中途升版選完版本後要選（2026/11/24）
-  const [offerId, setOfferId] = useState('');
+  // Google 方案快照：新訂、續約、中途升版選完版本後，依客戶即時從 Google 查並選擇（2026/11/24）
+  const [offer, setOffer] = useState<OfferSnapshot | undefined>();
   const [source, setSource] = useState<TransferSource | ''>('');
   const [memo, setMemo] = useState('');
   const [tried, setTried] = useState(false);
@@ -139,7 +138,7 @@ export function OperationModal({
     setScheduledAt('');
     setScheduledTime(initial?.scheduledTime ?? AFTERNOON_START);
     setRenewEndAt(initial?.renewEndAt ?? '');
-    setOfferId(initial?.offerId ?? '');
+    setOffer(initial?.offer);
     setSource(initial?.transferSource ?? '');
     setMemo(initial?.memo ?? '');
     setTried(false);
@@ -163,16 +162,11 @@ export function OperationModal({
   const afternoon = AFTERNOON_TYPES.includes(type);
   const needsOffer = OFFER_TYPES.includes(type);
   const offerSeats = type === 'upgrade' ? (target.seats ?? 0) + (Number(addSeats) || 0) : Number(seats) || undefined;
-  const chosenOffer = findOffer(offerId);
   // 換了版本，原本選的方案就不適用
   useEffect(() => {
-    if (chosenOffer && chosenOffer.sku.version !== plan) setOfferId('');
-  }, [plan, chosenOffer]);
-  const offerError = !needsOffer
-    ? undefined
-    : !chosenOffer
-      ? '請選擇方案'
-      : offerUnavailableReason(chosenOffer.offer, offerSeats, type);
+    if (offer && offer.version !== plan) setOffer(undefined);
+  }, [plan, offer]);
+  const offerError = !needsOffer ? undefined : !offer ? '請選擇方案' : offerUnavailableReason(offer, offerSeats, type);
   const sub = target.subscriptionId ? { plan: target.plan ?? '', seats: target.seats ?? 0, expiresAt: target.expiresAt ?? TODAY } : undefined;
   const analysis = analyzeOrder(type, sub, payload);
   const date = type === 'renewal' ? analysis.defaultDate! : scheduledAt || analysis.defaultDate || TODAY;
@@ -229,7 +223,7 @@ export function OperationModal({
     if (type === 'addSeats') p.addSeats = Number(addSeats);
     if (type === 'upgrade') Object.assign(p, { plan }, Number(addSeats) > 0 ? { addSeats: Number(addSeats) } : {});
     if (type === 'transfer') p.transferSource = source || undefined;
-    if (needsOffer) p.offerId = offerId;
+    if (needsOffer) p.offer = offer;
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
     if (analysis.execution === 'schedule' && afternoon) p.scheduledTime = scheduledTime;
     setSaving(true);
@@ -407,7 +401,7 @@ export function OperationModal({
             {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
           </FormField>
         </div>
-        <OfferPicker version={plan} seats={offerSeats} type={type} value={offerId} onChange={setOfferId} error={show('offerId')} />
+        <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
         </div>
       )}
 
@@ -444,7 +438,7 @@ export function OperationModal({
               )}
             </FormField>
           </div>
-          <OfferPicker version={plan} seats={offerSeats} type={type} value={offerId} onChange={setOfferId} error={show('offerId')} />
+          <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
           {plan && Number(seats) > 0 && (
             <div className="inline">
               <span className="muted">這次續約：</span>
@@ -516,7 +510,7 @@ export function OperationModal({
             {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
           </FormField>
           <div className="is-full">
-            <OfferPicker version={plan} seats={offerSeats} type={type} value={offerId} onChange={setOfferId} error={show('offerId')} />
+            <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
           </div>
         </div>
       )}

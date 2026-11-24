@@ -18,7 +18,6 @@ import { GcpBillDetailPage } from './pages/GcpBillDetailPage';
 import { GcpBillingPage } from './pages/GcpBillingPage';
 import { GcpUsagePage } from './pages/GcpUsagePage';
 import { GwsNewOrderPage } from './pages/GwsNewOrderPage';
-import { GwsOffersPage } from './pages/GwsOffersPage';
 import { GwsSubscriptionsPage } from './pages/GwsSubscriptionsPage';
 import { HomePage } from './pages/HomePage';
 import { NewCustomerPage } from './pages/NewCustomerPage';
@@ -92,7 +91,7 @@ function Protected() {
             <Route path="/catalog" element={<ProductsPage />} />
             <Route path="/plans" element={<Navigate to="/products/gws/versions" replace />} />
             <Route path="/products/gws/versions" element={<PlansPage />} />
-            <Route path="/products/gws/offers" element={<GwsOffersPage />} />
+            <Route path="/products/gws/offers" element={<Navigate to="/products/gws" replace />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
             <Route path="/products/gws/new" element={<GwsNewOrderPage />} />
             <Route path="/products/gws/transfer-in" element={<NewCustomerPage key="transfer" mode="transfer" />} />

@@ -26,7 +26,8 @@ import type {
   Customer,
   CustomerInvite,
   GwsOffer,
-  GwsSku,
+  OfferLookup,
+  OfferSnapshot,
   SalesAssignment,
   ProductCode,
   Address,
@@ -821,8 +822,7 @@ export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan'
 
 /** 訂單說明裡的方案，例如「（年約・每月計費）」 */
 const offerText = (p: OperationPayload) => {
-  const f = findOffer(p.offerId);
-  return f ? `（${offerSummary(f.offer)}）` : '';
+  return p.offer ? `（${offerSummary(p.offer)}）` : '';
 };
 
 function describeOperation(op: { type: OperationType; subscriptionId?: string; payload: OperationPayload }): string {
@@ -886,20 +886,38 @@ export function getPendingSchedules(customerId: string): Promise<ScheduleListIte
 
 /** 檢查操作內容，回傳錯誤訊息（沒有錯誤回傳 undefined） */
 // ═════════ Google 可訂閱方案（2026/11/24）═════════
-// 後端從 Google 平台撈到 SKU 與 Offer；後勤在新訂、續約、中途升版時選方案。
+// 方案清單不存在系統裡：新訂、續約、中途升版時，依客戶即時向 Google 查（正式版由後端呼叫 Cloud Channel API）。
+// 系統只存下單時選到的方案快照（SKU ID、Offer ID、方案內容）。
 
-export function getGwsSkus(): Promise<GwsSku[]> {
-  return delay(gwsSkus);
+/** Prototype：模擬 Google 沒回應 */
+let googleDown = false;
+export const setGoogleDownForPrototype = (down: boolean) => {
+  googleDown = down;
+};
+
+/**
+ * 依客戶即時查這個版本可訂閱的方案。Prototype 用假資料模擬 Google 的回應：
+ * 已經有 GWS 訂閱的客戶不能再用試用方案（示意方案會因客戶不同而不同）。
+ */
+export function fetchOffersFromGoogle(customerId: string | undefined, version: string): Promise<OfferLookup> {
+  if (googleDown) return new Promise((_, reject) => setTimeout(() => reject(new Error('Google 沒有回應，請稍後按「重新整理」再試')), 700));
+  const sku = gwsSkus.find((k) => k.version === version);
+  if (!sku) return fail('Google 上找不到這個版本的 SKU');
+  const hasGws = Boolean(customerId && db.subscriptions.some((x) => x.customerId === customerId && x.status !== 'cancelled'));
+  const offers = sku.offers.filter((o) => !(o.planType === 'trial' && hasGws));
+  return new Promise((resolve) =>
+    setTimeout(() => resolve(structuredClone({ skuId: sku.skuId, skuName: sku.name, version, offers, fetchedAt: now() })), 700),
+  );
 }
 
-export function findOffer(offerId: string | undefined): { sku: GwsSku; offer: GwsOffer } | undefined {
-  if (!offerId) return undefined;
-  for (const sku of gwsSkus) {
-    const offer = sku.offers.find((x) => x.offerId === offerId);
-    if (offer) return { sku, offer };
-  }
-  return undefined;
-}
+/** 把選到的方案存成快照 */
+export const toOfferSnapshot = (lookup: OfferLookup, offer: GwsOffer): OfferSnapshot => ({
+  ...offer,
+  skuId: lookup.skuId,
+  skuName: lookup.skuName,
+  version: lookup.version,
+  fetchedAt: lookup.fetchedAt,
+});
 
 /** 方案能不能選：已過供應期限、人數不在範圍、試用只能新訂 */
 export function offerUnavailableReason(offer: GwsOffer, seats: number | undefined, type: OperationType): string | undefined {
@@ -961,11 +979,10 @@ export function validateOperation(input: NewOperationInput): string | undefined 
   }
   if (AFTERNOON_TYPES.includes(input.type) && p.scheduledTime && p.scheduledTime < AFTERNOON_START) return '新購、加購要排在下午 4 點（GMT+8）之後';
   if (OFFER_TYPES.includes(input.type)) {
-    const found = findOffer(p.offerId);
-    if (!found) return '請選擇方案';
-    if (found.sku.version !== p.plan) return '方案和版本不一致，請重新選擇方案';
+    if (!p.offer) return '請選擇方案';
+    if (p.offer.version !== p.plan) return '方案和版本不一致，請重新選擇方案';
     const seats = input.type === 'upgrade' ? (sub?.seats ?? 0) + (p.addSeats ?? 0) : p.seats;
-    const reason = offerUnavailableReason(found.offer, seats, input.type);
+    const reason = offerUnavailableReason(p.offer, seats, input.type);
     if (reason) return `這個方案不能選：${reason}`;
   }
   if (input.type === 'renewal' && p.renewEndAt && sub && p.renewEndAt <= addDays(sub.expiresAt, 1)) return '自訂的到期日要晚於新合約起日';
@@ -1155,17 +1172,17 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
         sub.seats = p.seats ?? sub.seats;
         sub.startsAt = p.newStartsAt ?? addDays(sub.expiresAt, 1);
         sub.expiresAt = p.newExpiresAt ?? addMonths(sub.expiresAt, p.renewMonths ?? 12);
-        if (p.offerId) {
-          sub.offerId = p.offerId;
-          sub.term = findOffer(p.offerId)?.offer.planType === 'flexible' ? 'flexible' : 'annual';
+        if (p.offer) {
+          sub.offer = p.offer;
+          sub.term = p.offer.planType === 'flexible' ? 'flexible' : 'annual';
         }
       }
       break;
     case 'upgrade':
       if (sub && p.plan) sub.plan = p.plan;
-      if (sub && p.offerId) {
-        sub.offerId = p.offerId;
-        sub.term = findOffer(p.offerId)?.offer.planType === 'flexible' ? 'flexible' : 'annual';
+      if (sub && p.offer) {
+        sub.offer = p.offer;
+        sub.term = p.offer.planType === 'flexible' ? 'flexible' : 'annual';
       }
       if (sub && p.addSeats) sub.seats = (sub.seats ?? 0) + p.addSeats;
       break;
@@ -1182,8 +1199,8 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
         startsAt: start,
         expiresAt: addDays(addMonths(start, 12), -1),
         contractTime: gmt0Of(p.scheduledTime ?? AFTERNOON_START),
-        term: findOffer(p.offerId)?.offer.planType === 'flexible' ? 'flexible' : 'annual',
-        offerId: p.offerId,
+        term: p.offer?.planType === 'flexible' ? 'flexible' : 'annual',
+        offer: p.offer,
         lastSyncedAt: at,
       });
       op.subscriptionId = id;
