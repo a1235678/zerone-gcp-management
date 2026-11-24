@@ -1,8 +1,8 @@
 // 對應 docs/handoff.md「待確認事項」。答案出來後在這裡移除或更新，畫面上的「待確認」標籤會跟著變。
-// 已確認並移除：#18 到期通知固定 30、3 天（2026/11/12）；#2 帳單是獨立權限項目、#8 不做發票功能（2026/11/10）；#19 不提供取消訂閱（2026/11/11）；#4 客戶轉入使用 Cloud Channel API、#6 執行單放第二階段（2026/11/13）。
+// 已確認並移除：#18 到期通知固定 30、3 天（2026/11/12）；#2 帳單是獨立權限項目、#8 不做發票功能（2026/11/10）；#19 不提供取消訂閱（2026/11/11）；#4 客戶轉入使用 Cloud Channel API、#6 執行單放第二階段（2026/11/13）；#25 可能會有個人客戶（做公司／個人選項）、#26 客戶不需要一般聯絡人（2026/11/24）。
 export const pendingItems = {
   1: { question: '客戶由誰建立？目前傳聞是 Connie', owner: 'Connie' },
-  3: { question: 'API 能不能抓到 GWS 已購買的方案', owner: 'Terry' },
+  3: { question: 'API 能不能抓到 GWS 已購買的版本', owner: 'Terry' },
   5: { question: 'PM 希望在這個系統看到哪些 GWS 資訊', owner: 'PM' },
   7: { question: '排程任務、TipTop 整合是否不做；信件通知要做，是否放第一階段', owner: 'Debbie／使用者' },
   9: { question: '後端語言、部署位置、API 格式', owner: 'Terry' },
@@ -18,12 +18,11 @@ export const pendingItems = {
   21: { question: '能否取得系統設定的用量上限數字', owner: 'Ray' },
   22: { question: 'Gemini Enterprise 能否取得用量和 token 數', owner: 'Ray' },
   23: { question: '建立使用者帳號時，是否會連動到 GCP', owner: 'Ray' },
-  25: { question: '會不會有個人客戶', owner: 'Connie' },
-  26: { question: '「一般聯絡人」頁籤要不要拿掉', owner: 'Connie' },
   27: { question: '快到期但已設定續約排程的客戶，還要不要寄到期通知', owner: 'Connie' },
   28: { question: '轉入的客戶資料由誰來填寫', owner: 'Connie' },
   29: { question: '經銷商主檔要有哪些欄位', owner: 'Connie' },
   30: { question: '到期前 1 天要不要再寄一次通知', owner: '待指定' },
+  31: { question: '登入與註冊流程細節：邀請信註冊、帳號已存在時的驗證信、經銷商替客戶開帳號', owner: '待討論' },
 } as const;
 
 export type PendingId = keyof typeof pendingItems;

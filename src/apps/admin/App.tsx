@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'r
 import type { ResourceKey } from '@data/types';
 import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
+import { setPriceVisible } from '@shared/format';
 import { AuthProvider, useAuth, usePermission } from './auth';
 import { resourceOf, visibleNav } from './nav';
 import { NoPermissionPage } from './pages/PlaceholderPage';
@@ -59,6 +60,8 @@ function Protected() {
   const location = useLocation();
   const navigate = useNavigate();
   if (!session) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  // 角色看不到價格時，畫面上的金額改顯示「••••」（2026/11/24）
+  setPriceVisible(session.canSeePrice);
   return (
     <AppShell
       siteName="零壹雲管家"
@@ -75,7 +78,7 @@ function Protected() {
             <Route path="/" element={<HomePage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/customers/new" element={<NewCustomerPage key="new" />} />
-            <Route path="/customers/transfer-in" element={<NewCustomerPage key="transfer" mode="transfer" />} />
+            <Route path="/customers/transfer-in" element={<TransferInRedirect />} />
             <Route path="/customers/:id" element={<CustomerDetailPage />} />
             <Route path="/dealers" element={<DealersPage />} />
             <Route path="/dealers/new" element={<NewDealerPage />} />
@@ -86,9 +89,12 @@ function Protected() {
             <Route path="/work-orders/:id/edit" element={<WorkOrderFormPage key="edit" />} />
             <Route path="/brands" element={<BrandsPage />} />
             <Route path="/catalog" element={<ProductsPage />} />
-            <Route path="/plans" element={<PlansPage />} />
+            <Route path="/plans" element={<Navigate to="/products/gws/versions" replace />} />
+            <Route path="/products/gws/versions" element={<PlansPage />} />
+            <Route path="/products/gws/offers" element={<Navigate to="/products/gws" replace />} />
             <Route path="/products/gws" element={<GwsSubscriptionsPage />} />
             <Route path="/products/gws/new" element={<GwsNewOrderPage />} />
+            <Route path="/products/gws/transfer-in" element={<NewCustomerPage key="transfer" mode="transfer" />} />
             <Route path="/products/gws/:id" element={<SubscriptionDetailPage />} />
             <Route path="/products/gcp" element={<GcpIndex />} />
             <Route path="/products/gcp/usage" element={<GcpUsagePage />} />
@@ -115,6 +121,12 @@ function pageAllowed(pathname: string, can: (r: ResourceKey) => boolean) {
 }
 
 /** /products/gcp 本身沒有頁面：有用量權限去用量，否則去帳單 */
+/** 舊網址：客戶轉入搬到 GWS 訂閱底下（保留執行單帶入的參數） */
+function TransferInRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/products/gws/transfer-in${location.search}`} replace />;
+}
+
 function GcpIndex() {
   const { can } = usePermission();
   return <Navigate to={can('gcpUsage') || !can('billing') ? '/products/gcp/usage' : '/products/gcp/billing'} replace />;

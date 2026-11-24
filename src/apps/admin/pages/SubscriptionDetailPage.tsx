@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { EXPIRING_DAYS, daysUntil, getExpiryNoticeFor, getOperations, setRenewalCancelled, getPlans, getSchedules, getSubscription, getWorkOrders } from '@data/api';
-import { executionModeLabel, operationTypeLabel, scheduleActionLabel, workOrderTypeLabel } from '@data/labels';
+import { EXPIRING_DAYS, cancelSchedule, daysUntil, offerSummary, getExpiryNoticeFor, getOperations, setRenewalCancelled, getSchedules, getSubscription, getWorkOrders } from '@data/api';
+import { contractTermLabel, executionModeLabel, operationTypeLabel, scheduleActionLabel, workOrderTypeLabel } from '@data/labels';
 import type { OperationListItem, OperationType, ScheduleListItem, WorkOrderListItem } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState, type Column } from '@shared/components/DataTable';
@@ -13,9 +13,10 @@ import { Modal } from '@shared/components/Modal';
 import { useToast } from '@shared/components/Toast';
 import { NoticeStageTag } from './ExpiryNoticePage';
 import { StatusTag } from '@shared/components/StatusTag';
-import { formatDate, formatDateTime } from '@shared/format';
+import { formatContractPeriod, formatDate, formatDateTime, formatUsd } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
+import { OfferPlanTag } from '../components/OfferPicker';
 import { OperationBody, OperationPanel } from '../components/OperationPanel';
 import { OperationStatusTag, ScheduleStatusTag, SubscriptionStatusTag, WorkOrderStatusTag } from '../tags';
 import { usePermission } from '../auth';
@@ -32,12 +33,13 @@ export function SubscriptionDetailPage() {
   const [action, setAction] = useState<OperationType | null>(null);
   const [panelId, setPanelId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelRenewSchedOpen, setCancelRenewSchedOpen] = useState(false);
   const [cancelNote, setCancelNote] = useState('');
   const toast = useToast();
   const toggleRenewal = async (cancel: boolean) => {
     try {
       await setRenewalCancelled(id, cancel, cancelNote);
-      toast(cancel ? '已取消續約，到期後不續約、不寄到期通知' : '已恢復續約');
+      toast(cancel ? '已設定不續約，到期後不寄到期通知' : '已恢復續約');
       setCancelOpen(false);
       reload();
     } catch (e) {
@@ -46,11 +48,24 @@ export function SubscriptionDetailPage() {
   };
 
   const sub = useAsync(() => getSubscription(id), [id, version]);
-  const plans = useAsync(getPlans);
   const ops = useAsync(() => getOperations({ subscriptionId: id }), [id, version]);
   const schedules = useAsync(() => getSchedules({ subscriptionId: id }), [id, version]);
   const orders = useAsync(() => (can('workOrders') ? getWorkOrders({ subscriptionId: id }) : Promise.resolve([])), [id, version]);
   const notice = useAsync(() => getExpiryNoticeFor(id), [id, version]);
+
+  // 彈性合約：等待中的續約排程可以直接取消（2026/11/24）
+  const renewSchedule = (schedules.data ?? []).find((x) => x.action === 'renew' && x.status === 'waiting');
+  const cancelRenewSchedule = async () => {
+    if (!renewSchedule) return;
+    try {
+      await cancelSchedule(renewSchedule.id);
+      toast(`已取消續約排程 ${renewSchedule.id}`);
+      setCancelRenewSchedOpen(false);
+      reload();
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    }
+  };
 
   const s = sub.data;
   if (sub.loading && !s) return <p className="muted">載入中…</p>;
@@ -65,7 +80,6 @@ export function SubscriptionDetailPage() {
     );
 
   const days = daysUntil(s.expiresAt);
-  const topPlan = plans.data?.[plans.data.length - 1];
   const live = s.status !== 'cancelled';
   const openOps = (ops.data ?? []).filter((o) => OPEN.includes(o.status));
   const pastOps = (ops.data ?? []).filter((o) => !OPEN.includes(o.status));
@@ -78,6 +92,7 @@ export function SubscriptionDetailPage() {
     plan: s.plan,
     seats: s.seats,
     startsAt: s.startsAt,
+    contractTime: s.contractTime,
     expiresAt: s.expiresAt,
     renewalCancelled: Boolean(s.renewalCancelled),
   };
@@ -125,7 +140,7 @@ export function SubscriptionDetailPage() {
         titleAddon={
           <>
             <SubscriptionStatusTag value={s.status} />
-            {s.renewalCancelled && <StatusTag tone="warning">已取消續約</StatusTag>}
+            {s.renewalCancelled && <StatusTag tone="warning">不續約</StatusTag>}
           </>
         }
         description={
@@ -140,22 +155,25 @@ export function SubscriptionDetailPage() {
         actions={
           canOperate && live ? (
             <>
+              {/* 加購與中途升版合併成一個按鈕（2026/11/24） */}
               <button className="btn" onClick={() => setAction('addSeats')}>
-                加購
+                加購／升版
               </button>
-              <button className="btn" disabled={topPlan === s.plan} title={topPlan === s.plan ? '已經是最高等級的方案' : undefined} onClick={() => setAction('upgrade')}>
-                中途升版
-              </button>
+              {s.term === 'flexible' && renewSchedule && (
+                <button className="btn" onClick={() => setCancelRenewSchedOpen(true)}>
+                  取消續約排程
+                </button>
+              )}
               {s.renewalCancelled ? (
                 <button className="btn" onClick={() => toggleRenewal(false)}>
                   恢復續約
                 </button>
               ) : (
                 <button className="btn" onClick={() => { setCancelNote(''); setCancelOpen(true); }}>
-                  取消續約
+                  不續約
                 </button>
               )}
-              <button className="btn btn--primary" disabled={Boolean(s.renewalCancelled)} title={s.renewalCancelled ? '已取消續約，要續約請先恢復續約' : undefined} onClick={() => setAction('renewal')}>
+              <button className="btn btn--primary" disabled={Boolean(s.renewalCancelled)} title={s.renewalCancelled ? '已設定不續約，要續約請先恢復續約' : undefined} onClick={() => setAction('renewal')}>
                 續約
               </button>
             </>
@@ -165,7 +183,7 @@ export function SubscriptionDetailPage() {
 
       <div className="stack">
         {s.renewalCancelled && (
-          <Callout tone="warning" title="客戶已取消續約">
+          <Callout tone="warning" title="客戶不續約">
             合約到期（{formatDate(s.expiresAt)}）後不再續約，也不寄到期通知。原因：{s.renewalCancelled.note}（{s.renewalCancelled.by}，{formatDateTime(s.renewalCancelled.at)}）
           </Callout>
         )}
@@ -178,7 +196,7 @@ export function SubscriptionDetailPage() {
                 { label: '經銷商', value: s.dealerName },
                 { label: '產品', value: 'Google Workspace' },
                 {
-                  label: '方案',
+                  label: '版本',
                   value: (
                     <span className="inline">
                       {s.plan}
@@ -188,15 +206,35 @@ export function SubscriptionDetailPage() {
                     </span>
                   ),
                 },
+                {
+                  label: 'Google 方案',
+                  full: true,
+                  value: s.offer ? (
+                    <div>
+                      <span className="inline">
+                        <OfferPlanTag offer={s.offer} />
+                        {offerSummary(s.offer)}
+                        <span className="tnum">· {formatUsd(s.offer.priceCents)} / 授權</span>
+                      </span>
+                      <div className="table__secondary">
+                        {s.offer.skuName} · SKU <span className="mono">{s.offer.skuId}</span> · Offer <span className="mono">{s.offer.offerId}</span>
+                      </div>
+                      <div className="table__secondary">下單時的快照（{formatDateTime(s.offer.fetchedAt)} 從 Google 取得）</div>
+                    </div>
+                  ) : (
+                    <span className="muted">沒有下單時的方案紀錄</span>
+                  ),
+                },
                 { label: '人數', value: `${s.seats} 席` },
                 {
                   label: '合約期間',
                   value: (
                     <span className="mono">
-                      {formatDate(s.startsAt)} – {formatDate(s.expiresAt)}
+                      {formatContractPeriod(s.startsAt, s.expiresAt, s.contractTime)}
                     </span>
                   ),
                 },
+                { label: '合約類型', value: contractTermLabel[s.term] },
                 {
                   label: '剩餘天數',
                   value: live ? <span className={days <= EXPIRING_DAYS ? 'text-warning' : ''}>{days >= 0 ? `${days} 天` : `已過 ${-days} 天`}</span> : '',
@@ -226,7 +264,7 @@ export function SubscriptionDetailPage() {
             <Card title={"到期通知"}>
               {notice.data && live ? (
                 <div className="stack" style={{ gap: 'var(--space-2)' }}>
-                  {notice.data.renewalCancelled && <p className="muted" style={{ margin: 0 }}>已取消續約，不寄到期通知。</p>}
+                  {notice.data.renewalCancelled && <p className="muted" style={{ margin: 0 }}>不續約，不寄到期通知。</p>}
                   {notice.data.stages.map((st) => (
                     <div key={st.daysBefore} className="inline">
                       <span style={{ minWidth: 92 }}>到期前 {st.daysBefore} 天</span>
@@ -281,6 +319,7 @@ export function SubscriptionDetailPage() {
         <OperationModal
           open
           type={action}
+          combined={action === 'addSeats'}
           target={target}
           onClose={() => setAction(null)}
           onSubmitted={() => {
@@ -290,9 +329,32 @@ export function SubscriptionDetailPage() {
         />
       )}
       <Modal
+        open={cancelRenewSchedOpen}
+        onClose={() => setCancelRenewSchedOpen(false)}
+        title="取消續約排程"
+        width={480}
+        footer={
+          <>
+            <button className="btn" onClick={() => setCancelRenewSchedOpen(false)}>
+              返回
+            </button>
+            <button className="btn btn--danger" onClick={cancelRenewSchedule}>
+              確認取消排程
+            </button>
+          </>
+        }
+      >
+        {renewSchedule && (
+          <p style={{ margin: 0 }}>
+            彈性合約的客戶可以取消續約排程。取消 <span className="mono">{renewSchedule.id}</span>（{renewSchedule.detail}，
+            {formatDateTime(renewSchedule.enabledAt)} 執行）後，系統不會在這個時間續約；要續約時再重新建立。
+          </p>
+        )}
+      </Modal>
+      <Modal
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        title="取消續約"
+        title="不續約"
         width={460}
         footer={
           <>
@@ -300,13 +362,13 @@ export function SubscriptionDetailPage() {
               返回
             </button>
             <button className="btn btn--danger" disabled={!cancelNote.trim()} onClick={() => toggleRenewal(true)}>
-              確認取消續約
+              確認不續約
             </button>
           </>
         }
       >
         <p style={{ marginTop: 0 }}>
-          客戶合約到期（{formatDate(s.expiresAt)}）後不再續約。系統不會執行任何動作，只會標記為「已取消續約」，並停止寄到期通知。之後可以再恢復續約。
+          客戶合約到期（{formatDate(s.expiresAt)}）後不再續約。系統不會執行任何動作，只會標記為「不續約」，並停止寄到期通知。之後可以再恢復續約。
         </p>
         <FormField label="原因" required>
           {(p) => <textarea {...p} className="textarea" value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} />}

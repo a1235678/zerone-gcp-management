@@ -173,6 +173,8 @@ function NavParent({ item, pathname }: { item: NavItem; pathname: string }) {
     if (inside) setOpen(true);
   }, [inside]);
   const id = `nav-sub-${item.to.replace(/\W/g, '-')}`;
+  // 子選單可能互為前綴（例如 /products/gws 與 /products/gws/versions），只標示最長的那一個
+  const activeChild = item.children!.filter((c) => matches(c.to, pathname)).sort((a, b) => b.to.length - a.to.length)[0]?.to;
   return (
     <div className={`nav-parent ${inside ? 'is-inside' : ''}`}>
       <button type="button" className="nav-item nav-item--parent" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
@@ -183,7 +185,13 @@ function NavParent({ item, pathname }: { item: NavItem; pathname: string }) {
       {open && (
         <div className="nav-sub" id={id}>
           {item.children!.map((c) => (
-            <NavLink key={c.to} to={c.to} className={({ isActive }) => `nav-item nav-item--child ${isActive ? 'is-active' : ''}`}>
+            <NavLink
+              key={c.to}
+              to={c.to}
+              end
+              aria-current={activeChild === c.to ? 'page' : undefined}
+              className={() => `nav-item nav-item--child ${activeChild === c.to ? 'is-active' : ''}`}
+            >
               {c.label}
             </NavLink>
           ))}

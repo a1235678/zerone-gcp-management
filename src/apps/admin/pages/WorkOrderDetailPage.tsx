@@ -95,6 +95,7 @@ export function WorkOrderDetailPage() {
         plan: sub?.plan,
         seats: sub?.seats,
         startsAt: sub?.startsAt,
+        contractTime: sub?.contractTime,
         expiresAt: sub?.expiresAt,
       }
     : undefined;
@@ -123,7 +124,7 @@ export function WorkOrderDetailPage() {
     { label: '經銷商', value: w.dealerName },
     ...(sub ? [{ label: '訂閱', value: `${sub.plan} · 目前 ${sub.seats} 席 · 合約 ${sub.startsAt.replace(/-/g, '/')} – ${sub.expiresAt.replace(/-/g, '/')}` }] : []),
     ...(p.domain ? [{ label: '網域', value: <span className="mono">{p.domain}</span> }] : []),
-    ...(p.plan ? [{ label: w.type === 'upgrade' ? '升級後方案' : w.type === 'renewal' ? '續約方案' : '方案', value: <span className="inline">{p.plan} <PendingTag id={3} /></span> }] : []),
+    ...(p.plan ? [{ label: w.type === 'upgrade' ? '升級後版本' : w.type === 'renewal' ? '續約版本' : '版本', value: <span className="inline">{p.plan} <PendingTag id={3} /></span> }] : []),
     ...(p.seats !== undefined ? [{ label: w.type === 'renewal' ? '續約人數' : '人數', value: `${p.seats} 席` }] : []),
     ...(p.addSeats !== undefined ? [{ label: w.type === 'upgrade' ? '同時加購人數' : '加購人數', value: `${p.addSeats} 席${sub ? `（${sub.seats} → ${(sub.seats ?? 0) + p.addSeats}）` : ''}` }] : []),
     ...(w.type === 'renewal' ? [{ label: '續約期間', value: `${p.renewMonths} 個月` }] : []),
@@ -228,7 +229,7 @@ export function WorkOrderDetailPage() {
                     {s.key === 'createCustomer' && s.state === 'todo' && !can('customers', 'create') && <div className="table__secondary">由後勤處理（需要「客戶」可編輯權限）</div>}
                     {s.key === 'createCustomer' && s.state === 'todo' && can('customers', 'create') && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
-                        <Link className="btn btn--primary btn--sm" to={`/customers/${w.type === 'transfer' ? 'transfer-in' : 'new'}?fromWo=${w.id}`}>
+                        <Link className="btn btn--primary btn--sm" to={`${w.type === 'transfer' ? '/products/gws/transfer-in' : '/customers/new'}?fromWo=${w.id}`}>
                           {w.type === 'transfer' ? '轉入客戶' : '建立客戶'}（帶入執行單資料）
                         </Link>
                       </div>

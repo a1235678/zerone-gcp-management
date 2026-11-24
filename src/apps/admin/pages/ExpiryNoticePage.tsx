@@ -20,7 +20,7 @@ export function NoticeStageTag({ stage, cancelled }: { stage: NoticeStage; cance
   return <StatusTag tone="neutral">{stage.date <= TODAY ? '未寄出' : '待寄出'}</StatusTag>;
 }
 
-/** 到期通知：GWS 到期前 30 天、3 天寄信給負責續約的業務和後勤（2026/11/12 會議）；已取消續約的不寄 */
+/** 到期通知：GWS 到期前 30 天、3 天寄信給負責續約的業務和後勤（2026/11/12 會議）；不續約的不寄 */
 export function ExpiryNoticePage() {
   const { can } = usePermission();
   const canWrite = can('schedules', 'write');
@@ -65,7 +65,7 @@ export function ExpiryNoticePage() {
           </Link>
           {r.renewalCancelled && (
             <div>
-              <StatusTag tone="warning">已取消續約</StatusTag>
+              <StatusTag tone="warning">不續約</StatusTag>
             </div>
           )}
         </div>
@@ -128,11 +128,11 @@ export function ExpiryNoticePage() {
       <PageHeader
         title="到期通知"
         titleAddon={<PendingTag id={7} hint="信件通知要做，是否放第一階段待定" />}
-        description="GWS 訂閱到期前 30 天、3 天，系統寄信給這個客戶負責續約的業務和後勤，提醒處理續約。已取消續約的訂閱不寄。Prototype 不會真的寄信。"
+        description="GWS 訂閱到期前 30 天、3 天，系統寄信給這個客戶負責續約的業務和後勤，提醒處理續約。不續約的訂閱不寄。Prototype 不會真的寄信。"
       />
 
       <StatGrid>
-        <Stat label="120 天內到期" value={rows.length} unit="筆訂閱" sub={`其中已取消續約 ${cancelled} 筆`} />
+        <Stat label="120 天內到期" value={rows.length} unit="筆訂閱" sub={`其中不續約 ${cancelled} 筆`} />
         <Stat label="已寄出通知" value={sent} unit="封" />
         <Stat label="30 天內要寄" value={next30} unit="封" />
       </StatGrid>
@@ -142,7 +142,7 @@ export function ExpiryNoticePage() {
           <ul className="exec-box__reasons" style={{ margin: 0 }}>
             <li>寄送時間固定：到期前 30 天、到期前 3 天（2026/11/12 會議）。</li>
             <li>收件人：客戶的 GWS 續約業務、後勤。</li>
-            <li>已取消續約的訂閱不寄任何到期通知。</li>
+            <li>不續約的訂閱不寄任何到期通知。</li>
           </ul>
           <div className="inline" style={{ marginTop: 'var(--space-3)' }}>
             <PendingTag id={27} />
@@ -197,7 +197,7 @@ export function ExpiryNoticePage() {
                 {preview.row.customerName}（{preview.row.primaryDomain}）的 {preview.row.plan}（{preview.row.seats} 席）將於 <strong>{formatDate(preview.row.expiresAt)}</strong>{' '}
                 到期，還有 {preview.stage.daysBefore} 天。
               </p>
-              <p>請和客戶確認續約的版本與人數，並在零壹雲管家建立續約；客戶不續約時，請在訂閱按「取消續約」。</p>
+              <p>請和客戶確認續約的版本與人數，並在零壹雲管家建立續約；客戶不續約時，請在訂閱按「不續約」。</p>
               <p className="muted">此信由零壹雲管家自動寄出。</p>
             </div>
           </div>

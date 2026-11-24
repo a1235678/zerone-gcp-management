@@ -1,4 +1,5 @@
-import type { Subscription } from '../types';
+import { gwsSkus } from './offers';
+import type { OfferSnapshot, Subscription } from '../types';
 
 // GWS 訂閱。status 只存「已取消」；「使用中／即將到期」由資料層依到期日計算（30 天內為即將到期）。
 // 席次已反映「已完成」的執行單結果，例如 WO-1104-003 把 S009 調到 75 席。
@@ -34,6 +35,13 @@ const seeds: Seed[] = [
   ['S027', 'C0025', 'Business Starter', 5, '2027-06-18'],
 ];
 
+/** 示意資料：下單時存下的方案快照 */
+const offerFor = (plan: string, planType: 'annual' | 'flexible', fetchedAt: string): OfferSnapshot | undefined => {
+  const sku = gwsSkus.find((k) => k.version === plan);
+  const offer = sku?.offers.find((o) => o.planType === planType && o.billing === 'monthly' && !o.availableUntil);
+  return sku && offer ? { ...offer, skuId: sku.skuId, skuName: sku.name, version: plan, fetchedAt: `${fetchedAt} 15:40` } : undefined;
+};
+
 export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, seats, expiresAt, cancelled, lastSyncedAt]) => ({
   id,
   customerId,
@@ -43,6 +51,12 @@ export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, s
   status: cancelled ? 'cancelled' : 'active',
   startsAt: contractStart(expiresAt),
   expiresAt,
+  // 合約時間（GMT+0）：大多是 16:00（GMT+8）生效，也就是 08:00 GMT+0
+  contractTime: ['S004', 'S011'].includes(id) ? '02:30' : '08:00',
+  // 彈性合約（Flexible）：可以取消續約排程
+  term: ['S012', 'S020'].includes(id) ? 'flexible' : 'annual',
+  // 目前使用的 Google 方案：彈性合約用彈性方案，其他用年約（每月計費）
+  offer: offerFor(plan, ['S012', 'S020'].includes(id) ? 'flexible' : 'annual', contractStart(expiresAt)),
   lastSyncedAt: lastSyncedAt ?? '2026-11-05 06:00',
 }));
 

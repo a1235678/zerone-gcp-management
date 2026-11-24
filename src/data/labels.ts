@@ -18,6 +18,10 @@ import type {
   ScheduleStatus,
   SubscriptionStatus,
   UserStatus,
+  InviteStatus,
+  ContractTerm,
+  OfferPlanType,
+  BillingCycle,
   WorkOrderStatus,
   WorkOrderType,
   OperationStatus,
@@ -59,7 +63,7 @@ export const operationStatusLabel: Record<OperationStatus, string> = {
   manual: '已手動處理・待同步',
   cancelled: '已取消',
 };
-export const executionModeLabel: Record<ExecutionMode, string> = { schedule: '排程執行', manual: '人工執行' };
+export const executionModeLabel: Record<ExecutionMode, string> = { schedule: '排程執行', manual: '人工執行', immediate: '立即送出' };
 export const transferSourceLabel: Record<TransferSource, string> = { selfPaid: '客戶自己刷卡，要轉進來', otherDealer: '從其他經銷商轉入' };
 
 export const scheduleKindLabel: Record<ScheduleKind, string> = { once: '單次', monthly: '每月', yearly: '每年' };
@@ -78,6 +82,17 @@ export const scheduleStatusLabel: Record<ScheduleStatus, string> = {
   cancelled: '已取消',
 };
 
+/** 送給 Google 的語言（Language code） */
+export const languageOptions: { code: string; label: string }[] = [
+  { code: 'zh-TW', label: '中文（台灣）' },
+  { code: 'en-US', label: 'English (United States)' },
+  { code: 'zh-CN', label: '中文（中國）' },
+  { code: 'ja', label: '日本語' },
+];
+export const offerPlanTypeLabel: Record<OfferPlanType, string> = { annual: '年約', flexible: '彈性', trial: '試用' };
+export const billingCycleLabel: Record<BillingCycle, string> = { monthly: '每月計費', yearly: '每年計費' };
+export const contractTermLabel: Record<ContractTerm, string> = { annual: '年約', flexible: '彈性' };
+export const inviteStatusLabel: Record<InviteStatus, string> = { sent: '已寄邀請，待註冊', verifying: '帳號已存在，已寄驗證信', verified: '已驗證，產品已加入' };
 export const userStatusLabel: Record<UserStatus, string> = { active: '啟用', disabled: '停用', invited: '已邀請' };
 export const permissionLabel: Record<PermissionLevel, string> = { none: '禁止', read: '唯讀', write: '可編輯', create: '可新增與編輯' };
 export const resourceLabel: Record<ResourceKey, string> = {

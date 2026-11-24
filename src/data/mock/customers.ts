@@ -31,6 +31,8 @@ const base: Customer[] = [
   c('C0025', '一葉茶堂', '90010025', 'oneleaf-tea.example', 'D000', '林冠宇', '049-2900-1025', '林怡君', '2026-06-19'),
   c('C0026', '新創合作社', '90010026', 'coop-lab.example', 'D003', '施怡安', '02-2706-1026', '黃柏翰', '2026-09-08', 'active', '新客戶', 'pending'),
   c('C0027', '曉風出版社', '90010027', 'xiaofeng-press.example', 'D003', '馮靜宜', '02-2368-1027', '黃柏翰', '2026-10-19', 'active', '等客戶在 Google 申請轉移'),
+  // 個人客戶：沒有統編（2026/11/24）
+  c('C0028', '周家瑜', '', 'chou-studio.example', 'D000', '周家瑜', '0912-345-028', '林怡君', '2026-11-02', 'active', '個人工作室'),
 ];
 
 function c(
@@ -49,6 +51,7 @@ function c(
 ): Customer {
   return {
     id,
+    kind: taxId ? 'company' : 'individual',
     name,
     taxId,
     primaryDomain,
@@ -68,7 +71,6 @@ function c(
     otherDomains: [],
     gwsDomains: [],
     salesAssignments: [],
-    contacts: [{ name: contactName, title: '主要聯絡人', email: `admin@${primaryDomain}`, phone: contactPhone }],
   };
 }
 

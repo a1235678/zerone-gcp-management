@@ -30,7 +30,7 @@ const columns: Column<CustomerListItem>[] = [
       </div>
     ),
   },
-  { key: 'taxId', header: '統一編號', render: (c) => <span className="mono">{c.taxId}</span> },
+  { key: 'taxId', header: '統一編號', render: (c) => (c.kind === 'individual' ? <span className="muted">個人</span> : <span className="mono">{c.taxId}</span>) },
   {
     key: 'domain',
     header: '主網域',
@@ -116,7 +116,7 @@ export function CustomersPage() {
         description={
           all.data ? (
             <>
-              共 {counts.total} 位客戶，啟用 {counts.active}、停用 {counts.total - counts.active}。訂閱資訊（方案、席次、到期日）請至「產品」各頁查看。
+              共 {counts.total} 位客戶，啟用 {counts.active}、停用 {counts.total - counts.active}。訂閱資訊（版本、席次、到期日）請至「產品」各頁查看。
             </>
           ) : (
             '載入中…'
@@ -125,11 +125,6 @@ export function CustomersPage() {
         actions={
           <>
             <PendingTag id={1} hint="客戶由誰建立" />
-            {can('customers', 'create') && can('subscriptions', 'write') && (
-              <Link to="/customers/transfer-in" className="btn">
-                轉入客戶
-              </Link>
-            )}
             {can('customers', 'create') && (
               <Link to="/customers/new" className="btn btn--primary">
                 <Icon name="plus" size={16} />

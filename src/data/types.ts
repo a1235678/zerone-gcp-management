@@ -7,8 +7,13 @@ export type OrgType = 'internal' | 'dealer' | 'customer';
 export type DealerStatus = 'active' | 'suspended';
 /** 經銷商主檔（2026/11/12 第一版，欄位待 Connie 確認 #29） */
 export interface Dealer {
-  /** 經銷商 ID：建立時自動產生，客戶主檔選經銷商後會帶出 */
+  /** 系統內部編號（自動產生，只用在網址與關聯，不顯示給使用者） */
   id: string;
+  /**
+   * 經銷商 ID：Google 平台上的 Channel Partner ID，由使用者輸入（2026/11/24）。
+   * 客戶主檔選經銷商後會帶出。「直銷（零壹）」沒有。
+   */
+  partnerId: string;
   /** 經銷商名稱（公司全名） */
   name: string;
   shortNames: string[];
@@ -22,6 +27,8 @@ export interface Dealer {
   contactName: string;
   contactPhone: string;
   contactEmail: string;
+  /** 一般聯絡人（不一定有系統帳號；2026/11/24 客戶主檔不需要、經銷商要有） */
+  contacts: CustomerContact[];
   note: string;
   createdAt: string;
 }
@@ -61,9 +68,12 @@ export interface SalesAssignment {
   term: 'new' | 'renewal';
   salesName: string;
 }
+/** 客戶類型：公司或個人（個人不用統編，2026/11/24） */
+export type CustomerKind = 'company' | 'individual';
 export interface Customer {
   id: string;
-  /** 公司全名 */
+  kind: CustomerKind;
+  /** 公司全名；個人客戶是姓名 */
   name: string;
   /** 公司簡稱，可以有多個別名 */
   shortNames: string[];
@@ -71,7 +81,7 @@ export interface Customer {
   registeredAddress: Address;
   contactAddress: Address;
   contactSameAsRegistered: boolean;
-  /** 統一編號（8 碼） */
+  /** 統一編號（8 碼）；個人客戶是空字串 */
   taxId: string;
   /** 主網域：建立客戶時不填，GWS 新訂時填寫，訂閱成功後寫回（2026/11/12） */
   primaryDomain: string;
@@ -80,8 +90,6 @@ export interface Customer {
   /** 已開通 GWS 的網域（其餘是客戶有、但還沒開通 GWS 的網域） */
   gwsDomains: string[];
   salesAssignments: SalesAssignment[];
-  /** 一般聯絡人（不一定有系統帳號） */
-  contacts: CustomerContact[];
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -94,6 +102,8 @@ export interface Customer {
 }
 export interface CustomerListItem extends Customer {
   dealerName: string;
+  /** 所屬經銷商的經銷商 ID（Channel Partner ID） */
+  dealerPartnerId: string;
 }
 export interface CustomerQuery {
   keyword?: string;
@@ -101,6 +111,7 @@ export interface CustomerQuery {
   status?: CustomerStatus | '';
 }
 export interface NewCustomerInput {
+  kind: CustomerKind;
   name: string;
   taxId: string;
   /** 只有客戶轉入要填（既有的 GWS 客戶） */
@@ -110,8 +121,6 @@ export interface NewCustomerInput {
   contactEmail: string;
   contactPhone: string;
   note: string;
-  adminName: string;
-  adminEmail: string;
   shortNames?: string[];
   registeredAddress?: Address;
   contactAddress?: Address;
@@ -126,6 +135,53 @@ export type DomainCheck =
 // ── 訂閱 ───────────────────────────────
 export type ProductCode = 'GWS' | 'GCP';
 export type SubscriptionStatus = 'active' | 'expiring' | 'cancelled';
+export type ContractTerm = 'annual' | 'flexible';
+
+/**
+ * Google Workspace 可訂閱方案（後端從 Google 平台撈到，2026/11/24）。
+ * 一個 SKU（對應我們的「版本」）有多個方案（Offer）：年約／彈性／試用、授權數範圍、計費週期、價格。
+ */
+export type OfferPlanType = 'annual' | 'flexible' | 'trial';
+export type BillingCycle = 'monthly' | 'yearly';
+export interface GwsOffer {
+  offerId: string;
+  planType: OfferPlanType;
+  minSeats: number;
+  maxSeats: number;
+  /** 試用沒有計費週期 */
+  billing: BillingCycle | null;
+  /** 每個授權的價格（美分） */
+  priceCents: number;
+  /** 供應至（之後不能再選） */
+  availableUntil?: string;
+}
+/**
+ * 下單時選到的方案快照：方案清單不存在系統裡（每次依客戶即時向 Google 查），
+ * 所以訂單與訂閱要把當時的 SKU 與方案內容存下來，之後查詢、對帳都看這份（2026/11/24）。
+ */
+export interface OfferSnapshot extends GwsOffer {
+  skuId: string;
+  skuName: string;
+  /** 對應的版本名稱 */
+  version: string;
+  /** 從 Google 取得的時間 */
+  fetchedAt: string;
+}
+/** 依客戶即時向 Google 查到的方案 */
+export interface OfferLookup {
+  skuId: string;
+  skuName: string;
+  version: string;
+  offers: GwsOffer[];
+  fetchedAt: string;
+}
+export interface GwsSku {
+  skuId: string;
+  name: string;
+  /** 對應的版本名稱；系統還沒有這個版本時是 null */
+  version: string | null;
+  offers: GwsOffer[];
+}
 export interface Subscription {
   id: string;
   customerId: string;
@@ -138,7 +194,13 @@ export interface Subscription {
   startsAt: string;
   /** 目前合約迄日（到期日） */
   expiresAt: string;
-  /** 已取消續約：客戶合約到期後不再續約（不寄到期通知） */
+  /** 合約起迄的時間（時:分，GMT+0；2026/11/24 合約期間要顯示時、分） */
+  contractTime: string;
+  /** 合約期間：年約，或彈性（Flexible，可以取消續約排程） */
+  term: ContractTerm;
+  /** 目前使用的 Google 方案（下單時的快照：SKU ID、Offer ID、方案內容） */
+  offer?: OfferSnapshot;
+  /** 不續約：客戶合約到期後不再續約（不寄到期通知） */
   renewalCancelled?: { at: string; by: string; note: string };
   lastSyncedAt: string;
 }
@@ -167,7 +229,8 @@ export interface SubscriptionQuery {
  */
 export type OperationType = 'new' | 'transfer' | 'renewal' | 'addSeats' | 'upgrade';
 /** 排程執行：到啟用時間由系統送 Google；人工執行：後勤在 Google 後台處理後回來標記 */
-export type ExecutionMode = 'schedule' | 'manual';
+/** 排程執行、人工執行、立即送出（客戶轉入：送出就呼叫 API，2026/11/24） */
+export type ExecutionMode = 'schedule' | 'manual' | 'immediate';
 /** selfPaid：客戶自己刷卡、要移轉進來；otherDealer：從其他經銷商移轉（需移轉 ID） */
 export type TransferSource = 'selfPaid' | 'otherDealer';
 /**
@@ -183,6 +246,18 @@ export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'com
 export interface OperationPayload {
   /** 新訂的網域；訂閱成功後寫回客戶主檔 */
   domain?: string;
+  /** 選擇的 Google 方案快照（SKU ID、Offer ID、方案內容）：新訂、續約、中途升版要選（2026/11/24） */
+  offer?: OfferSnapshot;
+  /** 客戶轉入用 Cloud Identity ID 找客戶（和網域二選一，跟 Google 轉入畫面一樣，2026/11/24） */
+  cloudIdentityId?: string;
+  /** 新訂：第一個使用者的帳號（公司網域的信箱）與驗證信箱（不是公司網域，2026/11/24） */
+  firstUserEmail?: string;
+  verifyEmail?: string;
+  /** 第一個使用者的名、姓：Google 用來建立第一個管理員帳號（2026/11/24，對照 Google 建客戶畫面） */
+  firstUserFirstName?: string;
+  firstUserLastName?: string;
+  /** 送給 Google 的語言（Language code），預設 zh-TW */
+  languageCode?: string;
   /** 新訂、續約、中途升版的方案（續約、升版為變更後的方案） */
   plan?: string;
   /** 新訂的席次，或續約後的席次 */
@@ -193,6 +268,10 @@ export interface OperationPayload {
   fromPlan?: string;
   fromSeats?: number;
   renewMonths?: number;
+  /** 續約期間選「自訂」時的新合約到期日 */
+  renewEndAt?: string;
+  /** 排程執行的啟用時間（時:分，GMT+8）；新購、加購要在 16:00 之後（2026/11/24） */
+  scheduledTime?: string;
   /** 續約後的新合約起迄 */
   newStartsAt?: string;
   newExpiresAt?: string;
@@ -518,6 +597,23 @@ export interface UserQuery {
   roleId?: string;
   status?: UserStatus | '';
 }
+/**
+ * 客戶帳號的邀請（2026/11/24）：零壹（代理商）或經銷商用 Email 邀請，對方點邀請信完成註冊後才能登入。
+ * Email 已經註冊過時改寄驗證信，對方驗證後把這個產品加到這個客戶。登入流程細節之後再討論。
+ */
+export type InviteStatus = 'sent' | 'verifying' | 'verified';
+export interface CustomerInvite {
+  id: string;
+  customerId: string;
+  email: string;
+  product: ProductCode;
+  status: InviteStatus;
+  /** Email 已經有帳號時，原本的帳號 */
+  existingUserId?: string;
+  sentAt: string;
+  sentBy: string;
+  verifiedAt?: string;
+}
 export interface NewUserInput {
   name: string;
   email: string;
@@ -549,6 +645,8 @@ export interface Role {
   description: string;
   isPreset: boolean;
   permissions: Record<ResourceKey, PermissionLevel>;
+  /** 是否能看到價格（金額）；看不到時畫面上的金額以「••••」顯示（2026/11/24） */
+  canSeePrice: boolean;
 }
 export interface RoleListItem extends Role {
   orgName: string;
@@ -595,13 +693,12 @@ export interface Product {
   status: 'active' | 'draft';
   createdAt: string;
 }
-/** 方案：等級數字越大版本越高，用來判斷升版、降版 */
+/** 版本（原「方案」）：等級數字越大版本越高，用來判斷升版、降版。版本沒有狀態，全部都可以選（2026/11/24） */
 export interface Plan {
   id: string;
   productId: string;
   name: string;
   tier: number;
-  status: 'active' | 'draft';
   createdAt: string;
 }
 export interface PlanListItem extends Plan {

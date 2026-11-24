@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { checkNewDomain, addressComplete, addCustomerContact, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, getAuditLogs, getCustomer, getOperations, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
+import { checkNewDomain, addressComplete, getCustomerInvites, inviteCustomerUser, simulateInviteVerified, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, getAuditLogs, getCustomer, getOperations, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { Tabs } from '@shared/components/Tabs';
-import { workOrderTypeLabel } from '@data/labels';
-import type { CustomerContact, SalesAssignment } from '@data/types';
+import { inviteStatusLabel, workOrderTypeLabel } from '@data/labels';
+import type { CustomerListItem, ProductCode, SalesAssignment } from '@data/types';
 import { SalesAssignmentEditor, SalesAssignmentTable } from '../components/SalesAssignments';
-import { FormField } from '@shared/components/Form';
+import { Callout, FormField } from '@shared/components/Form';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Icon } from '@shared/components/Icon';
 import { Modal } from '@shared/components/Modal';
@@ -26,7 +26,7 @@ import { AddressFields, TagInput } from '../components/CustomerFields';
 /** 網域的 GWS 狀態 */
 const GwsDomainTag = ({ on }: { on: boolean }) => (on ? <StatusTag tone="success">已開通 GWS</StatusTag> : <StatusTag tone="neutral">尚未開通 GWS</StatusTag>);
 
-type DetailTab = 'org' | 'users' | 'contacts' | 'workOrders' | 'logs';
+type DetailTab = 'org' | 'users' | 'workOrders' | 'logs';
 
 export function CustomerDetailPage() {
   const { can } = usePermission();
@@ -43,8 +43,13 @@ export function CustomerDetailPage() {
   const orders = useAsync(() => (can('workOrders') ? getWorkOrders({ customerId: id }) : Promise.resolve([])), [id, version]);
   const [editForm, setEditForm] = useState<CustomerEdit | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [contactOpen, setContactOpen] = useState(false);
-  const [contact, setContact] = useState<CustomerContact>({ name: '', title: '', email: '', phone: '' });
+  // 邀請使用者（2026/11/24：建立客戶主檔時不建立帳號，改在這裡邀請）
+  const invites = useAsync(() => getCustomerInvites(id), [id, version]);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteProduct, setInviteProduct] = useState<ProductCode>('GWS');
+  const [inviteTried, setInviteTried] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const transfers = useAsync(() => getOperations({ customerId: id, type: 'transfer' }), [id, version]);
   const [panelId, setPanelId] = useState<string | null>(null);
   const logs = useAsync(() => getAuditLogs({ customerId: id }), [id, version]);
@@ -70,6 +75,8 @@ export function CustomerDetailPage() {
     );
 
   const canEdit = can('customers', 'write');
+  // 零壹（代理商）和經銷商都可以邀請客戶的使用者
+  const canInvite = can('accounts', 'create');
   const openSales = () => {
     setSalesForm(c.salesAssignments.map((x) => ({ ...x })));
     setSalesOpen(true);
@@ -111,7 +118,11 @@ export function CustomerDetailPage() {
     if (!editForm) return;
     setSavingEdit(true);
     try {
-      await updateCustomer(c.id, editForm);
+      // 個人客戶：聯絡人就是本人，只有一組地址
+      await updateCustomer(
+        c.id,
+        c.kind === 'individual' ? { ...editForm, contactName: editForm.name, contactSameAsRegistered: true, shortNames: [] } : editForm,
+      );
       toast('已更新客戶資料');
       setEditForm(null);
       reload();
@@ -122,11 +133,26 @@ export function CustomerDetailPage() {
     }
   };
   const ef = <K extends keyof CustomerEdit>(k: K, v: CustomerEdit[K]) => setEditForm((f) => (f ? { ...f, [k]: v } : f));
-  const saveContact = async () => {
+  const inviteEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim());
+  const sendInvite = async () => {
+    setInviteTried(true);
+    if (!inviteEmailOk) return;
+    setInviting(true);
     try {
-      await addCustomerContact(c.id, contact);
-      toast(`已新增聯絡人 ${contact.name.trim()}`);
-      setContactOpen(false);
+      const iv = await inviteCustomerUser({ customerId: c.id, email: inviteEmail, product: inviteProduct });
+      toast(iv.status === 'verifying' ? `${iv.email} 已經註冊過，已寄出驗證信；對方驗證後會把 ${iv.product} 加到這個客戶` : `已寄出邀請信給 ${iv.email}，對方完成註冊後才能登入`);
+      setInviteOpen(false);
+      reload();
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    } finally {
+      setInviting(false);
+    }
+  };
+  const verifyInvite = async (inviteId: string) => {
+    try {
+      await simulateInviteVerified(inviteId);
+      toast('已模擬對方完成驗證');
       reload();
     } catch (e) {
       toast((e as Error).message, 'danger');
@@ -189,7 +215,6 @@ export function CustomerDetailPage() {
           tabs={[
             { value: 'org', label: '組織資訊' },
             { value: 'users', label: '使用者帳號', count: users.data?.length },
-            { value: 'contacts', label: '一般聯絡人', count: c.contacts.length },
             { value: 'workOrders', label: '執行單', count: orders.data?.length },
             { value: 'logs', label: '異動歷程' },
           ]}
@@ -202,18 +227,31 @@ export function CustomerDetailPage() {
           <Card title="基本資訊" actions={canEdit ? <button className="btn btn--sm" onClick={openEdit}>編輯</button> : undefined}>
             <DescriptionList
               items={[
-                { label: '公司全名', value: c.name },
-                { label: '公司簡稱', value: c.shortNames.join('、') },
-                { label: '統一編號', value: <span className="mono">{c.taxId}</span> },
-                { label: '登記地址', value: formatAddress(c.registeredAddress), full: true },
+                { label: '客戶類型', value: c.kind === 'individual' ? '個人' : '公司' },
+                ...(c.kind === 'individual'
+                  ? [{ label: '姓名', value: c.name }]
+                  : [
+                      { label: '公司全名', value: c.name },
+                      { label: '公司簡稱', value: c.shortNames.join('、') },
+                      { label: '統一編號', value: <span className="mono">{c.taxId}</span> },
+                      { label: '登記地址', value: formatAddress(c.registeredAddress), full: true },
+                    ]),
                 { label: '所屬經銷商', value: c.dealerName },
-                { label: '經銷商 ID', value: <span className="mono">{c.dealerId}</span> },
+                { label: '經銷商 ID', value: c.dealerPartnerId ? <span className="mono">{c.dealerPartnerId}</span> : <span className="muted">—（直銷）</span> },
                 { label: '主網域', value: c.primaryDomain ? <span className="mono">{c.primaryDomain}</span> : <span className="muted">尚未有網域（GWS 新訂時填寫）</span> },
                 { label: '其他網域', value: c.otherDomains.length ? <span className="mono">{c.otherDomains.join('、')}</span> : '' },
-                { label: '聯絡地址', value: c.contactSameAsRegistered ? <>同登記地址</> : formatAddress(c.contactAddress), full: true },
-                { label: '聯絡人姓名', value: c.contactName },
-                { label: '聯絡電話', value: <span className="mono">{c.contactPhone}</span> },
-                { label: '聯絡人信箱', value: <span className="mono">{c.contactEmail}</span>, full: true },
+                ...(c.kind === 'individual'
+                  ? [
+                      { label: '地址', value: formatAddress(c.contactAddress), full: true },
+                      { label: '電話', value: <span className="mono">{c.contactPhone}</span> },
+                      { label: 'Email', value: <span className="mono">{c.contactEmail}</span> },
+                    ]
+                  : [
+                      { label: '聯絡地址', value: c.contactSameAsRegistered ? <>同登記地址</> : formatAddress(c.contactAddress), full: true },
+                      { label: '聯絡人姓名', value: c.contactName },
+                      { label: '聯絡電話', value: <span className="mono">{c.contactPhone}</span> },
+                      { label: '聯絡人信箱', value: <span className="mono">{c.contactEmail}</span>, full: true },
+                    ]),
                 { label: '客戶編號', value: <span className="mono">{c.id}</span> },
                 { label: '建立人', value: c.createdBy },
                 { label: '建立日期', value: <span className="mono">{formatDate(c.createdAt)}</span> },
@@ -323,7 +361,27 @@ export function CustomerDetailPage() {
       )}
 
       {tab === 'users' && (
-        <Card bodyless title="使用者帳號" actions={<span className="muted" style={{ fontSize: 'var(--text-sm)' }}>零壹只建立第一個組織管理員帳號，其他由客戶自己建立</span>}>
+        <div className="stack">
+        <Card
+          bodyless
+          title={<span className="inline">使用者帳號 <PendingTag hint="登入與註冊流程細節之後討論" /></span>}
+          actions={
+            canInvite ? (
+              <button
+                className="btn btn--sm btn--primary"
+                onClick={() => {
+                  setInviteEmail('');
+                  setInviteProduct('GWS');
+                  setInviteTried(false);
+                  setInviteOpen(true);
+                }}
+              >
+                <Icon name="plus" size={14} />
+                邀請
+              </button>
+            ) : undefined
+          }
+        >
           <DataTable
             caption="使用者帳號"
             rows={users.data ?? []}
@@ -351,24 +409,47 @@ export function CustomerDetailPage() {
             empty={<EmptyState title="還沒有使用者" />}
           />
         </Card>
+        {(invites.data ?? []).length > 0 && (
+          <Card bodyless title="邀請紀錄">
+            <DataTable
+              caption="邀請紀錄"
+              rows={invites.data ?? []}
+              rowKey={(iv) => iv.id}
+              columns={[
+                { key: 'email', header: 'Email', render: (iv) => <span className="mono">{iv.email}</span> },
+                { key: 'product', header: '產品', render: (iv) => <StatusTag tone="neutral">{iv.product}</StatusTag> },
+                {
+                  key: 'status',
+                  header: '狀態',
+                  render: (iv) => <StatusTag tone={iv.status === 'verified' ? 'success' : iv.status === 'verifying' ? 'warning' : 'info'}>{inviteStatusLabel[iv.status]}</StatusTag>,
+                },
+                {
+                  key: 'sent',
+                  header: '寄出',
+                  render: (iv) => (
+                    <div>
+                      <div className="mono">{formatDateTime(iv.sentAt)}</div>
+                      <div className="table__secondary">{iv.sentBy}</div>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'act',
+                  header: <span className="visually-hidden">操作</span>,
+                  render: (iv) =>
+                    iv.status === 'verifying' ? (
+                      <button className="btn btn--sm" onClick={() => verifyInvite(iv.id)} title="Prototype 用：正式版由對方點驗證信完成">
+                        模擬驗證完成
+                      </button>
+                    ) : null,
+                },
+              ]}
+            />
+          </Card>
+        )}
+        </div>
       )}
 
-      {tab === 'contacts' && (
-        <Card bodyless title={<span className="inline">一般聯絡人 <PendingTag id={26} /></span>} actions={canEdit ? <button className="btn btn--sm" onClick={() => { setContact({ name: '', title: '', email: '', phone: '' }); setContactOpen(true); }}>新增聯絡人</button> : undefined}>
-          <DataTable
-            caption="一般聯絡人"
-            rows={c.contacts}
-            rowKey={(x) => x.name + x.email}
-            columns={[
-              { key: 'name', header: '姓名', render: (x) => <span className="table__primary">{x.name}</span> },
-              { key: 'title', header: '職稱／用途', render: (x) => x.title || '—' },
-              { key: 'email', header: 'Email', render: (x) => <span className="mono">{x.email || '—'}</span> },
-              { key: 'phone', header: '電話', render: (x) => <span className="mono">{x.phone || '—'}</span> },
-            ]}
-            empty={<EmptyState title="沒有聯絡人" />}
-          />
-        </Card>
-      )}
 
       {tab === 'workOrders' && (
         <Card bodyless title="執行單">
@@ -415,6 +496,10 @@ export function CustomerDetailPage() {
       >
         {editForm && (
           <div className="stack">
+            {c.kind === 'individual' ? (
+              <IndividualEditFields c={c} editForm={editForm} ef={ef} />
+            ) : (
+            <>
             <div className="form-grid">
               <FormField label="統一編號" help="統一編號不能修改。">
                 {(p) => <input {...p} className="input mono" value={c.taxId} readOnly disabled />}
@@ -426,7 +511,7 @@ export function CustomerDetailPage() {
                 {(p) => <TagInput id={p.id} values={editForm.shortNames} onChange={(v) => ef('shortNames', v)} />}
               </FormField>
               <FormField label="所屬經銷商" help="所屬經銷商不在這裡修改。">
-                {(p) => <input {...p} className="input" value={`${c.dealerName}（${c.dealerId}）`} readOnly disabled />}
+                {(p) => <input {...p} className="input" value={c.dealerPartnerId ? `${c.dealerName}（${c.dealerPartnerId}）` : c.dealerName} readOnly disabled />}
               </FormField>
             </div>
             <div>
@@ -461,6 +546,8 @@ export function CustomerDetailPage() {
                 <FormField label="聯絡人信箱" required>{(p) => <input {...p} className="input" type="email" value={editForm.contactEmail} onChange={(e) => ef('contactEmail', e.target.value)} />}</FormField>
               </div>
             </div>
+            </>
+            )}
             <FormField label="備註" help={`${editForm.note.length} / 2000`}>
               {(p) => <textarea {...p} className="textarea" maxLength={2000} value={editForm.note} onChange={(e) => ef('note', e.target.value)} />}
             </FormField>
@@ -471,26 +558,42 @@ export function CustomerDetailPage() {
         )}
       </Modal>
       <Modal
-        open={contactOpen}
-        onClose={() => setContactOpen(false)}
-        title="新增一般聯絡人"
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        title="邀請使用者"
         width={480}
         footer={
           <>
-            <button className="btn" onClick={() => setContactOpen(false)}>
+            <button className="btn" onClick={() => setInviteOpen(false)}>
               取消
             </button>
-            <button className="btn btn--primary" disabled={!contact.name.trim()} onClick={saveContact}>
-              新增
+            <button className="btn btn--primary" disabled={inviting} onClick={sendInvite}>
+              {inviting ? '寄送中…' : '寄出邀請'}
             </button>
           </>
         }
       >
-        <div className="form-grid">
-          <FormField label="姓名" required>{(p) => <input {...p} className="input" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} />}</FormField>
-          <FormField label="職稱／用途" help="例如：帳務、IT 窗口">{(p) => <input {...p} className="input" value={contact.title} onChange={(e) => setContact({ ...contact, title: e.target.value })} />}</FormField>
-          <FormField label="Email">{(p) => <input {...p} className="input" type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} />}</FormField>
-          <FormField label="電話">{(p) => <input {...p} className="input" type="tel" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} />}</FormField>
+        <div className="stack">
+          <FormField
+            label="Email"
+            required
+            message={inviteTried && !inviteEmailOk ? 'Email 格式不正確' : undefined}
+            state={inviteTried && !inviteEmailOk ? 'error' : undefined}
+          >
+            {(p) => <input {...p} className="input" type="email" autoComplete="off" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />}
+          </FormField>
+          <FormField label="公司">{(p) => <input {...p} className="input" value={c.name} readOnly disabled />}</FormField>
+          <FormField label="產品">
+            {(p) => (
+              <select {...p} className="select" value={inviteProduct} onChange={(e) => setInviteProduct(e.target.value as ProductCode)}>
+                <option value="GWS">GWS</option>
+                <option value="GCP">GCP</option>
+              </select>
+            )}
+          </FormField>
+          <Callout tone="neutral">
+            對方點邀請信完成註冊後才能登入。如果這個 Email 已經註冊過，系統會改寄驗證信，對方驗證後就會把這個產品加到這個客戶。
+          </Callout>
         </div>
       </Modal>
       <Modal
@@ -529,7 +632,7 @@ export function CustomerDetailPage() {
           </label>
           {domainHasGws && (
             <div className="inline">
-              <PendingTag id={3} hint="能否從 API 抓到已購買的方案" />
+              <PendingTag id={3} hint="能否從 API 抓到已購買的版本" />
             </div>
           )}
         </fieldset>
@@ -585,6 +688,42 @@ export function CustomerDetailPage() {
           <PendingTag hint="停用後帳號能否登入、訂閱怎麼處理" />
         </p>
       </Modal>
+    </>
+  );
+}
+
+/** 個人客戶的編輯欄位：姓名、地址、電話、Email（沒有統編、簡稱、登記地址） */
+function IndividualEditFields({
+  c,
+  editForm,
+  ef,
+}: {
+  c: CustomerListItem;
+  editForm: CustomerEdit;
+  ef: <K extends keyof CustomerEdit>(k: K, v: CustomerEdit[K]) => void;
+}) {
+  return (
+    <>
+      <div className="form-grid">
+        <FormField label="客戶類型">{(p) => <input {...p} className="input" value="個人" readOnly disabled />}</FormField>
+        <FormField label="姓名" required message={!editForm.name.trim() ? '請輸入姓名' : undefined} state={!editForm.name.trim() ? 'error' : undefined}>
+          {(p) => <input {...p} className="input" value={editForm.name} onChange={(e) => ef('name', e.target.value)} />}
+        </FormField>
+        <FormField label="所屬經銷商" help="所屬經銷商不在這裡修改。">
+          {(p) => <input {...p} className="input" value={c.dealerPartnerId ? `${c.dealerName}（${c.dealerPartnerId}）` : c.dealerName} readOnly disabled />}
+        </FormField>
+      </div>
+      <div>
+        <h3 className="form-section__title" style={{ marginBottom: 'var(--space-3)' }}>
+          地址 <span className="form-field__req">必填</span>
+        </h3>
+        <AddressFields label="地址" value={editForm.registeredAddress} onChange={(a) => ef('registeredAddress', a)} />
+        {!addressComplete(editForm.registeredAddress) && <div className="form-field__msg form-field__msg--error">請填寫完整的地址（縣市、鄉鎮區、街道）</div>}
+      </div>
+      <div className="form-grid">
+        <FormField label="電話">{(p) => <input {...p} className="input" type="tel" value={editForm.contactPhone} onChange={(e) => ef('contactPhone', e.target.value)} />}</FormField>
+        <FormField label="Email" required>{(p) => <input {...p} className="input" type="email" value={editForm.contactEmail} onChange={(e) => ef('contactEmail', e.target.value)} />}</FormField>
+      </div>
     </>
   );
 }
