@@ -105,7 +105,7 @@ export function GwsNewOrderPage() {
                 required
                 message={pickTried && !pickId ? '請選擇客戶' : undefined}
                 state={pickTried && !pickId ? 'error' : undefined}
-                help="從其他經銷商轉入的客戶，請到客戶管理用「轉入客戶」。"
+                help="從其他經銷商轉入的客戶，請回 GWS 訂閱用「客戶轉入」。"
               >
                 {(p) => (
                   <Combobox

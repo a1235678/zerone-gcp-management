@@ -170,16 +170,22 @@ export function GwsSubscriptionsPage() {
         title="GWS 訂閱"
         actions={
           can('subscriptions', 'create') ? (
-            <button className="btn btn--primary" onClick={() => navigate('/products/gws/new')}>
-              <Icon name="plus" size={16} />
-              新訂
-            </button>
+            <>
+              {/* 客戶轉入屬於 GWS 訂閱，不在客戶管理（2026/11/24） */}
+              <button className="btn" onClick={() => navigate('/products/gws/transfer-in')}>
+                客戶轉入
+              </button>
+              <button className="btn btn--primary" onClick={() => navigate('/products/gws/new')}>
+                <Icon name="plus" size={16} />
+                新訂
+              </button>
+            </>
           ) : undefined
         }
         titleAddon={<PendingTag id={5} hint="PM 想看哪些 GWS 資訊" />}
         description={
           <span className="inline">
-            以訂閱為單位，資料由 Google 同步回來；點一列可以看訂閱詳情。{canOperate ? '可以直接在這裡新訂、續約、加購、中途升版，依類型排程執行或人工執行。' : '你的角色只能查看；需要變更請開立執行單。'}
+            以訂閱為單位，資料由 Google 同步回來；點一列可以看訂閱詳情。{canOperate ? '可以直接在這裡新訂、客戶轉入、續約、加購、中途升版，依類型排程執行或人工執行。' : '你的角色只能查看；需要變更請開立執行單。'}
             <PendingTag id={3} hint="能否抓到已購買版本" />
           </span>
         }

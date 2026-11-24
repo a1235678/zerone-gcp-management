@@ -125,11 +125,6 @@ export function CustomersPage() {
         actions={
           <>
             <PendingTag id={1} hint="客戶由誰建立" />
-            {can('customers', 'create') && can('subscriptions', 'write') && (
-              <Link to="/customers/transfer-in" className="btn">
-                轉入客戶
-              </Link>
-            )}
             {can('customers', 'create') && (
               <Link to="/customers/new" className="btn btn--primary">
                 <Icon name="plus" size={16} />

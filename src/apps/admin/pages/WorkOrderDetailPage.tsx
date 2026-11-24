@@ -229,7 +229,7 @@ export function WorkOrderDetailPage() {
                     {s.key === 'createCustomer' && s.state === 'todo' && !can('customers', 'create') && <div className="table__secondary">由後勤處理（需要「客戶」可編輯權限）</div>}
                     {s.key === 'createCustomer' && s.state === 'todo' && can('customers', 'create') && (
                       <div style={{ marginTop: 'var(--space-2)' }}>
-                        <Link className="btn btn--primary btn--sm" to={`/customers/${w.type === 'transfer' ? 'transfer-in' : 'new'}?fromWo=${w.id}`}>
+                        <Link className="btn btn--primary btn--sm" to={`${w.type === 'transfer' ? '/products/gws/transfer-in' : '/customers/new'}?fromWo=${w.id}`}>
                           {w.type === 'transfer' ? '轉入客戶' : '建立客戶'}（帶入執行單資料）
                         </Link>
                       </div>

@@ -20,8 +20,10 @@ import { usePermission } from '../auth';
  */
 export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' }) {
   const isTransfer = mode === 'transfer';
-  const [who, setWho] = useState<'new' | 'existing'>('new');
   const { can } = usePermission();
+  // 客戶轉入：沒有「客戶可新增」權限的角色只能轉入現有客戶
+  const canCreateCustomer = can('customers', 'create');
+  const [who, setWho] = useState<'new' | 'existing'>(isTransfer && !canCreateCustomer ? 'existing' : 'new');
   const navigate = useNavigate();
   const toast = useToast();
   const [params] = useSearchParams();
@@ -81,8 +83,8 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     try {
       if (isTransfer) {
         const { customer, operation } = await createTransferInCustomer({ ...input, primaryDomain, memo: transferMemo, workOrderId: fromWo ?? undefined });
-        toast(`已建立「${customer.name}」，客戶轉入（${operation.id}）待後勤人工執行`);
-        navigate(fromWo ? `/work-orders/${fromWo}` : `/customers/${customer.id}`);
+        toast(`已建立「${customer.name}」與客戶轉入（${operation.id}）`);
+        navigate(fromWo ? `/work-orders/${fromWo}` : `/products/gws?op=${operation.id}`);
       } else {
         const c = await createCustomer(input);
         if (fromWo) {
@@ -132,7 +134,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
 
   const missing = [!domainOk && '有效的主網域', Object.keys(errors).length > 0 && `${Object.keys(errors).length} 個必填欄位`].filter(Boolean);
 
-  if (!(can('customers', 'create') && (!isTransfer || can('subscriptions', 'write'))))
+  if (isTransfer ? !can('subscriptions', 'write') : !canCreateCustomer)
     return (
       <Callout tone="warning" title="你的角色沒有權限">
         你的角色不能建立客戶。如果需要，請聯絡系統管理員調整角色權限。
@@ -141,16 +143,16 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
 
   return (
     <>
-      <Link to="/customers" className="back-link">
+      <Link to={isTransfer ? '/products/gws' : '/customers'} className="back-link">
         <Icon name="chevronLeft" size={14} />
-        客戶管理
+        {isTransfer ? 'GWS 訂閱' : '客戶管理'}
       </Link>
       <PageHeader
-        title={isTransfer ? '轉入客戶' : '新增客戶'}
+        title={isTransfer ? '客戶轉入' : '新增客戶'}
         titleAddon={<PendingTag id={1} hint="客戶由誰建立" />}
         description={
           isTransfer
-            ? '客戶從其他經銷商轉到我們底下，客戶已經在 Google 申請完轉移。建立後產生一筆客戶轉入，由後勤在 Google 後台人工執行。'
+            ? 'GWS 客戶從其他經銷商轉到我們底下，客戶已經在 Google 申請完轉移。送出後產生一筆客戶轉入，回到 GWS 訂閱，流程就結束。'
             : '建立客戶主檔。建立時不會建立帳號；客戶的使用者帳號在客戶詳情的「使用者帳號」用「邀請」建立。'
         }
       />
@@ -158,7 +160,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
       {isTransfer && !fromWo && (
         <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
           <div className="segmented" role="group" aria-label="轉入的客戶">
-            <button type="button" aria-pressed={who === 'new'} onClick={() => setWho('new')}>
+            <button type="button" aria-pressed={who === 'new'} disabled={!canCreateCustomer} onClick={() => setWho('new')}>
               新客戶
             </button>
             <button type="button" aria-pressed={who === 'existing'} onClick={() => setWho('existing')}>
@@ -170,13 +172,13 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
           </p>
         </div>
       )}
-      {isTransfer && who === 'existing' && !fromWo ? (
+      {isTransfer && (who === 'existing' || !canCreateCustomer) && !fromWo ? (
         <ExistingTransferForm />
       ) : (
         <>
           {fromWo && (
             <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
-              <Callout tone="info" title={`依執行單 ${fromWo} ${isTransfer ? '轉入客戶' : '建立客戶'}`}>
+              <Callout tone="info" title={`依執行單 ${fromWo} ${isTransfer ? '客戶轉入' : '建立客戶'}`}>
                 {isTransfer
                   ? '客戶資料與轉移備註已從執行單帶入，請確認後建立。建立後會產生一筆客戶轉入（待人工執行），並回到執行單。'
                   : '客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。'}
@@ -248,11 +250,11 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             </div>
             <div className="form-actions">
               <span className="form-actions__hint">{canSubmit ? '資料完整，可以建立' : `尚缺：${missing.join('、')}`}</span>
-              <Link to="/customers" className="btn">
+              <Link to={isTransfer ? '/products/gws' : '/customers'} className="btn">
                 取消
               </Link>
               <button type="submit" className="btn btn--primary" disabled={saving}>
-                {saving ? '處理中…' : isTransfer ? '建立客戶並建立客戶轉入' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
+                {saving ? '處理中…' : isTransfer ? '送出客戶轉入' : fromWo ? '建立客戶並回到執行單' : '建立客戶'}
               </button>
             </div>
           </form>
@@ -285,8 +287,8 @@ function ExistingTransferForm() {
     setSaving(true);
     try {
       const op = await createTransferForExisting({ customerId, domain, memo });
-      toast(`已建立客戶轉入（${op.id}），待後勤人工執行`);
-      navigate(`/customers/${customerId}`);
+      toast(`已建立客戶轉入（${op.id}）`);
+      navigate(`/products/gws?op=${op.id}`);
     } catch (e) {
       toast((e as Error).message, 'danger');
       setSaving(false);
@@ -352,11 +354,11 @@ function ExistingTransferForm() {
         </FormSection>
       </div>
       <div className="form-actions">
-        <Link to="/customers" className="btn">
+        <Link to="/products/gws" className="btn">
           取消
         </Link>
         <button type="button" className="btn btn--primary" disabled={saving} onClick={submit}>
-          建立客戶轉入
+          送出客戶轉入
         </button>
       </div>
     </form>
