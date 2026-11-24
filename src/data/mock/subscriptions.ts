@@ -1,3 +1,4 @@
+import { gwsSkus } from './offers';
 import type { Subscription } from '../types';
 
 // GWS 訂閱。status 只存「已取消」；「使用中／即將到期」由資料層依到期日計算（30 天內為即將到期）。
@@ -34,6 +35,9 @@ const seeds: Seed[] = [
   ['S027', 'C0025', 'Business Starter', 5, '2027-06-18'],
 ];
 
+const offerFor = (plan: string, planType: 'annual' | 'flexible') =>
+  gwsSkus.find((k) => k.version === plan)?.offers.find((o) => o.planType === planType && o.billing === 'monthly' && !o.availableUntil)?.offerId;
+
 export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, seats, expiresAt, cancelled, lastSyncedAt]) => ({
   id,
   customerId,
@@ -47,6 +51,8 @@ export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, s
   contractTime: ['S004', 'S011'].includes(id) ? '02:30' : '08:00',
   // 彈性合約（Flexible）：可以取消續約排程
   term: ['S012', 'S020'].includes(id) ? 'flexible' : 'annual',
+  // 目前使用的 Google 方案：彈性合約用彈性方案，其他用年約（每月計費）
+  offerId: offerFor(plan, ['S012', 'S020'].includes(id) ? 'flexible' : 'annual'),
   lastSyncedAt: lastSyncedAt ?? '2026-11-05 06:00',
 }));
 

@@ -13,10 +13,11 @@ import { auditLogs as seedLogs, roleOfActor } from './mock/logs';
 import { roles as seedRoles } from './mock/roles';
 import { schedules as seedSchedules } from './mock/schedules';
 import { subscriptions as seedSubscriptions, unlinkedGwsDomains } from './mock/subscriptions';
+import { gwsSkus } from './mock/offers';
 import { users as seedUsers } from './mock/users';
 import { operations as seedOperations } from './mock/operations';
 import { workOrders as seedWorkOrders } from './mock/workOrders';
-import { executionModeLabel, operationStatusLabel, operationTypeLabel, orgTypeLabel, transferSourceLabel, workOrderTypeLabel } from './labels';
+import { billingCycleLabel, executionModeLabel, offerPlanTypeLabel, operationStatusLabel, operationTypeLabel, orgTypeLabel, transferSourceLabel, workOrderTypeLabel } from './labels';
 import type {
   AuditLog,
   AuditLogQuery,
@@ -24,6 +25,8 @@ import type {
   BrandListItem,
   Customer,
   CustomerInvite,
+  GwsOffer,
+  GwsSku,
   SalesAssignment,
   ProductCode,
   Address,
@@ -777,9 +780,10 @@ export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan'
     case 'new':
       return { execution: 'schedule', reasons: ['全新客戶的新訂由排程執行'], defaultDate: TODAY };
     case 'transfer':
+      // 客戶轉入：送出就呼叫 API（Cloud Channel），成功就完成；失敗才由後勤到 Google 後台接受轉入（2026/11/24）
       return {
-        execution: 'manual',
-        reasons: [payload.transferSource === 'selfPaid' ? '客戶自己刷卡、要轉進來，由後勤人工執行' : '從其他經銷商轉入，由後勤人工執行'],
+        execution: 'immediate',
+        reasons: ['送出後立即呼叫 Google API 轉入，成功就完成', '失敗時可以重新送出，或改為在 Google 後台手動接受轉入'],
       };
     case 'renewal': {
       const planChange = planChangeOf(sub?.plan, payload.plan ?? sub?.plan);
@@ -815,6 +819,12 @@ export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan'
   }
 }
 
+/** 訂單說明裡的方案，例如「（年約・每月計費）」 */
+const offerText = (p: OperationPayload) => {
+  const f = findOffer(p.offerId);
+  return f ? `（${offerSummary(f.offer)}）` : '';
+};
+
 function describeOperation(op: { type: OperationType; subscriptionId?: string; payload: OperationPayload }): string {
   const sub = db.subscriptions.find((s) => s.id === op.subscriptionId);
   const p = op.payload;
@@ -822,7 +832,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
   const fromSeats = p.fromSeats ?? sub?.seats ?? 0;
   switch (op.type) {
     case 'new':
-      return `${p.plan} ${p.seats} 席${p.domain ? `，${p.domain}` : ''}${p.firstUserEmail ? `，第一個使用者 ${p.firstUserEmail}` : ''}`;
+      return `${p.plan} ${p.seats} 席${offerText(p)}${p.domain ? `，${p.domain}` : ''}${p.firstUserEmail ? `，第一個使用者 ${p.firstUserEmail}` : ''}`;
     case 'transfer':
       return `${transferSourceLabel[p.transferSource ?? 'otherDealer']}${p.domain ? `，${p.domain}` : ''}`;
     case 'renewal': {
@@ -875,9 +885,39 @@ export function getPendingSchedules(customerId: string): Promise<ScheduleListIte
 }
 
 /** 檢查操作內容，回傳錯誤訊息（沒有錯誤回傳 undefined） */
+// ═════════ Google 可訂閱方案（2026/11/24）═════════
+// 後端從 Google 平台撈到 SKU 與 Offer；後勤在新訂、續約、中途升版時選方案。
+
+export function getGwsSkus(): Promise<GwsSku[]> {
+  return delay(gwsSkus);
+}
+
+export function findOffer(offerId: string | undefined): { sku: GwsSku; offer: GwsOffer } | undefined {
+  if (!offerId) return undefined;
+  for (const sku of gwsSkus) {
+    const offer = sku.offers.find((x) => x.offerId === offerId);
+    if (offer) return { sku, offer };
+  }
+  return undefined;
+}
+
+/** 方案能不能選：已過供應期限、人數不在範圍、試用只能新訂 */
+export function offerUnavailableReason(offer: GwsOffer, seats: number | undefined, type: OperationType): string | undefined {
+  if (offer.availableUntil && offer.availableUntil < TODAY) return '已過供應期限';
+  if (offer.planType === 'trial' && type !== 'new') return '試用只能用在新訂';
+  if (seats !== undefined && seats > 0 && (seats < offer.minSeats || seats > offer.maxSeats)) return `人數要在 ${offer.minSeats}–${offer.maxSeats}`;
+  return undefined;
+}
+
+/** 方案的簡短說明，例如「年約・每月計費」 */
+export const offerSummary = (offer: GwsOffer) =>
+  [offerPlanTypeLabel[offer.planType], offer.billing ? billingCycleLabel[offer.billing] : ''].filter(Boolean).join('・');
+
 /** 新購、加購的排程要在下午 4 點（GMT+8）之後（2026/11/24） */
 export const AFTERNOON_START = '16:00';
 export const AFTERNOON_TYPES: OperationType[] = ['new', 'addSeats'];
+/** 要選 Google 方案的訂單類型 */
+export const OFFER_TYPES: OperationType[] = ['new', 'renewal', 'upgrade'];
 /** GMT+8 的時:分換成 GMT+0 */
 const gmt0Of = (gmt8: string) => {
   const [h, m] = gmt8.split(':').map(Number);
@@ -920,6 +960,14 @@ export function validateOperation(input: NewOperationInput): string | undefined 
     if (userError) return userError;
   }
   if (AFTERNOON_TYPES.includes(input.type) && p.scheduledTime && p.scheduledTime < AFTERNOON_START) return '新購、加購要排在下午 4 點（GMT+8）之後';
+  if (OFFER_TYPES.includes(input.type)) {
+    const found = findOffer(p.offerId);
+    if (!found) return '請選擇方案';
+    if (found.sku.version !== p.plan) return '方案和版本不一致，請重新選擇方案';
+    const seats = input.type === 'upgrade' ? (sub?.seats ?? 0) + (p.addSeats ?? 0) : p.seats;
+    const reason = offerUnavailableReason(found.offer, seats, input.type);
+    if (reason) return `這個方案不能選：${reason}`;
+  }
   if (input.type === 'renewal' && p.renewEndAt && sub && p.renewEndAt <= addDays(sub.expiresAt, 1)) return '自訂的到期日要晚於新合約起日';
   if (input.type === 'renewal') {
     if (!p.plan || !activePlans.includes(p.plan)) return '請選擇續約版本';
@@ -967,7 +1015,7 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
     workOrderId: input.workOrderId,
     payload,
     execution: analysis.execution,
-    status: analysis.execution === 'schedule' ? 'scheduled' : 'pendingManual',
+    status: analysis.execution === 'schedule' ? 'scheduled' : analysis.execution === 'immediate' ? 'submitted' : 'pendingManual',
     createdBy: currentUser.name,
     createdAt: at,
     updatedAt: at,
@@ -990,6 +1038,8 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
     });
     op.scheduleId = jid;
     op.history.push({ at, by: currentUser.name, action: `建立排程 ${jid}，${payload.scheduledAt!.replace(/-/g, '/')} 執行`, status: 'scheduled' });
+  } else if (analysis.execution === 'immediate') {
+    op.history.push({ at, by: currentUser.name, action: '送出 Google API', status: 'submitted' });
   } else {
     op.history.push({ at, by: currentUser.name, action: '建立，待後勤人工執行', status: 'pendingManual', note: analysis.reasons.join('；') });
   }
@@ -1001,6 +1051,7 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
     'success',
     c.id,
   );
+  if (analysis.execution === 'immediate') respondImmediately(op);
   if (op.workOrderId) {
     const wo = db.workOrders.find((w) => w.id === op.workOrderId);
     if (wo) {
@@ -1009,6 +1060,26 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
     }
   }
   return delay(operationListItem(op));
+}
+
+/**
+ * Prototype：模擬立即送出的 API 回應。網域含「fail」時模擬失敗，其他都成功。
+ * 正式版由後端呼叫 Google API，依實際回應更新狀態。
+ */
+function respondImmediately(op: GwsOperation) {
+  const at = now();
+  const failed = (op.payload.domain ?? customerOf(op.customerId)?.primaryDomain ?? '').includes('fail');
+  if (failed) {
+    op.status = 'failed';
+    op.failureReason = 'Google 回應：轉入失敗（客戶尚未在 Google 核准轉移）';
+    op.history.push({ at, by: '系統', action: 'Google 回應失敗', status: 'failed', note: op.failureReason });
+    log('gws', op.id, `Google 回應失敗：${op.failureReason}`, 'failure', op.customerId, '系統');
+    return;
+  }
+  op.status = 'completed';
+  op.history.push({ at, by: '系統', action: 'Google 回應完成', status: 'completed' });
+  log('gws', op.id, 'Google 回應完成', 'success', op.customerId, '系統');
+  applyCompletedOperation(op, at);
 }
 
 /**
@@ -1084,10 +1155,18 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
         sub.seats = p.seats ?? sub.seats;
         sub.startsAt = p.newStartsAt ?? addDays(sub.expiresAt, 1);
         sub.expiresAt = p.newExpiresAt ?? addMonths(sub.expiresAt, p.renewMonths ?? 12);
+        if (p.offerId) {
+          sub.offerId = p.offerId;
+          sub.term = findOffer(p.offerId)?.offer.planType === 'flexible' ? 'flexible' : 'annual';
+        }
       }
       break;
     case 'upgrade':
       if (sub && p.plan) sub.plan = p.plan;
+      if (sub && p.offerId) {
+        sub.offerId = p.offerId;
+        sub.term = findOffer(p.offerId)?.offer.planType === 'flexible' ? 'flexible' : 'annual';
+      }
       if (sub && p.addSeats) sub.seats = (sub.seats ?? 0) + p.addSeats;
       break;
     case 'new': {
@@ -1103,7 +1182,8 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
         startsAt: start,
         expiresAt: addDays(addMonths(start, 12), -1),
         contractTime: gmt0Of(p.scheduledTime ?? AFTERNOON_START),
-        term: 'annual',
+        term: findOffer(p.offerId)?.offer.planType === 'flexible' ? 'flexible' : 'annual',
+        offerId: p.offerId,
         lastSyncedAt: at,
       });
       op.subscriptionId = id;

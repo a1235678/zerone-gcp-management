@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { EXPIRING_DAYS, cancelSchedule, daysUntil, getExpiryNoticeFor, getOperations, setRenewalCancelled, getPlans, getSchedules, getSubscription, getWorkOrders } from '@data/api';
+import { EXPIRING_DAYS, cancelSchedule, daysUntil, findOffer, offerSummary, getExpiryNoticeFor, getOperations, setRenewalCancelled, getPlans, getSchedules, getSubscription, getWorkOrders } from '@data/api';
 import { contractTermLabel, executionModeLabel, operationTypeLabel, scheduleActionLabel, workOrderTypeLabel } from '@data/labels';
 import type { OperationListItem, OperationType, ScheduleListItem, WorkOrderListItem } from '@data/types';
 import { Card } from '@shared/components/Card';
@@ -16,6 +16,7 @@ import { StatusTag } from '@shared/components/StatusTag';
 import { formatContractPeriod, formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
+import { OfferPlanTag } from '../components/OfferPicker';
 import { OperationBody, OperationPanel } from '../components/OperationPanel';
 import { OperationStatusTag, ScheduleStatusTag, SubscriptionStatusTag, WorkOrderStatusTag } from '../tags';
 import { usePermission } from '../auth';
@@ -208,6 +209,21 @@ export function SubscriptionDetailPage() {
                       </span>
                     </span>
                   ),
+                },
+                {
+                  label: 'Google 方案',
+                  value: (() => {
+                    const f = findOffer(s.offerId);
+                    return f ? (
+                      <span className="inline">
+                        <OfferPlanTag offer={f.offer} />
+                        {offerSummary(f.offer)}
+                        <span className="mono muted">{f.offer.offerId}</span>
+                      </span>
+                    ) : (
+                      <span className="muted">尚未同步（下次從 Google 同步時帶入）</span>
+                    );
+                  })(),
                 },
                 { label: '人數', value: `${s.seats} 席` },
                 {

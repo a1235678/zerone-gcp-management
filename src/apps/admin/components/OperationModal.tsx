@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AFTERNOON_START,
   AFTERNOON_TYPES,
+  OFFER_TYPES,
+  findOffer,
+  offerUnavailableReason,
   TODAY,
   analyzeOrder,
   checkDomain,
@@ -23,6 +26,7 @@ import { StatusTag } from '@shared/components/StatusTag';
 import { useToast } from '@shared/components/Toast';
 import { formatContractPeriod, formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
+import { OfferPicker } from './OfferPicker';
 
 export interface OperationTarget {
   customerId: string;
@@ -115,6 +119,8 @@ export function OperationModal({
   const [scheduledAt, setScheduledAt] = useState('');
   const [scheduledTime, setScheduledTime] = useState(AFTERNOON_START);
   const [renewEndAt, setRenewEndAt] = useState('');
+  // Google 方案（Offer）：新訂、續約、中途升版選完版本後要選（2026/11/24）
+  const [offerId, setOfferId] = useState('');
   const [source, setSource] = useState<TransferSource | ''>('');
   const [memo, setMemo] = useState('');
   const [tried, setTried] = useState(false);
@@ -133,6 +139,7 @@ export function OperationModal({
     setScheduledAt('');
     setScheduledTime(initial?.scheduledTime ?? AFTERNOON_START);
     setRenewEndAt(initial?.renewEndAt ?? '');
+    setOfferId(initial?.offerId ?? '');
     setSource(initial?.transferSource ?? '');
     setMemo(initial?.memo ?? '');
     setTried(false);
@@ -154,6 +161,18 @@ export function OperationModal({
     transferSource: source || undefined,
   };
   const afternoon = AFTERNOON_TYPES.includes(type);
+  const needsOffer = OFFER_TYPES.includes(type);
+  const offerSeats = type === 'upgrade' ? (target.seats ?? 0) + (Number(addSeats) || 0) : Number(seats) || undefined;
+  const chosenOffer = findOffer(offerId);
+  // 換了版本，原本選的方案就不適用
+  useEffect(() => {
+    if (chosenOffer && chosenOffer.sku.version !== plan) setOfferId('');
+  }, [plan, chosenOffer]);
+  const offerError = !needsOffer
+    ? undefined
+    : !chosenOffer
+      ? '請選擇方案'
+      : offerUnavailableReason(chosenOffer.offer, offerSeats, type);
   const sub = target.subscriptionId ? { plan: target.plan ?? '', seats: target.seats ?? 0, expiresAt: target.expiresAt ?? TODAY } : undefined;
   const analysis = analyzeOrder(type, sub, payload);
   const date = type === 'renewal' ? analysis.defaultDate! : scheduledAt || analysis.defaultDate || TODAY;
@@ -180,6 +199,7 @@ export function OperationModal({
       const n = Number(addSeats);
       if (!Number.isInteger(n) || n < 1) e.addSeats = '加購人數需為大於 0 的整數（加購不能減人）';
     }
+    if (needsOffer && plan && offerError) e.offerId = offerError;
     if (type === 'renewal' && renewMonths === 'custom') {
       if (!renewEndAt) e.renewEndAt = '請選擇新合約到期日';
       else if (analysis.newStartsAt && renewEndAt <= analysis.newStartsAt) e.renewEndAt = '到期日要晚於新合約起日';
@@ -193,7 +213,7 @@ export function OperationModal({
       if (!source) e.source = '請選擇轉入來源';
     }
     return e;
-  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon]);
+  }, [type, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon, needsOffer, offerError]);
   const show = (k: string) => (tried ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
@@ -209,6 +229,7 @@ export function OperationModal({
     if (type === 'addSeats') p.addSeats = Number(addSeats);
     if (type === 'upgrade') Object.assign(p, { plan }, Number(addSeats) > 0 ? { addSeats: Number(addSeats) } : {});
     if (type === 'transfer') p.transferSource = source || undefined;
+    if (needsOffer) p.offerId = offerId;
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
     if (analysis.execution === 'schedule' && afternoon) p.scheduledTime = scheduledTime;
     setSaving(true);
@@ -220,7 +241,16 @@ export function OperationModal({
         return;
       }
       const op = await createOperation({ type, customerId: target.customerId, subscriptionId: target.subscriptionId, workOrderId, payload: p });
-      toast(op.execution === 'schedule' ? `已建立排程（${op.id}），${formatDate(op.payload.scheduledAt ?? TODAY)} 執行` : `已建立（${op.id}），待後勤人工執行`);
+      toast(
+        op.execution === 'schedule'
+          ? `已建立排程（${op.id}），${formatDate(op.payload.scheduledAt ?? TODAY)} 執行`
+          : op.execution === 'immediate'
+            ? op.status === 'failed'
+              ? `Google 回應失敗（${op.id}），請重新送出或改為手動處理`
+              : `已完成（${op.id}）`
+            : `已建立（${op.id}），待後勤人工執行`,
+        op.status === 'failed' ? 'danger' : 'success',
+      );
       onSubmitted(op);
     } catch (e) {
       toast((e as Error).message, 'danger');
@@ -265,7 +295,7 @@ export function OperationModal({
         </button>
       )}
       <button type="button" className="btn btn--primary" disabled={saving} onClick={submit}>
-        {saving ? '送出中…' : analysis.execution === 'schedule' ? '建立排程' : '建立人工執行'}
+        {saving ? '送出中…' : analysis.execution === 'schedule' ? '建立排程' : analysis.execution === 'immediate' ? '送出' : '建立人工執行'}
       </button>
     </>
   );
@@ -377,6 +407,7 @@ export function OperationModal({
             {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
           </FormField>
         </div>
+        <OfferPicker version={plan} seats={offerSeats} type={type} value={offerId} onChange={setOfferId} error={show('offerId')} />
         </div>
       )}
 
@@ -413,6 +444,7 @@ export function OperationModal({
               )}
             </FormField>
           </div>
+          <OfferPicker version={plan} seats={offerSeats} type={type} value={offerId} onChange={setOfferId} error={show('offerId')} />
           {plan && Number(seats) > 0 && (
             <div className="inline">
               <span className="muted">這次續約：</span>
@@ -483,6 +515,9 @@ export function OperationModal({
           <FormField label="期間" help="升版後仍沿用目前合約，到期日不變。" className="is-full">
             {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
           </FormField>
+          <div className="is-full">
+            <OfferPicker version={plan} seats={offerSeats} type={type} value={offerId} onChange={setOfferId} error={show('offerId')} />
+          </div>
         </div>
       )}
 
@@ -504,7 +539,7 @@ export function OperationModal({
             ))}
             {show('source') && <div className="form-field__msg form-field__msg--error">{show('source')}</div>}
           </fieldset>
-          <Callout tone="neutral">客戶已經在 Google 申請完轉移。建立後狀態為「待人工執行」，後勤到 Google 後台接受轉入後，回來標記完成。</Callout>
+          <Callout tone="neutral">客戶已經在 Google 申請完轉移。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域含「fail」會模擬失敗。</Callout>
         </>
       )}
 
@@ -514,7 +549,7 @@ export function OperationModal({
 
       <div className={`exec-box exec-box--${analysis.execution}`}>
         <div className="exec-box__head">
-          <StatusTag tone={analysis.execution === 'schedule' ? 'info' : 'warning'}>{executionModeLabel[analysis.execution]}</StatusTag>
+          <StatusTag tone={analysis.execution === 'manual' ? 'warning' : 'info'}>{executionModeLabel[analysis.execution]}</StatusTag>
           {analysis.pendingId && <PendingTag id={analysis.pendingId} />}
         </div>
         <ul className="exec-box__reasons">

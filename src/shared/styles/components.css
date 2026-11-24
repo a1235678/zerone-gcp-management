@@ -2139,3 +2139,116 @@ button.topbar__user:hover {
   margin-bottom: var(--space-4);
   font-size: var(--text-base);
 }
+
+/* Google 方案（Offer）選擇 */
+.offer-picker__empty {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.offer-picker__list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.offer-option {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1.4fr) minmax(90px, 1fr) minmax(72px, 0.8fr) minmax(110px, 1fr) minmax(110px, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.offer-option + .offer-option {
+  border-top: 1px solid var(--color-border);
+}
+.offer-option:hover {
+  background: var(--color-surface-hover);
+}
+.offer-option.is-selected {
+  background: var(--color-accent-soft);
+}
+.offer-option.is-disabled {
+  cursor: not-allowed;
+  color: var(--color-text-tertiary);
+}
+.offer-option.is-disabled:hover {
+  background: none;
+}
+.offer-option__plan {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.offer-option__id {
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.offer-option__reason {
+  grid-column: 2 / -1;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+@media (max-width: 640px) {
+  .offer-option {
+    grid-template-columns: auto 1fr 1fr;
+    grid-template-areas:
+      'radio plan plan'
+      'radio seats billing'
+      'radio price price'
+      'radio id id'
+      'radio reason reason';
+    row-gap: var(--space-1);
+    align-items: start;
+  }
+  .offer-option > input {
+    grid-area: radio;
+    margin-top: 4px;
+  }
+  .offer-option__plan {
+    grid-area: plan;
+  }
+  .offer-option__seats {
+    grid-area: seats;
+  }
+  .offer-option__billing {
+    grid-area: billing;
+  }
+  .offer-option__price {
+    grid-area: price;
+  }
+  .offer-option__id {
+    grid-area: id;
+  }
+  .offer-option__reason {
+    grid-area: reason;
+  }
+}
+
+/* 可訂閱方案清單 */
+.offer-table td {
+  vertical-align: top;
+}
+.offer-table__offers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.offer-table__row {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.6fr) minmax(110px, 1fr) minmax(72px, 0.8fr) minmax(120px, 1fr) minmax(120px, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .offer-table__row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: var(--space-1);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px dashed var(--color-border);
+  }
+}

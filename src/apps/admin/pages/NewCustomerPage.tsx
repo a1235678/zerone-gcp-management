@@ -83,7 +83,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
     try {
       if (isTransfer) {
         const { customer, operation } = await createTransferInCustomer({ ...input, primaryDomain, memo: transferMemo, workOrderId: fromWo ?? undefined });
-        toast(`已建立「${customer.name}」與客戶轉入（${operation.id}）`);
+        toast(operation.status === 'failed' ? `已建立「${customer.name}」，但 Google 轉入失敗（${operation.id}），請重新送出或改為手動處理` : `已建立「${customer.name}」，客戶轉入完成（${operation.id}）`, operation.status === 'failed' ? 'danger' : 'success');
         navigate(fromWo ? `/work-orders/${fromWo}` : `/products/gws?op=${operation.id}`);
       } else {
         const c = await createCustomer(input);
@@ -152,7 +152,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
         titleAddon={<PendingTag id={1} hint="客戶由誰建立" />}
         description={
           isTransfer
-            ? 'GWS 客戶從其他經銷商轉到我們底下，客戶已經在 Google 申請完轉移。送出後產生一筆客戶轉入，回到 GWS 訂閱，流程就結束。'
+            ? 'GWS 客戶從其他經銷商轉到我們底下，客戶已經在 Google 申請完轉移。送出後立即呼叫 Google API，成功就完成，回到 GWS 訂閱；失敗才需要到 Google 後台手動接受轉入。'
             : '建立客戶主檔。建立時不會建立帳號；客戶的使用者帳號在客戶詳情的「使用者帳號」用「邀請」建立。'
         }
       />
@@ -180,7 +180,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
             <div className="form-card" style={{ marginBottom: 'var(--space-4)' }}>
               <Callout tone="info" title={`依執行單 ${fromWo} ${isTransfer ? '客戶轉入' : '建立客戶'}`}>
                 {isTransfer
-                  ? '客戶資料與轉移備註已從執行單帶入，請確認後建立。建立後會產生一筆客戶轉入（待人工執行），並回到執行單。'
+                  ? '客戶資料與轉移備註已從執行單帶入，請確認後送出。送出後立即呼叫 Google API 轉入，並回到執行單。'
                   : '客戶資料已從執行單帶入，請確認後建立。建立後會回到執行單繼續下一步。'}
               </Callout>
             </div>
@@ -240,7 +240,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
                 )}
               </QuickCustomerForm>
               {isTransfer && (
-                <FormSection title="轉移資訊" description="客戶已經在 Google 申請完轉移。建立客戶後狀態為「待人工執行」，後勤在 Google 後台接受轉入後回來標記。">
+                <FormSection title="轉移資訊" description="客戶已經在 Google 申請完轉移。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域含「fail」會模擬失敗。">
                   <FormField label="轉移備註" className="is-full">
                     {(p) => <textarea {...p} className="textarea" value={transferMemo} onChange={(e) => setTransferMemo(e.target.value)} />}
                   </FormField>
@@ -287,7 +287,7 @@ function ExistingTransferForm() {
     setSaving(true);
     try {
       const op = await createTransferForExisting({ customerId, domain, memo });
-      toast(`已建立客戶轉入（${op.id}）`);
+      toast(op.status === 'failed' ? `Google 轉入失敗（${op.id}），請重新送出或改為手動處理` : `客戶轉入完成（${op.id}）`, op.status === 'failed' ? 'danger' : 'success');
       navigate(`/products/gws?op=${op.id}`);
     } catch (e) {
       toast((e as Error).message, 'danger');
@@ -320,7 +320,7 @@ function ExistingTransferForm() {
             )}
           </FormField>
         </FormSection>
-        <FormSection title="轉入資訊" description="客戶已經在 Google 申請完轉移，不需要轉移碼。建立後狀態為「待人工執行」，後勤在 Google 後台接受轉入後回來標記，完成後網域會寫回客戶主檔。">
+        <FormSection title="轉入資訊" description="客戶已經在 Google 申請完轉移，不需要轉移碼。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域含「fail」會模擬失敗。完成後網域會寫回客戶主檔。">
           <fieldset className="plain-fieldset is-full">
             <legend className="form-field__label">
               GWS 網域 <span className="form-field__req">必填</span>

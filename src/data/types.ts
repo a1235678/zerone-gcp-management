@@ -129,6 +129,32 @@ export type DomainCheck =
 export type ProductCode = 'GWS' | 'GCP';
 export type SubscriptionStatus = 'active' | 'expiring' | 'cancelled';
 export type ContractTerm = 'annual' | 'flexible';
+
+/**
+ * Google Workspace 可訂閱方案（後端從 Google 平台撈到，2026/11/24）。
+ * 一個 SKU（對應我們的「版本」）有多個方案（Offer）：年約／彈性／試用、授權數範圍、計費週期、價格。
+ */
+export type OfferPlanType = 'annual' | 'flexible' | 'trial';
+export type BillingCycle = 'monthly' | 'yearly';
+export interface GwsOffer {
+  offerId: string;
+  planType: OfferPlanType;
+  minSeats: number;
+  maxSeats: number;
+  /** 試用沒有計費週期 */
+  billing: BillingCycle | null;
+  /** 每個授權的價格（美分） */
+  priceCents: number;
+  /** 供應至（之後不能再選） */
+  availableUntil?: string;
+}
+export interface GwsSku {
+  skuId: string;
+  name: string;
+  /** 對應的版本名稱；系統還沒有這個版本時是 null */
+  version: string | null;
+  offers: GwsOffer[];
+}
 export interface Subscription {
   id: string;
   customerId: string;
@@ -145,6 +171,8 @@ export interface Subscription {
   contractTime: string;
   /** 合約期間：年約，或彈性（Flexible，可以取消續約排程） */
   term: ContractTerm;
+  /** 目前使用的 Google 方案（Offer ID） */
+  offerId?: string;
   /** 不續約：客戶合約到期後不再續約（不寄到期通知） */
   renewalCancelled?: { at: string; by: string; note: string };
   lastSyncedAt: string;
@@ -174,7 +202,8 @@ export interface SubscriptionQuery {
  */
 export type OperationType = 'new' | 'transfer' | 'renewal' | 'addSeats' | 'upgrade';
 /** 排程執行：到啟用時間由系統送 Google；人工執行：後勤在 Google 後台處理後回來標記 */
-export type ExecutionMode = 'schedule' | 'manual';
+/** 排程執行、人工執行、立即送出（客戶轉入：送出就呼叫 API，2026/11/24） */
+export type ExecutionMode = 'schedule' | 'manual' | 'immediate';
 /** selfPaid：客戶自己刷卡、要移轉進來；otherDealer：從其他經銷商移轉（需移轉 ID） */
 export type TransferSource = 'selfPaid' | 'otherDealer';
 /**
@@ -190,6 +219,8 @@ export type OperationStatus = 'scheduled' | 'pendingManual' | 'submitted' | 'com
 export interface OperationPayload {
   /** 新訂的網域；訂閱成功後寫回客戶主檔 */
   domain?: string;
+  /** 選擇的 Google 方案（Offer ID）：新訂、續約、中途升版要選（2026/11/24） */
+  offerId?: string;
   /** 新訂：第一個使用者的帳號（公司網域的信箱）與驗證信箱（不是公司網域，2026/11/24） */
   firstUserEmail?: string;
   verifyEmail?: string;

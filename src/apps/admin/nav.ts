@@ -25,6 +25,7 @@ export const adminNav: NavGroup[] = [
         children: [
           { to: '/products/gws', label: '訂閱' },
           { to: '/products/gws/versions', label: '版本' },
+          { to: '/products/gws/offers', label: '可訂閱方案' },
         ],
       },
       {
@@ -64,6 +65,7 @@ export const pageResource: Record<string, ResourceKey> = {
   '/catalog': 'catalog',
   '/products/gws': 'subscriptions',
   '/products/gws/versions': 'catalog',
+  '/products/gws/offers': 'subscriptions',
   '/products/gcp/usage': 'gcpUsage',
   '/products/gcp/billing': 'billing',
   '/schedules/gws': 'schedules',
