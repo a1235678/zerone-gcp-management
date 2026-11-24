@@ -237,7 +237,7 @@ export function CustomerDetailPage() {
                       { label: '登記地址', value: formatAddress(c.registeredAddress), full: true },
                     ]),
                 { label: '所屬經銷商', value: c.dealerName },
-                { label: '經銷商 ID', value: <span className="mono">{c.dealerId}</span> },
+                { label: '經銷商 ID', value: c.dealerPartnerId ? <span className="mono">{c.dealerPartnerId}</span> : <span className="muted">—（直銷）</span> },
                 { label: '主網域', value: c.primaryDomain ? <span className="mono">{c.primaryDomain}</span> : <span className="muted">尚未有網域（GWS 新訂時填寫）</span> },
                 { label: '其他網域', value: c.otherDomains.length ? <span className="mono">{c.otherDomains.join('、')}</span> : '' },
                 ...(c.kind === 'individual'
@@ -511,7 +511,7 @@ export function CustomerDetailPage() {
                 {(p) => <TagInput id={p.id} values={editForm.shortNames} onChange={(v) => ef('shortNames', v)} />}
               </FormField>
               <FormField label="所屬經銷商" help="所屬經銷商不在這裡修改。">
-                {(p) => <input {...p} className="input" value={`${c.dealerName}（${c.dealerId}）`} readOnly disabled />}
+                {(p) => <input {...p} className="input" value={c.dealerPartnerId ? `${c.dealerName}（${c.dealerPartnerId}）` : c.dealerName} readOnly disabled />}
               </FormField>
             </div>
             <div>
@@ -710,7 +710,7 @@ function IndividualEditFields({
           {(p) => <input {...p} className="input" value={editForm.name} onChange={(e) => ef('name', e.target.value)} />}
         </FormField>
         <FormField label="所屬經銷商" help="所屬經銷商不在這裡修改。">
-          {(p) => <input {...p} className="input" value={`${c.dealerName}（${c.dealerId}）`} readOnly disabled />}
+          {(p) => <input {...p} className="input" value={c.dealerPartnerId ? `${c.dealerName}（${c.dealerPartnerId}）` : c.dealerName} readOnly disabled />}
         </FormField>
       </div>
       <div>

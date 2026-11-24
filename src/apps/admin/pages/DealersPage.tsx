@@ -39,7 +39,13 @@ export function DealersPage() {
         <div>
           <div className="table__primary">{d.shortNames[0] ?? d.name}</div>
           <div className="table__secondary">
-            <span className="mono">{d.id}</span>
+            {d.partnerId ? (
+              <>
+                經銷商 ID <span className="mono">{d.partnerId}</span>
+              </>
+            ) : (
+              '直銷'
+            )}
             {d.taxId && <> · 統編 <span className="mono">{d.taxId}</span></>}
           </div>
         </div>

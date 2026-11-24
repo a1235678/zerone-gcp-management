@@ -7,8 +7,13 @@ export type OrgType = 'internal' | 'dealer' | 'customer';
 export type DealerStatus = 'active' | 'suspended';
 /** 經銷商主檔（2026/11/12 第一版，欄位待 Connie 確認 #29） */
 export interface Dealer {
-  /** 經銷商 ID：建立時自動產生，客戶主檔選經銷商後會帶出 */
+  /** 系統內部編號（自動產生，只用在網址與關聯，不顯示給使用者） */
   id: string;
+  /**
+   * 經銷商 ID：Google 平台上的 Channel Partner ID，由使用者輸入（2026/11/24）。
+   * 客戶主檔選經銷商後會帶出。「直銷（零壹）」沒有。
+   */
+  partnerId: string;
   /** 經銷商名稱（公司全名） */
   name: string;
   shortNames: string[];
@@ -97,6 +102,8 @@ export interface Customer {
 }
 export interface CustomerListItem extends Customer {
   dealerName: string;
+  /** 所屬經銷商的經銷商 ID（Channel Partner ID） */
+  dealerPartnerId: string;
 }
 export interface CustomerQuery {
   keyword?: string;

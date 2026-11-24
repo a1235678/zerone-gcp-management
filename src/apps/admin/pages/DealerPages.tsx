@@ -11,7 +11,6 @@ import {
   getDealer,
   getUsers,
   lookupTaxId,
-  nextDealerId,
   updateDealer,
   type DealerInput,
 } from '@data/api';
@@ -35,6 +34,7 @@ import { usePermission } from '../auth';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const emptyDealer = (): DealerInput => ({
+  partnerId: '',
   name: '',
   shortNames: [],
   taxId: '',
@@ -48,7 +48,7 @@ const emptyDealer = (): DealerInput => ({
 });
 
 /** 經銷商主檔欄位（新增頁與編輯視窗共用）。第一版，欄位待 Connie 確認 #29 */
-function DealerFields({ value, onChange, idText, taxIdLocked, showErrors }: { value: DealerInput; onChange: (v: DealerInput) => void; idText: string; taxIdLocked?: boolean; showErrors: boolean }) {
+function DealerFields({ value, onChange, taxIdLocked, showErrors }: { value: DealerInput; onChange: (v: DealerInput) => void; taxIdLocked?: boolean; showErrors: boolean }) {
   const set = <K extends keyof DealerInput>(k: K, v: DealerInput[K]) => onChange({ ...value, [k]: v });
   const [lookingUp, setLookingUp] = useState(false);
   const [lookupMsg, setLookupMsg] = useState<{ text: string; tone: 'success' | 'error' }>();
@@ -72,8 +72,24 @@ function DealerFields({ value, onChange, idText, taxIdLocked, showErrors }: { va
   return (
     <>
       <FormSection title="基本資訊">
-        <FormField label="經銷商 ID" help="建立時自動產生；客戶主檔選擇經銷商後會帶出這個 ID。">
-          {(p) => <input {...p} className="input mono" readOnly value={idText} />}
+        <FormField
+          label="經銷商 ID"
+          required
+          message={err(!PARTNER_ID.test(value.partnerId.trim()), '請輸入經銷商 ID（英文、數字、連字號、底線）')}
+          state={err(!PARTNER_ID.test(value.partnerId.trim()), 'x') ? 'error' : undefined}
+          help="Google 平台上的 Channel Partner ID，請照 Google 後台輸入；客戶主檔選擇經銷商後會帶出這個 ID。"
+        >
+          {(p) => (
+            <input
+              {...p}
+              className="input mono"
+              spellCheck={false}
+              autoCapitalize="off"
+              placeholder="例如 C02k7xq3a"
+              value={value.partnerId}
+              onChange={(e) => set('partnerId', e.target.value)}
+            />
+          )}
         </FormField>
         <FormField
           label="統一編號"
@@ -149,8 +165,9 @@ function DealerFields({ value, onChange, idText, taxIdLocked, showErrors }: { va
   );
 }
 
+const PARTNER_ID = /^[A-Za-z0-9_-]+$/;
 const dealerValid = (v: DealerInput) =>
-  Boolean(v.name.trim() && /^\d{8}$/.test(v.taxId) && v.contactName.trim() && EMAIL.test(v.contactEmail) && addressComplete(v.contactSameAsRegistered ? v.registeredAddress : v.contactAddress));
+  Boolean(PARTNER_ID.test(v.partnerId.trim()) && v.name.trim() && /^\d{8}$/.test(v.taxId) && v.contactName.trim() && EMAIL.test(v.contactEmail) && addressComplete(v.contactSameAsRegistered ? v.registeredAddress : v.contactAddress));
 
 export function NewDealerPage() {
   const { can } = usePermission();
@@ -180,7 +197,7 @@ export function NewDealerPage() {
     setSaving(true);
     try {
       const d = await createDealer({ ...value, ...admin });
-      toast(`已新增「${d.name}」（${d.id}），並寄出組織管理員邀請`);
+      toast(`已新增「${d.name}」（經銷商 ID ${d.partnerId}），並寄出組織管理員邀請`);
       navigate(`/dealers/${d.id}`);
     } catch (e) {
       toast((e as Error).message, 'danger');
@@ -197,7 +214,7 @@ export function NewDealerPage() {
       <PageHeader title="新增經銷商" titleAddon={<PendingTag id={29} />} description="建立經銷商主檔，同時建立經銷商的第一個「組織管理員」帳號。經銷商統一在這裡維護，客戶主檔不再標示「是否為經銷商」。" />
       <form className="card form-card" onSubmit={(e) => e.preventDefault()} noValidate>
         <div className="card__body">
-          <DealerFields value={value} onChange={setValue} idText={`${nextDealerId()}（建立後產生）`} showErrors={tried} />
+          <DealerFields value={value} onChange={setValue} showErrors={tried} />
           <FormSection title="第一個組織管理員帳號" description="零壹只建立這一個帳號；其他帳號與角色由經銷商自己建立。">
             <label className="inline is-full">
               <input type="checkbox" checked={sameAsContact} onChange={(e) => setSameAsContact(e.target.checked)} />
@@ -293,7 +310,7 @@ export function DealerDetailPage() {
         }
         description={
           <span className="inline">
-            <span className="mono">{d.id}</span>
+            <span>經銷商 ID <span className="mono">{d.partnerId || '—'}</span></span>
             <span>·</span>
             <span>名下客戶 {d.customerCount}</span>
             <span>·</span>
@@ -306,8 +323,8 @@ export function DealerDetailPage() {
               className="btn"
               onClick={() => {
                 setTried(false);
-                const { name, shortNames, taxId, registeredAddress, contactAddress, contactSameAsRegistered, contactName, contactPhone, contactEmail, note } = d;
-                setEdit({ name, shortNames: [...shortNames], taxId, registeredAddress: { ...registeredAddress }, contactAddress: { ...contactAddress }, contactSameAsRegistered, contactName, contactPhone, contactEmail, note });
+                const { partnerId, name, shortNames, taxId, registeredAddress, contactAddress, contactSameAsRegistered, contactName, contactPhone, contactEmail, note } = d;
+                setEdit({ partnerId, name, shortNames: [...shortNames], taxId, registeredAddress: { ...registeredAddress }, contactAddress: { ...contactAddress }, contactSameAsRegistered, contactName, contactPhone, contactEmail, note });
               }}
             >
               編輯
@@ -335,7 +352,7 @@ export function DealerDetailPage() {
         <Card title="基本資訊">
           <DescriptionList
             items={[
-              { label: '經銷商 ID', value: <span className="mono">{d.id}</span> },
+              { label: '經銷商 ID', value: d.partnerId ? <span className="mono">{d.partnerId}</span> : <span className="muted">—（零壹自己，沒有）</span> },
               { label: '統一編號', value: <span className="mono">{d.taxId}</span> },
               { label: '經銷商名稱（公司全名）', value: d.name },
               { label: '公司簡稱', value: d.shortNames.join('、') },
@@ -471,7 +488,7 @@ export function DealerDetailPage() {
           </>
         }
       >
-        {edit && <DealerFields value={edit} onChange={setEdit} idText={d.id} taxIdLocked showErrors={tried} />}
+        {edit && <DealerFields value={edit} onChange={setEdit} taxIdLocked showErrors={tried} />}
       </Modal>
     </>
   );

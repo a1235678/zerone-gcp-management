@@ -3,6 +3,14 @@ import type { Address, Dealer } from '../types';
 // 名稱、統編、地址、聯絡人皆為虛構。經銷商主檔欄位是第一版，待 Connie 確認（#29）
 const addr = (city: string, district: string, postalCode: string, street: string): Address => ({ country: '台灣', city, district, postalCode, street });
 
+/** 經銷商 ID（Google Channel Partner ID，假資料）；直銷（零壹）沒有 */
+const PARTNER_IDS: Record<string, string> = {
+  D001: 'C02k7xq3a',
+  D002: 'C03m9pz1b',
+  D003: 'C01r4vn8c',
+  D004: 'C04t2hw6d',
+};
+
 function d(
   id: string,
   name: string,
@@ -18,6 +26,7 @@ function d(
 ): Dealer {
   return {
     id,
+    partnerId: PARTNER_IDS[id] ?? '',
     name,
     shortNames: shortName ? [shortName] : [],
     taxId,

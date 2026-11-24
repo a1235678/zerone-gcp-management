@@ -314,12 +314,14 @@ export function getDealerList(query: { keyword?: string; status?: string } = {})
   return delay(
     db.dealers
       .filter((d) => !query.status || d.status === query.status)
-      .filter((d) => includesKw(kw, d.name, d.id, d.taxId, ...d.shortNames))
+      .filter((d) => includesKw(kw, d.name, d.partnerId, d.taxId, ...d.shortNames))
       .map(dealerListItem),
   );
 }
 
 export interface DealerInput {
+  /** 經銷商 ID（Google Channel Partner ID），由使用者輸入 */
+  partnerId: string;
   name: string;
   shortNames: string[];
   taxId: string;
@@ -333,6 +335,10 @@ export interface DealerInput {
 }
 
 function validateDealer(input: DealerInput, selfId?: string): string | undefined {
+  const partnerId = input.partnerId.trim();
+  if (!partnerId) return '請輸入經銷商 ID（Google Channel Partner ID）';
+  if (!/^[A-Za-z0-9_-]+$/.test(partnerId)) return '經銷商 ID 只能有英文、數字、連字號、底線';
+  if (db.dealers.some((d) => d.partnerId === partnerId && d.id !== selfId)) return '這個經銷商 ID 已經是其他經銷商';
   const name = input.name.trim();
   if (!name) return '請輸入經銷商名稱';
   if (db.dealers.some((d) => d.name === name && d.id !== selfId)) return '已有同名的經銷商';
@@ -347,6 +353,7 @@ function validateDealer(input: DealerInput, selfId?: string): string | undefined
 
 const cleanDealer = (input: DealerInput) => ({
   ...input,
+  partnerId: input.partnerId.trim(),
   name: input.name.trim(),
   contactName: input.contactName.trim(),
   contactPhone: input.contactPhone.trim(),
@@ -354,7 +361,7 @@ const cleanDealer = (input: DealerInput) => ({
   contactAddress: input.contactSameAsRegistered ? { ...input.registeredAddress } : input.contactAddress,
 });
 
-/** 下一個經銷商 ID（建立時自動產生） */
+/** 下一個系統內部編號（建立時自動產生，不顯示給使用者） */
 export const nextDealerId = () => `D${String(Math.max(0, ...db.dealers.map((d) => Number(d.id.slice(1)))) + 1).padStart(3, '0')}`;
 
 export function createDealer(input: DealerInput & { adminName: string; adminEmail: string }): Promise<DealerListItem> {
@@ -411,7 +418,11 @@ export function updateDealer(id: string, input: DealerInput): Promise<DealerList
 
 // ═════════ 客戶 ═════════
 
-const withDealer = (c: Customer): CustomerListItem => ({ ...c, dealerName: dealerName(c.dealerId) });
+const withDealer = (c: Customer): CustomerListItem => ({
+  ...c,
+  dealerName: dealerName(c.dealerId),
+  dealerPartnerId: db.dealers.find((d) => d.id === c.dealerId)?.partnerId ?? '',
+});
 
 export function getCustomers(query: CustomerQuery = {}): Promise<CustomerListItem[]> {
   const kw = normKw(query.keyword);

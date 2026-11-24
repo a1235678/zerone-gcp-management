@@ -108,6 +108,7 @@ export function QuickCustomerForm({
   const state = (k: string) => (err(k) ? ('error' as const) : undefined);
   const set = <K extends keyof CustomerFormValue>(k: K, v: CustomerFormValue[K]) => onChange({ ...value, [k]: v });
   const individual = isIndividual(value);
+  const partnerId = dealers.data?.find((d) => d.id === value.dealerId)?.partnerId;
 
   const lookup = async () => {
     setLookingUp(true);
@@ -194,8 +195,8 @@ export function QuickCustomerForm({
             </select>
           )}
         </FormField>
-        <FormField label="經銷商 ID" help="選擇經銷商後自動帶出。">
-          {(p) => <input {...p} className="input mono" readOnly value={value.dealerId} placeholder="—" />}
+        <FormField label="經銷商 ID" help="Google Channel Partner ID，選擇經銷商後自動帶出。">
+          {(p) => <input {...p} className="input mono" readOnly value={value.dealerId ? partnerId || '—（直銷，沒有）' : ''} placeholder="—" />}
         </FormField>
         {domainNote && (
           <p className="muted is-full" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
