@@ -141,7 +141,7 @@ export function OperationModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, JSON.stringify(initial), target.subscriptionId, type, pendingAdd]);
 
-  const activePlans = (plans.data ?? []).filter((p) => p.productId === 'P01' && p.status === 'active');
+  const activePlans = (plans.data ?? []).filter((p) => p.productId === 'P01');
   const currentTier = activePlans.find((p) => p.name === target.plan)?.tier ?? plans.data?.find((p) => p.name === target.plan)?.tier ?? 0;
   const planOptions = type === 'upgrade' ? activePlans.filter((p) => p.tier > currentTier) : activePlans;
 

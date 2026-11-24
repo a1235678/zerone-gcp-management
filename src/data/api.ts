@@ -745,7 +745,7 @@ export function getSubscriptions(query: SubscriptionQuery = {}): Promise<Subscri
   return delay(rows);
 }
 
-/** 上架中的 GWS 版本名稱，依等級由低到高 */
+/** GWS 版本名稱，依等級由低到高 */
 export function getSubscription(id: string): Promise<(SubscriptionListItem & { planTier: number; sales: SalesAssignment[] }) | undefined> {
   const s = db.subscriptions.find((x) => x.id === id);
   if (!s) return delay(undefined);
@@ -756,7 +756,7 @@ export function getSubscription(id: string): Promise<(SubscriptionListItem & { p
 export function getPlans(): Promise<string[]> {
   return delay(activeGwsPlans().map((p) => p.name));
 }
-const activeGwsPlans = () => db.plans.filter((p) => p.productId === 'P01' && p.status === 'active').sort((a, b) => a.tier - b.tier);
+const activeGwsPlans = () => db.plans.filter((p) => p.productId === 'P01').sort((a, b) => a.tier - b.tier);
 /** 版本等級；找不到回傳 0 */
 export const planTier = (name?: string) => db.plans.find((p) => p.name === name)?.tier ?? 0;
 
@@ -2013,7 +2013,7 @@ export function getPlanList(): Promise<PlanListItem[]> {
   );
 }
 
-export function savePlan(input: { id?: string; productId: string; name: string; tier: number; status: Plan['status'] }): Promise<Plan> {
+export function savePlan(input: { id?: string; productId: string; name: string; tier: number }): Promise<Plan> {
   const name = input.name.trim();
   if (!name) return fail('請輸入版本名稱');
   if (!Number.isInteger(input.tier) || input.tier < 1) return fail('等級請填 1 以上的整數');
@@ -2023,11 +2023,11 @@ export function savePlan(input: { id?: string; productId: string; name: string; 
   const existing = db.plans.find((p) => p.id === input.id);
   if (existing) {
     if (existing.name !== name && db.subscriptions.some((s) => s.plan === existing.name)) return fail('已有訂閱使用這個版本，不能改名');
-    Object.assign(existing, { name, tier: input.tier, status: input.status });
-    log('catalog', name, `修改版本：等級 ${input.tier}、${input.status === 'active' ? '上架' : '草稿'}`);
+    Object.assign(existing, { name, tier: input.tier });
+    log('catalog', name, `修改版本：等級 ${input.tier}`);
     return delay(existing);
   }
-  const plan: Plan = { id: `PL${String(db.plans.length + 1).padStart(2, '0')}`, productId: input.productId, name, tier: input.tier, status: input.status, createdAt: TODAY };
+  const plan: Plan = { id: `PL${String(db.plans.length + 1).padStart(2, '0')}`, productId: input.productId, name, tier: input.tier, createdAt: TODAY };
   db.plans.push(plan);
   log('catalog', name, `新增版本（等級 ${plan.tier}）`);
   return delay(plan);

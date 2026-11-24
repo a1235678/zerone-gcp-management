@@ -193,8 +193,8 @@ export function ProductsPage() {
   );
 }
 
-type PlanForm = { id?: string; productId: string; name: string; tier: string; status: 'active' | 'draft' };
-const emptyPlan: PlanForm = { productId: 'P01', name: '', tier: '', status: 'draft' };
+type PlanForm = { id?: string; productId: string; name: string; tier: string };
+const emptyPlan: PlanForm = { productId: 'P01', name: '', tier: '' };
 
 export function PlansPage() {
   const { can } = usePermission();
@@ -221,7 +221,6 @@ export function PlansPage() {
     { key: 'name', header: '版本名稱', render: (p) => <span className="table__primary">{p.name}</span> },
     { key: 'product', header: '產品', render: (p) => `${p.brandName} › ${p.productName}` },
     { key: 'subs', header: '使用中訂閱', align: 'right', render: (p) => <span className="tnum">{p.subscriptionCount}</span> },
-    { key: 'status', header: '狀態', render: (p) => statusTag(p.status) },
     {
       key: 'actions',
       header: <span className="visually-hidden">操作</span>,
@@ -231,7 +230,7 @@ export function PlansPage() {
             className="btn btn--sm"
             onClick={() => {
               setTried(false);
-              setForm({ id: p.id, productId: p.productId, name: p.name, tier: String(p.tier), status: p.status });
+              setForm({ id: p.id, productId: p.productId, name: p.name, tier: String(p.tier) });
             }}
           >
             編輯
@@ -325,14 +324,6 @@ export function PlansPage() {
             </FormField>
             <FormField label="等級" required message={show('tier')} state={show('tier') ? 'error' : undefined} help="數字越大版本越高；同一個產品的等級不能重複。">
               {(p) => <input {...p} className="input tnum" type="number" min={1} value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} />}
-            </FormField>
-            <FormField label="狀態" required help="只有上架的版本會出現在新訂、續約、升版的選單。">
-              {(p) => (
-                <select {...p} className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as PlanForm['status'] })}>
-                  <option value="active">上架</option>
-                  <option value="draft">草稿</option>
-                </select>
-              )}
             </FormField>
           </div>
         )}

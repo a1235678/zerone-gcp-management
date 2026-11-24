@@ -628,13 +628,12 @@ export interface Product {
   status: 'active' | 'draft';
   createdAt: string;
 }
-/** 方案：等級數字越大版本越高，用來判斷升版、降版 */
+/** 版本（原「方案」）：等級數字越大版本越高，用來判斷升版、降版。版本沒有狀態，全部都可以選（2026/11/24） */
 export interface Plan {
   id: string;
   productId: string;
   name: string;
   tier: number;
-  status: 'active' | 'draft';
   createdAt: string;
 }
 export interface PlanListItem extends Plan {

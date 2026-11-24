@@ -50,7 +50,7 @@ export function WorkOrderFormPage() {
   );
   const liveSubs = (subs.data ?? []).filter((s) => s.status !== 'cancelled');
   const sub = liveSubs.find((s) => s.id === input.subscriptionId);
-  const activePlans = (plans.data ?? []).filter((p) => p.productId === 'P01' && p.status === 'active');
+  const activePlans = (plans.data ?? []).filter((p) => p.productId === 'P01');
   const subTier = activePlans.find((p) => p.name === sub?.plan)?.tier ?? 0;
   const analysis = analyzeOrder(input.type, sub, input.payload);
   const ownedCustomer = (customers.data ?? []).find((c) => c.id === input.customerId);
