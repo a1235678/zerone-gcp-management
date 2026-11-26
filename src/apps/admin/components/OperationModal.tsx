@@ -774,9 +774,20 @@ export function OperationModal({
               state={st('flexStartAt') ?? st('scheduledAt') ?? st('renewStartAt')}
               help="起日就是送出 Google 的日子，不用另外設定啟用日。"
             >
-              {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={flexStartAt} onChange={(e) => setFlexStart(e.target.value)} />}
+              {(p) => (
+                <div>
+                  <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={flexStartAt} onChange={(e) => setFlexStart(e.target.value)} />
+                  <div className="inline flex-period__months" role="group" aria-label="依起日自動算訖日">
+                    {[1, 2, 3].map((n) => (
+                      <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
+                        {n} 個月
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </FormField>
-            <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按下方按鈕自動算，也可以手動改。">
+            <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按起日下方的按鈕自動算，也可以手動改。">
               {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
             </FormField>
             {analysis.execution === 'schedule' && afternoon && (
@@ -790,13 +801,6 @@ export function OperationModal({
                 {(p) => <input {...p} className="input" type="time" min={AFTERNOON_START} max="23:59" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />}
               </FormField>
             )}
-          </div>
-          <div className="inline" style={{ marginTop: 'var(--space-2)' }}>
-            {[1, 2, 3].map((n) => (
-              <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
-                {n} 個月
-              </button>
-            ))}
           </div>
           <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
             送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
@@ -825,6 +829,23 @@ export function OperationModal({
         </fieldset>
       )}
 
+      <div className={`exec-box exec-box--${analysis.execution}`}>
+        <div className="exec-box__head">
+          <StatusTag tone={analysis.execution === 'manual' ? 'warning' : 'info'}>{executionModeLabel[analysis.execution]}</StatusTag>
+          {analysis.pendingId && <PendingTag id={analysis.pendingId} />}
+        </div>
+        <ul className="exec-box__reasons">
+          {analysis.reasons.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+        {analysis.execution === 'manual' && (
+          <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+            建立後狀態為「待人工執行」。請在 Google 後台完成後，回到這筆操作標記完成並寫下處理內容，下次同步時系統會比對確認。
+          </p>
+        )}
+      </div>
+
       {type !== 'transfer' && (
         <NotifyRecipients
           customerId={target.customerId || undefined}
@@ -843,22 +864,6 @@ export function OperationModal({
         {(p) => <textarea {...p} className="textarea" value={memo} onChange={(e) => setMemo(e.target.value)} />}
       </FormField>
 
-      <div className={`exec-box exec-box--${analysis.execution}`}>
-        <div className="exec-box__head">
-          <StatusTag tone={analysis.execution === 'manual' ? 'warning' : 'info'}>{executionModeLabel[analysis.execution]}</StatusTag>
-          {analysis.pendingId && <PendingTag id={analysis.pendingId} />}
-        </div>
-        <ul className="exec-box__reasons">
-          {analysis.reasons.map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
-        {analysis.execution === 'manual' && (
-          <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-            建立後狀態為「待人工執行」。請在 Google 後台完成後，回到這筆操作標記完成並寫下處理內容，下次同步時系統會比對確認。
-          </p>
-        )}
-      </div>
     </div>
   );
 
