@@ -26,6 +26,7 @@ import { useToast } from '@shared/components/Toast';
 import { formatContractPeriod, formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OfferPicker } from './OfferPicker';
+import { NotifyRecipients } from './NotifyRecipients';
 
 export interface OperationTarget {
   customerId: string;
@@ -130,12 +131,21 @@ export function OperationModal({
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [languageCode, setLanguageCode] = useState('zh-TW');
+  // 通知信收件人（購買畫面：新訂、續約、加購／升版）
+  const [notifyEmails, setNotifyEmails] = useState<string[]>([]);
   const [seats, setSeats] = useState('');
   const [addSeats, setAddSeats] = useState('');
   const [renewMonths, setRenewMonths] = useState('12');
   const [scheduledAt, setScheduledAt] = useState('');
   const [scheduledTime, setScheduledTime] = useState(AFTERNOON_START);
   const [renewEndAt, setRenewEndAt] = useState('');
+  // 續約：勾選後可以自行修改新合約起日；續約方式（Google 續約設定／排程續約）
+  const [editStart, setEditStart] = useState(false);
+  // 彈性方案的起訖日（2026/11/26）
+  const [flexStartAt, setFlexStartAt] = useState('');
+  const [flexEndAt, setFlexEndAt] = useState('');
+  const [renewStartAt, setRenewStartAt] = useState('');
+  const [renewMode, setRenewMode] = useState<'googleSettings' | 'scheduled'>('googleSettings');
   // Google 方案快照：新訂、續約、中途升版選完版本後，依客戶即時從 Google 查並選擇（2026/11/24）
   const [offer, setOffer] = useState<OfferSnapshot | undefined>();
   const [source, setSource] = useState<TransferSource | ''>('');
@@ -153,12 +163,18 @@ export function OperationModal({
     setFirstName(initial?.firstUserFirstName ?? '');
     setLastName(initial?.firstUserLastName ?? '');
     setLanguageCode(initial?.languageCode ?? 'zh-TW');
+    setNotifyEmails(initial?.notifyEmails ?? []);
     setSeats(initial?.seats ? String(initial.seats) : type === 'renewal' && target.seats ? String(target.seats + pendingAdd) : '');
     setAddSeats(initial?.addSeats ? String(initial.addSeats) : '');
     setRenewMonths(initial?.renewEndAt ? 'custom' : String(initial?.renewMonths ?? 12));
     setScheduledAt('');
     setScheduledTime(initial?.scheduledTime ?? AFTERNOON_START);
     setRenewEndAt(initial?.renewEndAt ?? '');
+    setEditStart(Boolean(initial?.renewStartAt));
+    setFlexStartAt(initial?.flexStartAt ?? '');
+    setFlexEndAt(initial?.flexEndAt ?? '');
+    setRenewStartAt(initial?.renewStartAt ?? '');
+    setRenewMode(initial?.renewMode ?? 'googleSettings');
     setOffer(initial?.offer);
     setSource(initial?.transferSource ?? '');
     setMemo(initial?.memo ?? '');
@@ -182,6 +198,8 @@ export function OperationModal({
     addSeats: intOrUndef(addSeats),
     renewMonths: renewMonths === 'custom' ? undefined : Number(renewMonths),
     renewEndAt: renewMonths === 'custom' ? renewEndAt || undefined : undefined,
+    renewStartAt: typeProp === 'renewal' && editStart ? renewStartAt || undefined : undefined,
+    renewMode: typeProp === 'renewal' ? renewMode : undefined,
     transferSource: source || undefined,
   };
   const afternoon = AFTERNOON_TYPES.includes(type);
@@ -196,6 +214,19 @@ export function OperationModal({
   const analysis = analyzeOrder(type, sub, payload);
   const date = type === 'renewal' ? analysis.defaultDate! : scheduledAt || analysis.defaultDate || TODAY;
   const maxDate = type === 'addSeats' || type === 'upgrade' ? target.expiresAt : undefined;
+  // 選了彈性方案：要設定起訖日，到期日系統自動排程取消合約
+  const isFlex = needsOffer && offer?.planType === 'flexible';
+  const flexDefaultStart = type === 'renewal' ? analysis.newStartsAt ?? TODAY : date;
+  useEffect(() => {
+    if (isFlex && !flexStartAt) setFlexStartAt(flexDefaultStart);
+  }, [isFlex, flexStartAt, flexDefaultStart]);
+  const flexMonths = (n: number) => {
+    const base = flexStartAt || flexDefaultStart;
+    const d = new Date(`${base}T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + n);
+    d.setUTCDate(d.getUTCDate() - 1);
+    setFlexEndAt(d.toISOString().slice(0, 10));
+  };
 
   const usingOwned = Boolean(fixedDomain) || domainPick !== '';
   const chosenDomain = fixedDomain ?? (usingOwned ? domainPick : newDomain.trim());
@@ -230,6 +261,9 @@ export function OperationModal({
         e.addSeats = combined ? '版本不變時，加購人數要大於 0；要升版請選更高的版本' : '加購人數需為大於 0 的整數（加購不能減人）';
     }
     if (needsOffer && plan && offerError) e.offerId = offerError;
+    if (isFlex && !flexStartAt) e.flexStartAt = '請選擇起日';
+    if (isFlex && (!flexEndAt || flexEndAt <= flexStartAt)) e.flexEndAt = '請選擇晚於起日的訖日';
+    if (type === 'renewal' && editStart && (!renewStartAt || renewStartAt < TODAY)) e.renewStartAt = '請選擇今天以後的起始日';
     if (type === 'renewal' && renewMonths === 'custom') {
       if (!renewEndAt) e.renewEndAt = '請選擇新合約到期日';
       else if (analysis.newStartsAt && renewEndAt <= analysis.newStartsAt) e.renewEndAt = '到期日要晚於新合約起日';
@@ -243,7 +277,7 @@ export function OperationModal({
       if (!source) e.source = '請選擇轉入來源';
     }
     return e;
-  }, [type, combined, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, analysis.newStartsAt, scheduledTime, afternoon, needsOffer, offerError, firstName, lastName]);
+  }, [type, combined, plan, seats, addSeats, memo, source, date, maxDate, analysis.execution, usingOwned, domainCheckResult?.ok, newDomain, userErr, renewMonths, renewEndAt, editStart, renewStartAt, isFlex, flexStartAt, flexEndAt, analysis.newStartsAt, scheduledTime, afternoon, needsOffer, offerError, firstName, lastName]);
   const show = (k: string) => (tried ? errors[k] : undefined);
   const st = (k: string) => (show(k) ? ('error' as const) : undefined);
 
@@ -265,11 +299,18 @@ export function OperationModal({
         languageCode,
       });
     if (type === 'renewal')
-      Object.assign(p, { plan, seats: Number(seats) }, renewMonths === 'custom' ? { renewEndAt } : { renewMonths: Number(renewMonths) });
+      Object.assign(
+        p,
+        { plan, seats: Number(seats), renewMode: analysis.renewMode, planChange: analysis.planChange },
+        renewMonths === 'custom' ? { renewEndAt } : { renewMonths: Number(renewMonths) },
+        editStart && renewStartAt ? { renewStartAt } : {},
+      );
     if (type === 'addSeats') p.addSeats = Number(addSeats);
     if (type === 'upgrade') Object.assign(p, { plan }, Number(addSeats) > 0 ? { addSeats: Number(addSeats) } : {});
     if (type === 'transfer') p.transferSource = source || undefined;
     if (needsOffer) p.offer = offer;
+    if (isFlex) Object.assign(p, { flexStartAt, flexEndAt });
+    if (type !== 'transfer') p.notifyEmails = notifyEmails;
     if (analysis.execution === 'schedule' && type !== 'renewal') p.scheduledAt = date;
     if (analysis.execution === 'schedule' && afternoon) p.scheduledTime = scheduledTime;
     setSaving(true);
@@ -477,7 +518,32 @@ export function OperationModal({
             {(p) => <input {...p} className="input tnum" type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />}
           </FormField>
         </div>
-        <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+        <><OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+          {isFlex && (
+            <fieldset className="plain-fieldset flex-period">
+              <legend className="form-field__label">
+                彈性方案的起訖日 <span className="form-field__req">必填</span>
+              </legend>
+              <div className="form-grid">
+                <FormField label="起日" required message={show('flexStartAt')} state={st('flexStartAt')}>
+                  {(p) => <input {...p} className="input" type="date" min={TODAY} value={flexStartAt} onChange={(e) => setFlexStartAt(e.target.value)} />}
+                </FormField>
+                <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按下方按鈕自動算，也可以手動改。">
+                  {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
+                </FormField>
+              </div>
+              <div className="inline" style={{ marginTop: 'var(--space-2)' }}>
+                {[1, 2, 3].map((n) => (
+                  <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
+                    {n} 個月
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
+                送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
+              </p>
+            </fieldset>
+          )}</>
         </div>
       )}
 
@@ -503,7 +569,7 @@ export function OperationModal({
                 {(p) => <input {...p} className="input" type="date" min={analysis.newStartsAt} value={renewEndAt} onChange={(e) => setRenewEndAt(e.target.value)} />}
               </FormField>
             )}
-            <FormField label="新合約期間">
+            <FormField label="新合約期間" help="依舊合約到期日自動帶出。">
               {(p) => (
                 <input
                   {...p}
@@ -513,8 +579,94 @@ export function OperationModal({
                 />
               )}
             </FormField>
+            <div className="is-full">
+              <label className="inline checkbox-row">
+                <input type="checkbox" checked={editStart} onChange={(e) => {
+                  setEditStart(e.target.checked);
+                  if (e.target.checked && !renewStartAt) setRenewStartAt(analysis.newStartsAt ?? '');
+                }} />
+                自行修改起始日
+              </label>
+            </div>
+            {editStart && (
+              <FormField label="新合約起日" required message={show('renewStartAt')} state={st('renewStartAt')} help="預設是舊合約到期隔天。">
+                {(p) => <input {...p} className="input" type="date" min={TODAY} value={renewStartAt} onChange={(e) => setRenewStartAt(e.target.value)} />}
+              </FormField>
+            )}
           </div>
-          <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+          <fieldset className="plain-fieldset">
+            <legend className="form-field__label">
+              續約方式 <PendingTag hint="哪些情況用哪一種，跟 Terry 確認" />
+            </legend>
+            <label className="radio-row">
+              <input
+                type="radio"
+                name="renew-mode"
+                checked={analysis.renewMode === 'googleSettings'}
+                disabled={analysis.planChange !== 'same' || (analysis.seatChange ?? 0) < 0}
+                onChange={() => setRenewMode('googleSettings')}
+              />
+              <span>
+                <strong>Google 續約設定</strong>
+                <span className="muted">：現在更新 Google 的續約設定，舊合約到期時由 Google 自動續約。版本不變、人數不減時才能用。</span>
+              </span>
+            </label>
+            <label className="radio-row">
+              <input type="radio" name="renew-mode" checked={analysis.renewMode === 'scheduled'} onChange={() => setRenewMode('scheduled')} />
+              <span>
+                <strong>排程續約</strong>
+                <span className="muted">：到新合約起日由系統送出。續約升降版、減人數一定用這種。</span>
+              </span>
+            </label>
+          </fieldset>
+          {(analysis.planChange === 'up' || analysis.planChange === 'down') && (
+            <Callout tone="info" title={`續約${analysis.planChange === 'up' ? '升' : '降'}版`}>
+              系統會把「{analysis.planChange === 'up' ? '升版' : '降版'}」一起交給後端。第一階段的做法：後端先把訂閱改成彈性方案，再{analysis.planChange === 'up' ? '升' : '降'}版。
+            </Callout>
+          )}
+          {(analysis.seatChange ?? 0) < 0 && (
+            <Callout
+              tone="warning"
+              title={
+                <span className="inline">
+                  續約減人數 <StatusTag tone="neutral">第二階段</StatusTag>
+                </span>
+              }
+            >
+              減人數要由客戶自己到 Google 降人數。系統會在排程日與前 3 天檢查客戶實際人數有沒有降到 {seats} 席以下：
+              <ul className="exec-box__reasons" style={{ margin: 'var(--space-1) 0 0' }}>
+                <li>還沒降到：寄通知給客戶聯絡人、續約業務與後勤。</li>
+                <li>排程日人數還是不對：不執行續約，排程標示失敗並通知。</li>
+              </ul>
+              目前先做畫面，第二階段才實作檢查。
+            </Callout>
+          )}
+          <><OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+          {isFlex && (
+            <fieldset className="plain-fieldset flex-period">
+              <legend className="form-field__label">
+                彈性方案的起訖日 <span className="form-field__req">必填</span>
+              </legend>
+              <div className="form-grid">
+                <FormField label="起日" required message={show('flexStartAt')} state={st('flexStartAt')}>
+                  {(p) => <input {...p} className="input" type="date" min={TODAY} value={flexStartAt} onChange={(e) => setFlexStartAt(e.target.value)} />}
+                </FormField>
+                <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按下方按鈕自動算，也可以手動改。">
+                  {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
+                </FormField>
+              </div>
+              <div className="inline" style={{ marginTop: 'var(--space-2)' }}>
+                {[1, 2, 3].map((n) => (
+                  <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
+                    {n} 個月
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
+                送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
+              </p>
+            </fieldset>
+          )}</>
           {plan && Number(seats) > 0 && (
             <div className="inline">
               <span className="muted">這次續約：</span>
@@ -565,7 +717,32 @@ export function OperationModal({
             </span>
           </div>
           {type === 'upgrade' && (
-            <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+            <><OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+          {isFlex && (
+            <fieldset className="plain-fieldset flex-period">
+              <legend className="form-field__label">
+                彈性方案的起訖日 <span className="form-field__req">必填</span>
+              </legend>
+              <div className="form-grid">
+                <FormField label="起日" required message={show('flexStartAt')} state={st('flexStartAt')}>
+                  {(p) => <input {...p} className="input" type="date" min={TODAY} value={flexStartAt} onChange={(e) => setFlexStartAt(e.target.value)} />}
+                </FormField>
+                <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按下方按鈕自動算，也可以手動改。">
+                  {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
+                </FormField>
+              </div>
+              <div className="inline" style={{ marginTop: 'var(--space-2)' }}>
+                {[1, 2, 3].map((n) => (
+                  <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
+                    {n} 個月
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
+                送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
+              </p>
+            </fieldset>
+          )}</>
           )}
           {renewConflict && Number(addSeats) > 0 && (
             <Callout tone="warning" title="這個網域已經排了續約">
@@ -628,7 +805,32 @@ export function OperationModal({
             {(p) => <input {...p} className="input mono" readOnly value={`生效日起 – ${formatDate(target.expiresAt ?? '')}`} />}
           </FormField>
           <div className="is-full">
-            <OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+            <><OfferPicker customerId={target.customerId || undefined} version={plan} seats={offerSeats} type={type} value={offer} onChange={setOffer} error={show('offerId')} />
+          {isFlex && (
+            <fieldset className="plain-fieldset flex-period">
+              <legend className="form-field__label">
+                彈性方案的起訖日 <span className="form-field__req">必填</span>
+              </legend>
+              <div className="form-grid">
+                <FormField label="起日" required message={show('flexStartAt')} state={st('flexStartAt')}>
+                  {(p) => <input {...p} className="input" type="date" min={TODAY} value={flexStartAt} onChange={(e) => setFlexStartAt(e.target.value)} />}
+                </FormField>
+                <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按下方按鈕自動算，也可以手動改。">
+                  {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
+                </FormField>
+              </div>
+              <div className="inline" style={{ marginTop: 'var(--space-2)' }}>
+                {[1, 2, 3].map((n) => (
+                  <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
+                    {n} 個月
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
+                送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
+              </p>
+            </fieldset>
+          )}</>
           </div>
         </div>
       )}
@@ -653,6 +855,20 @@ export function OperationModal({
           </fieldset>
           <Callout tone="neutral">客戶已經在 Google 申請完轉移。送出後立即呼叫 Google API 轉入，成功就完成；失敗時可以重新送出，或改為在 Google 後台手動接受轉入。Prototype：網域含「fail」會模擬失敗。</Callout>
         </>
+      )}
+
+      {type !== 'transfer' && (
+        <NotifyRecipients
+          customerId={target.customerId || undefined}
+          dealerId={target.dealerId}
+          extra={
+            newCustomer
+              ? [{ name: newCustomer.contactName, email: newCustomer.contactEmail, role: '客戶聯絡人', defaultOn: true }]
+              : []
+          }
+          value={notifyEmails}
+          onChange={setNotifyEmails}
+        />
       )}
 
       <FormField label="備註">

@@ -14,4 +14,6 @@ export const isPriceVisible = () => priceVisible;
 export const HIDDEN_PRICE = '••••';
 export const formatUsd = (cents: number, digits = 2) =>
   priceVisible ? `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}` : HIDDEN_PRICE;
+/** 美金金額加上「US$」（2026/11/26 方案價錢要標示是美金） */
+export const formatUsdLabel = (cents: number, digits = 2) => (priceVisible ? `US${formatUsd(cents, digits)}` : HIDDEN_PRICE);
 export const formatPct = (pct: number) => `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct).toFixed(1)}%`;

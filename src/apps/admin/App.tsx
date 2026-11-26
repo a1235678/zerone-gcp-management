@@ -4,7 +4,7 @@ import { AppShell } from '@shared/components/AppShell';
 import { ToastProvider } from '@shared/components/Toast';
 import { setPriceVisible } from '@shared/format';
 import { AuthProvider, useAuth, usePermission } from './auth';
-import { resourceOf, visibleNav } from './nav';
+import { isAdminOnly, resourceOf, visibleNav } from './nav';
 import { NoPermissionPage } from './pages/PlaceholderPage';
 import { ForgotPasswordPage, LoginPage } from './pages/LoginPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
@@ -66,14 +66,14 @@ function Protected() {
     <AppShell
       siteName="零壹雲管家"
       siteSubtitle="Zerone Cloud · 管理端"
-      nav={visibleNav(can)}
+      nav={visibleNav(can, session.isSystemAdmin)}
       user={{ name: session.name, role: session.role, email: session.email }}
       onLogout={async () => {
         await logout();
         navigate('/login', { replace: true });
       }}
     >
-      {pageAllowed(location.pathname, can) ? (
+      {pageAllowed(location.pathname, can) && (!isAdminOnly(location.pathname) || session.isSystemAdmin) ? (
         <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/customers" element={<CustomersPage />} />

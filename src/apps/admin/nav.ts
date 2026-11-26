@@ -82,8 +82,12 @@ export function resourceOf(pathname: string): ResourceKey | undefined {
 }
 
 /** 依權限過濾選單：子選單全部看不到時上層一起拿掉，整組都看不到的群組也拿掉 */
-export function visibleNav(can: (r: ResourceKey) => boolean): NavGroup[] {
-  const ok = (to: string) => !pageResource[to] || can(pageResource[to]);
+/** 只有角色勾了「系統管理員」才看得到的頁面（2026/11/26） */
+export const ADMIN_ONLY_PAGES = ['/system/users', '/system/roles'];
+export const isAdminOnly = (pathname: string) => ADMIN_ONLY_PAGES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+
+export function visibleNav(can: (r: ResourceKey) => boolean, isSystemAdmin = true): NavGroup[] {
+  const ok = (to: string) => (!isAdminOnly(to) || isSystemAdmin) && (!pageResource[to] || can(pageResource[to]));
   return adminNav
     .map((g) => ({
       ...g,

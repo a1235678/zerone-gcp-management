@@ -60,7 +60,6 @@ import type {
   OperationStatus,
   OperationType,
   OrderAnalysis,
-  ExecutionMode,
   Schedule,
   GwsOperation,
   WorkOrderInput,
@@ -169,6 +168,7 @@ export interface Session {
   role: string;
   permissions: Role['permissions'];
   canSeePrice: boolean;
+  isSystemAdmin: boolean;
 }
 
 const SESSION_KEY = 'zerone-admin-session';
@@ -177,7 +177,7 @@ function sessionOf(userId: string): Session | undefined {
   const u = db.users.find((x) => x.id === userId);
   const r = u && db.roles.find((x) => x.id === u.roleId);
   if (!u || !r) return undefined;
-  return { id: u.id, name: u.name, email: u.email, roleId: r.id, role: r.name, permissions: r.permissions, canSeePrice: r.canSeePrice };
+  return { id: u.id, name: u.name, email: u.email, roleId: r.id, role: r.name, permissions: r.permissions, canSeePrice: r.canSeePrice, isSystemAdmin: r.isSystemAdmin };
 }
 
 function setCurrent(s: Session | undefined) {
@@ -191,7 +191,7 @@ let apiAuth: ApiAuth | undefined;
 
 function apiSessionOf(a: ApiAuth): Session {
   const r = db.roles.find((x) => x.id === 'R01')!;
-  return { id: 'api', name: a.name, email: a.email, roleId: r.id, role: `${r.name}（API 登入）`, permissions: r.permissions, canSeePrice: r.canSeePrice };
+  return { id: 'api', name: a.name, email: a.email, roleId: r.id, role: `${r.name}（API 登入）`, permissions: r.permissions, canSeePrice: r.canSeePrice, isSystemAdmin: r.isSystemAdmin };
 }
 
 /** API 登入成功後呼叫：記住 token，之後的畫面用這個登入者 */
@@ -584,9 +584,38 @@ export function addDealerContact(dealerId: string, contact: CustomerContact): Pr
   return delay(undefined);
 }
 
+// ── 購買通知信的建議收件人（2026/11/26）──
+export interface NotifySuggestion {
+  name: string;
+  email: string;
+  /** 例如「客戶聯絡人」「續約業務」「後勤」 */
+  role: string;
+  /** 預設勾選 */
+  defaultOn?: boolean;
+}
+
+export function getNotifySuggestions(customerId?: string, dealerId?: string): Promise<NotifySuggestion[]> {
+  const out: NotifySuggestion[] = [];
+  const c = customerId ? customerOf(customerId) : undefined;
+  if (c?.contactEmail) out.push({ name: c.contactName, email: c.contactEmail, role: '客戶聯絡人', defaultOn: true });
+  const userByName = (name: string) => db.users.find((u) => u.orgType === 'internal' && u.name === name && u.status === 'active');
+  for (const a of c?.salesAssignments ?? []) {
+    if (a.product !== 'GWS') continue;
+    const u = userByName(a.salesName);
+    if (u) out.push({ name: u.name, email: u.email, role: a.term === 'new' ? '新約業務' : '續約業務', defaultOn: true });
+  }
+  const d = db.dealers.find((x) => x.id === (dealerId ?? c?.dealerId));
+  if (d && !d.isDirect && d.contactEmail) out.push({ name: d.contactName, email: d.contactEmail, role: `經銷商（${d.shortNames[0] ?? d.name}）` });
+  for (const u of db.users.filter((x) => x.orgType === 'internal' && x.roleId === 'R14' && x.status === 'active'))
+    out.push({ name: u.name, email: u.email, role: '後勤', defaultOn: true });
+  return delay(out);
+}
+
 /** 可以指定為負責業務的內部帳號（業務、業務主管） */
 export function getSalesPeople(): Promise<string[]> {
-  return delay(db.users.filter((u) => u.orgType === 'internal' && (u.roleId === 'R03' || u.roleId === 'R12') && u.status === 'active').map((u) => u.name));
+  // 角色勾了「業務性質」的內部帳號（2026/11/26）
+  const salesRoles = new Set(db.roles.filter((r) => r.isSales).map((r) => r.id));
+  return delay(db.users.filter((u) => u.orgType === 'internal' && salesRoles.has(u.roleId) && u.status === 'active').map((u) => u.name));
 }
 
 /** 整理負責業務：去掉沒選業務的列、去掉完全重複的列 */
@@ -812,23 +841,24 @@ export function analyzeOrder(type: OperationType, sub: Pick<Subscription, 'plan'
     case 'renewal': {
       const planChange = planChangeOf(sub?.plan, payload.plan ?? sub?.plan);
       const seatChange = (payload.seats ?? sub?.seats ?? 0) - (sub?.seats ?? 0);
-      const start = sub ? addDays(sub.expiresAt, 1) : TODAY;
+      // 新合約起日：預設舊合約到期隔天；勾「自行修改起始日」可以改（2026/11/26）
+      const start = payload.renewStartAt || (sub ? addDays(sub.expiresAt, 1) : TODAY);
       // 續約期間：12／24／36 個月，或自訂到期日（2026/11/24）
       const end = payload.renewEndAt || addDays(addMonths(start, payload.renewMonths ?? 12), -1);
       const reasons: string[] = [];
-      let execution: ExecutionMode = 'schedule';
-      let pendingId: OrderAnalysis['pendingId'];
-      if (planChange === 'down') {
-        execution = 'manual';
-        pendingId = 17;
-        reasons.push('降版能否排程還在等 Terry 確認，先由後勤人工執行');
+      // 續約方式：版本不變、人數不減可以用 Google 續約設定；升降版、減人數一定是排程續約（2026/11/26）
+      const googleOk = planChange === 'same' && seatChange >= 0;
+      const mode = googleOk ? payload.renewMode ?? 'googleSettings' : 'scheduled';
+      if (planChange === 'up' || planChange === 'down')
+        reasons.push(`續約${planChange === 'up' ? '升' : '降'}版：後端先把訂閱改成彈性方案，再${planChange === 'up' ? '升' : '降'}版（第一階段做法）`);
+      if (seatChange < 0)
+        reasons.push('續約減人數：客戶要先自己在 Google 降人數。排程日與前 3 天系統檢查實際人數，沒降到就寄通知；排程日仍不符就不執行續約（第二階段實作）');
+      if (mode === 'googleSettings') {
+        reasons.push('送出後立即更新 Google 的續約設定，舊合約到期時由 Google 自動續約');
+        return { execution: 'immediate', planChange, seatChange, reasons, defaultDate: start, newStartsAt: start, newExpiresAt: end, renewMode: mode };
       }
-      if (seatChange < 0) {
-        execution = 'manual';
-        reasons.push('續約減人數由後勤人工執行');
-      }
-      if (execution === 'schedule') reasons.push(`排在舊合約到期隔天（${start.replace(/-/g, '/')}）自動續約`);
-      return { execution, pendingId, planChange, seatChange, reasons, defaultDate: start, newStartsAt: start, newExpiresAt: end };
+      reasons.push(`排程續約：排在 ${start.replace(/-/g, '/')} 由系統送出`);
+      return { execution: 'schedule', planChange, seatChange, reasons, defaultDate: start, newStartsAt: start, newExpiresAt: end, renewMode: mode };
     }
     case 'addSeats':
       return { execution: 'schedule', reasons: [`加購只能加人，期間到舊合約結束日（${sub?.expiresAt.replace(/-/g, '/') ?? '—'}）`], defaultDate: TODAY };
@@ -862,7 +892,9 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
       const plan = p.plan ?? fromPlan;
       const seats = p.seats ?? fromSeats;
       const change = plan !== fromPlan || seats !== fromSeats ? `${fromPlan} ${fromSeats} 席 → ${plan} ${seats} 席，` : `${plan} ${seats} 席，`;
-      return `${change}續約 ${p.renewMonths ?? 12} 個月`;
+      const mode = p.renewMode === 'googleSettings' ? 'Google 續約設定' : '排程續約';
+      const period = p.renewEndAt ? `續約到 ${p.renewEndAt.replace(/-/g, '/')}` : `續約 ${p.renewMonths ?? 12} 個月`;
+      return `${change}${period}（${mode}${p.planChange && p.planChange !== 'same' ? `，${p.planChange === 'up' ? '升版' : '降版'}` : ''}${(p.seats ?? 0) < fromSeats ? '，減人數需檢查實際人數' : ''}）`;
     }
     case 'addSeats':
       return `加購 ${p.addSeats} 席（${fromSeats} → ${fromSeats + (p.addSeats ?? 0)}）`;
@@ -1002,6 +1034,11 @@ export function validateOperation(input: NewOperationInput): string | undefined 
     if (userError) return userError;
     if (!p.languageCode) return '請選擇語言';
   }
+  if (p.offer?.planType === 'flexible' && OFFER_TYPES.includes(input.type)) {
+    if (!p.flexStartAt || !p.flexEndAt) return '彈性方案要設定起訖日';
+    if (p.flexEndAt <= p.flexStartAt) return '彈性方案的訖日要晚於起日';
+  }
+  if (p.notifyEmails?.some((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))) return '通知信收件人的 Email 格式不正確';
   if (AFTERNOON_TYPES.includes(input.type) && p.scheduledTime && p.scheduledTime < AFTERNOON_START) return '新購、加購要排在下午 4 點（GMT+8）之後';
   if (OFFER_TYPES.includes(input.type)) {
     if (!p.offer) return '請選擇方案';
@@ -1010,7 +1047,8 @@ export function validateOperation(input: NewOperationInput): string | undefined 
     const reason = offerUnavailableReason(p.offer, seats, input.type);
     if (reason) return `這個方案不能選：${reason}`;
   }
-  if (input.type === 'renewal' && p.renewEndAt && sub && p.renewEndAt <= addDays(sub.expiresAt, 1)) return '自訂的到期日要晚於新合約起日';
+  if (input.type === 'renewal' && p.renewStartAt && p.renewStartAt < TODAY) return '新合約起日不能早於今天';
+  if (input.type === 'renewal' && p.renewEndAt && sub && p.renewEndAt <= (p.renewStartAt || addDays(sub.expiresAt, 1))) return '自訂的到期日要晚於新合約起日';
   if (input.type === 'renewal') {
     if (!p.plan || !activePlans.includes(p.plan)) return '請選擇續約版本';
     if (!Number.isInteger(Number(p.seats)) || Number(p.seats) < 1) return '人數需為大於 0 的整數';
@@ -1046,7 +1084,9 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
   const at = now();
   const payload: OperationPayload = { ...input.payload };
   if (sub) Object.assign(payload, { fromPlan: sub.plan, fromSeats: sub.seats ?? 0 });
-  if (input.type === 'renewal') Object.assign(payload, { newStartsAt: analysis.newStartsAt, newExpiresAt: analysis.newExpiresAt });
+  // 續約：把新合約期間、續約方式、升降版一起交給後端（2026/11/26）
+  if (input.type === 'renewal')
+    Object.assign(payload, { newStartsAt: analysis.newStartsAt, newExpiresAt: analysis.newExpiresAt, renewMode: analysis.renewMode, planChange: analysis.planChange });
   if (analysis.execution === 'schedule') payload.scheduledAt = payload.scheduledAt ?? analysis.defaultDate ?? TODAY;
   else delete payload.scheduledAt;
   const op: GwsOperation = {
@@ -1084,6 +1124,23 @@ export function createOperation(input: NewOperationInput): Promise<OperationList
     op.history.push({ at, by: currentUser.name, action: '送出 Google API', status: 'submitted' });
   } else {
     op.history.push({ at, by: currentUser.name, action: '建立，待後勤人工執行', status: 'pendingManual', note: analysis.reasons.join('；') });
+  }
+  // 彈性方案：到期日自動下排程取消合約（2026/11/26）
+  if (payload.flexEndAt) {
+    const cid = `J${String(Math.max(0, ...db.schedules.map((x) => Number(x.id.slice(1)))) + 1).padStart(3, '0')}`;
+    db.schedules.push({
+      id: cid,
+      kind: 'once',
+      action: 'cancelContract',
+      status: 'waiting',
+      enabledAt: `${payload.flexEndAt} 23:59`,
+      customerId: c.id,
+      subscriptionId: op.subscriptionId,
+      operationId: op.id,
+      detail: `彈性方案到期（${payload.flexStartAt?.replace(/-/g, '/') ?? ''} – ${payload.flexEndAt.replace(/-/g, '/')}），自動取消合約${payload.domain ? `：${payload.domain}` : ''}`,
+      createdBy: currentUser.name,
+    });
+    op.history.push({ at, by: currentUser.name, action: `建立排程 ${cid}，${payload.flexEndAt.replace(/-/g, '/')} 到期自動取消合約`, status: op.status });
   }
   db.operations.push(op);
   log(
@@ -1192,6 +1249,11 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
       if (sub) sub.seats = (sub.seats ?? 0) + (p.addSeats ?? 0);
       break;
     case 'renewal':
+      // Google 續約設定：現在只更新設定，到期由 Google 自動續約，合約日期等下次同步
+      if (sub && p.renewMode === 'googleSettings') {
+        sub.googleRenewal = { plan: p.plan ?? sub.plan, seats: p.seats ?? sub.seats ?? 0, offer: p.offer, setAt: at, opId: op.id };
+        break;
+      }
       if (sub) {
         sub.plan = p.plan ?? sub.plan;
         sub.seats = p.seats ?? sub.seats;
@@ -1221,8 +1283,9 @@ function applyCompletedOperation(op: GwsOperation, at: string) {
         plan: p.plan ?? 'Business Starter',
         seats: p.seats ?? 1,
         status: 'active',
-        startsAt: start,
-        expiresAt: addDays(addMonths(start, 12), -1),
+        startsAt: p.flexStartAt ?? start,
+        // 彈性方案用設定的訖日；年約一年
+        expiresAt: p.flexEndAt ?? addDays(addMonths(start, 12), -1),
         contractTime: gmt0Of(p.scheduledTime ?? AFTERNOON_START),
         term: p.offer?.planType === 'flexible' ? 'flexible' : 'annual',
         offer: p.offer,
@@ -2136,9 +2199,13 @@ export function getPlanList(): Promise<PlanListItem[]> {
   );
 }
 
-export function savePlan(input: { id?: string; productId: string; name: string; tier: number }): Promise<Plan> {
+/** 版本類別（暫定，等試算表確認後再改，2026/11/26） */
+export const PLAN_CATEGORIES = ['Business', 'Enterprise', 'Frontline', 'Essentials', 'Education'];
+
+export function savePlan(input: { id?: string; productId: string; name: string; category: string; tier: number }): Promise<Plan> {
   const name = input.name.trim();
   if (!name) return fail('請輸入版本名稱');
+  if (!input.category) return fail('請選擇類別');
   if (!Number.isInteger(input.tier) || input.tier < 1) return fail('等級請填 1 以上的整數');
   if (db.plans.some((p) => p.name === name && p.productId === input.productId && p.id !== input.id)) return fail('同一個產品已有同名版本');
   const clash = db.plans.find((p) => p.productId === input.productId && p.tier === input.tier && p.id !== input.id);
@@ -2146,11 +2213,11 @@ export function savePlan(input: { id?: string; productId: string; name: string; 
   const existing = db.plans.find((p) => p.id === input.id);
   if (existing) {
     if (existing.name !== name && db.subscriptions.some((s) => s.plan === existing.name)) return fail('已有訂閱使用這個版本，不能改名');
-    Object.assign(existing, { name, tier: input.tier });
+    Object.assign(existing, { name, category: input.category, tier: input.tier });
     log('catalog', name, `修改版本：等級 ${input.tier}`);
     return delay(existing);
   }
-  const plan: Plan = { id: `PL${String(db.plans.length + 1).padStart(2, '0')}`, productId: input.productId, name, tier: input.tier, createdAt: TODAY };
+  const plan: Plan = { id: `PL${String(db.plans.length + 1).padStart(2, '0')}`, productId: input.productId, name, category: input.category, tier: input.tier, createdAt: TODAY };
   db.plans.push(plan);
   log('catalog', name, `新增版本（等級 ${plan.tier}）`);
   return delay(plan);

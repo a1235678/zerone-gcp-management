@@ -2271,3 +2271,59 @@ button.topbar__user:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 角色：特殊功能勾選 */
+.special-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+.special-item {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.special-item input {
+  margin-top: 3px;
+  flex: none;
+}
+.special-item span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 購買通知信收件人 */
+.notify-recipients__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.notify-recipients__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.notify-recipients__item input {
+  margin-top: 3px;
+  flex: none;
+}
+.notify-recipients__email {
+  display: block;
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+/* 彈性方案的起訖日 */
+.flex-period {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+}

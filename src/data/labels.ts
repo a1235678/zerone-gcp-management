@@ -73,6 +73,7 @@ export const scheduleActionLabel: Record<ScheduleAction, string> = {
   upgrade: '中途升版',
   renew: '續約',
   sync: '同步訂閱資料',
+  cancelContract: '到期取消合約',
 };
 export const scheduleStatusLabel: Record<ScheduleStatus, string> = {
   waiting: '等待執行',

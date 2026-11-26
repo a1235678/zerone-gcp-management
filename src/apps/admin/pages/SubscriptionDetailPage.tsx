@@ -13,7 +13,7 @@ import { Modal } from '@shared/components/Modal';
 import { useToast } from '@shared/components/Toast';
 import { NoticeStageTag } from './ExpiryNoticePage';
 import { StatusTag } from '@shared/components/StatusTag';
-import { formatContractPeriod, formatDate, formatDateTime, formatUsd } from '@shared/format';
+import { formatContractPeriod, formatDate, formatDateTime, formatUsdLabel } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { OperationModal, type OperationTarget } from '../components/OperationModal';
 import { OfferPlanTag } from '../components/OfferPicker';
@@ -214,7 +214,7 @@ export function SubscriptionDetailPage() {
                       <span className="inline">
                         <OfferPlanTag offer={s.offer} />
                         {offerSummary(s.offer)}
-                        <span className="tnum">· {formatUsd(s.offer.priceCents)} / 授權</span>
+                        <span className="tnum">· {formatUsdLabel(s.offer.priceCents)} / 授權</span>
                       </span>
                       <div className="table__secondary">
                         {s.offer.skuName} · SKU <span className="mono">{s.offer.skuId}</span> · Offer <span className="mono">{s.offer.offerId}</span>
@@ -235,6 +235,20 @@ export function SubscriptionDetailPage() {
                   ),
                 },
                 { label: '合約類型', value: contractTermLabel[s.term] },
+                ...(s.googleRenewal
+                  ? [
+                      {
+                        label: 'Google 續約設定',
+                        value: (
+                          <span>
+                            到期由 Google 自動續約：{s.googleRenewal.plan} · {s.googleRenewal.seats} 席
+                            {s.googleRenewal.offer ? `（${offerSummary(s.googleRenewal.offer)}）` : ''}
+                            <span className="table__secondary"> · {formatDateTime(s.googleRenewal.setAt)} 設定</span>
+                          </span>
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   label: '剩餘天數',
                   value: live ? <span className={days <= EXPIRING_DAYS ? 'text-warning' : ''}>{days >= 0 ? `${days} 天` : `已過 ${-days} 天`}</span> : '',

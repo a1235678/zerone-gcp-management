@@ -1,5 +1,5 @@
 // 對應 docs/handoff.md「待確認事項」。答案出來後在這裡移除或更新，畫面上的「待確認」標籤會跟著變。
-// 已確認並移除：#18 到期通知固定 30、3 天（2026/11/12）；#2 帳單是獨立權限項目、#8 不做發票功能（2026/11/10）；#19 不提供取消訂閱（2026/11/11）；#4 客戶轉入使用 Cloud Channel API、#6 執行單放第二階段（2026/11/13）；#25 可能會有個人客戶（做公司／個人選項）、#26 客戶不需要一般聯絡人（2026/11/24）。
+// 已確認並移除：#18 到期通知固定 30、3 天（2026/11/12）；#2 帳單是獨立權限項目、#8 不做發票功能（2026/11/10）；#19 不提供取消訂閱（2026/11/11）；#4 客戶轉入使用 Cloud Channel API、#6 執行單放第二階段（2026/11/13）；#25 可能會有個人客戶（做公司／個人選項）、#26 客戶不需要一般聯絡人（2026/11/24）；#17 系統支援續約升降版（2026/11/26）。
 export const pendingItems = {
   1: { question: '客戶由誰建立？目前傳聞是 Connie', owner: 'Connie' },
   3: { question: 'API 能不能抓到 GWS 已購買的版本', owner: 'Terry' },
@@ -13,7 +13,6 @@ export const pendingItems = {
   14: { question: '對帳差異容許範圍（目前差 0.01 USD 也算差異）', owner: '待指定' },
   15: { question: '能否取得客戶的經銷商名稱', owner: 'Terry' },
   16: { question: '合約未到期前的中途升版，能否做自動排程', owner: 'Terry' },
-  17: { question: '續約降版能否排程執行（目前先人工執行）', owner: 'Terry' },
   20: { question: '「客戶都要掛在羽昇底下」是否也適用 GWS；直銷要不要調整', owner: '後勤' },
   21: { question: '能否取得系統設定的用量上限數字', owner: 'Ray' },
   22: { question: 'Gemini Enterprise 能否取得用量和 token 數', owner: 'Ray' },
@@ -22,6 +21,7 @@ export const pendingItems = {
   28: { question: '轉入的客戶資料由誰來填寫', owner: 'Connie' },
   29: { question: '經銷商主檔要有哪些欄位', owner: 'Connie' },
   30: { question: '到期前 1 天要不要再寄一次通知', owner: '待指定' },
+  32: { question: 'GWS 版本的「類別」清單（依使用者提供的 Google 試算表確認）', owner: '待確認' },
   31: { question: '登入與註冊流程細節：邀請信註冊、帳號已存在時的驗證信、經銷商替客戶開帳號', owner: '待討論' },
 } as const;
 

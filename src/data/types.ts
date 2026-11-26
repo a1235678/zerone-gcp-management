@@ -200,6 +200,8 @@ export interface Subscription {
   term: ContractTerm;
   /** 目前使用的 Google 方案（下單時的快照：SKU ID、Offer ID、方案內容） */
   offer?: OfferSnapshot;
+  /** 已設定的 Google 續約設定（續約方式選「Google 續約設定」時，到期由 Google 自動續約） */
+  googleRenewal?: { plan: string; seats: number; offer?: OfferSnapshot; setAt: string; opId: string };
   /** 不續約：客戶合約到期後不再續約（不寄到期通知） */
   renewalCancelled?: { at: string; by: string; note: string };
   lastSyncedAt: string;
@@ -248,6 +250,11 @@ export interface OperationPayload {
   domain?: string;
   /** 選擇的 Google 方案快照（SKU ID、Offer ID、方案內容）：新訂、續約、中途升版要選（2026/11/24） */
   offer?: OfferSnapshot;
+  /** 彈性方案的起訖日：到期日系統自動排程取消合約（2026/11/26） */
+  flexStartAt?: string;
+  flexEndAt?: string;
+  /** 通知信收件人（2026/11/26：購買畫面可以複選，也可以自由輸入 Email） */
+  notifyEmails?: string[];
   /** 客戶轉入用 Cloud Identity ID 找客戶（和網域二選一，跟 Google 轉入畫面一樣，2026/11/24） */
   cloudIdentityId?: string;
   /** 新訂：第一個使用者的帳號（公司網域的信箱）與驗證信箱（不是公司網域，2026/11/24） */
@@ -270,6 +277,16 @@ export interface OperationPayload {
   renewMonths?: number;
   /** 續約期間選「自訂」時的新合約到期日 */
   renewEndAt?: string;
+  /** 勾選「自行修改起始日」時的新合約起日（2026/11/26） */
+  renewStartAt?: string;
+  /**
+   * 續約方式（2026/11/26，後端分成兩種）：
+   * googleSettings：設定 Google 的續約設定，到期由 Google 自動續約（版本不變、人數不減時）；
+   * scheduled：排程續約，到期由系統送出（續約升降版、減人數時）。
+   */
+  renewMode?: 'googleSettings' | 'scheduled';
+  /** 續約是升版、降版或版本不變，讓後端知道要怎麼處理（第一階段：先改成彈性，再升降版） */
+  planChange?: 'up' | 'down' | 'same';
   /** 排程執行的啟用時間（時:分，GMT+8）；新購、加購要在 16:00 之後（2026/11/24） */
   scheduledTime?: string;
   /** 續約後的新合約起迄 */
@@ -323,7 +340,7 @@ export interface NewOperationInput {
 export interface OrderAnalysis {
   execution: ExecutionMode;
   /** 執行方式還沒定案時，對應的待確認編號 */
-  pendingId?: 16 | 17;
+  pendingId?: 16;
   planChange?: 'up' | 'down' | 'same';
   /** 續約後與目前的席次差 */
   seatChange?: number;
@@ -333,6 +350,8 @@ export interface OrderAnalysis {
   defaultDate?: string;
   newStartsAt?: string;
   newExpiresAt?: string;
+  /** 續約方式：Google 續約設定或排程續約 */
+  renewMode?: 'googleSettings' | 'scheduled';
 }
 export type OperationAction = 'runSchedule' | 'cancelSchedule' | 'simulateSuccess' | 'simulateFailure' | 'retry' | 'completeManual' | 'markManual' | 'simulateSync';
 
@@ -538,7 +557,8 @@ export interface Reconciliation {
 
 // ── 排程 ───────────────────────────────
 export type ScheduleKind = 'once' | 'monthly' | 'yearly';
-export type ScheduleAction = 'new' | 'addSeats' | 'renew' | 'upgrade' | 'sync';
+/** cancelContract：彈性方案到期自動取消合約（2026/11/26） */
+export type ScheduleAction = 'new' | 'addSeats' | 'renew' | 'upgrade' | 'sync' | 'cancelContract';
 export type ScheduleStatus = 'waiting' | 'running' | 'done' | 'failed' | 'cancelled';
 export interface Schedule {
   id: string;
@@ -647,6 +667,12 @@ export interface Role {
   permissions: Record<ResourceKey, PermissionLevel>;
   /** 是否能看到價格（金額）；看不到時畫面上的金額以「••••」顯示（2026/11/24） */
   canSeePrice: boolean;
+  /** 特殊功能（2026/11/26）：系統管理員才看得到「使用者」「角色管理」 */
+  isSystemAdmin: boolean;
+  /** 業務性質：可以被指定為客戶的負責業務 */
+  isSales: boolean;
+  /** PM 性質 */
+  isPm: boolean;
 }
 export interface RoleListItem extends Role {
   orgName: string;
@@ -698,6 +724,8 @@ export interface Plan {
   id: string;
   productId: string;
   name: string;
+  /** 類別（2026/11/26）：選項暫定，等試算表確認後再改 */
+  category: string;
   tier: number;
   createdAt: string;
 }
