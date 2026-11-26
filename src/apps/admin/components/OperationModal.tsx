@@ -760,36 +760,44 @@ export function OperationModal({
       )}
 
 
-      {/* 日期與時間（2026/11/26：整個搬到通知信上方） */}
-      {isFlex && (
-        <fieldset className="plain-fieldset flex-period">
+      {/* 日期與時間：一般排程與彈性方案共用同一個區塊，只有欄位不同 */}
+      {(isFlex || (analysis.execution === 'schedule' && type !== 'renewal')) && (
+        <fieldset className="plain-fieldset date-time-block">
           <legend className="form-field__label">
-            日期與時間（彈性方案的起訖日） <span className="form-field__req">必填</span>
+            日期與時間{isFlex && '（彈性方案的起訖日）'} <span className="form-field__req">必填</span>
           </legend>
           <div className="form-grid">
-            <FormField
-              label={type === 'renewal' ? '起日（新合約起日）' : '起日（排程啟用日）'}
-              required
-              message={show('flexStartAt') ?? show('scheduledAt') ?? show('renewStartAt')}
-              state={st('flexStartAt') ?? st('scheduledAt') ?? st('renewStartAt')}
-              help="起日就是送出 Google 的日子，不用另外設定啟用日。"
-            >
-              {(p) => (
-                <div>
-                  <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={flexStartAt} onChange={(e) => setFlexStart(e.target.value)} />
-                  <div className="inline flex-period__months" role="group" aria-label="依起日自動算訖日">
-                    {[1, 2, 3].map((n) => (
-                      <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
-                        {n} 個月
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </FormField>
-            <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按起日下方的按鈕自動算，也可以手動改。">
-              {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
-            </FormField>
+            {isFlex ? (
+              <>
+                <FormField
+                  label={type === 'renewal' ? '起日（新合約起日）' : '起日（排程啟用日）'}
+                  required
+                  message={show('flexStartAt') ?? show('scheduledAt') ?? show('renewStartAt')}
+                  state={st('flexStartAt') ?? st('scheduledAt') ?? st('renewStartAt')}
+                  help="起日就是送出 Google 的日子，不用另外設定啟用日。"
+                >
+                  {(p) => (
+                    <div>
+                      <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={flexStartAt} onChange={(e) => setFlexStart(e.target.value)} />
+                      <div className="inline date-time-block__months" role="group" aria-label="依起日自動算訖日">
+                        {[1, 2, 3].map((n) => (
+                          <button key={n} type="button" className="btn btn--sm" onClick={() => flexMonths(n)}>
+                            {n} 個月
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </FormField>
+                <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按起日下方的按鈕自動算，也可以手動改。">
+                  {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
+                </FormField>
+              </>
+            ) : (
+              <FormField label="啟用日" required message={show('scheduledAt')} state={st('scheduledAt')} help="排程在這天由系統送 Google，可以到「GWS 排程中心」查看或取消。">
+                {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={date} onChange={(e) => setScheduledAt(e.target.value)} />}
+              </FormField>
+            )}
             {analysis.execution === 'schedule' && afternoon && (
               <FormField
                 label="啟用時間（GMT+8）"
@@ -802,30 +810,11 @@ export function OperationModal({
               </FormField>
             )}
           </div>
-          <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
-            送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
-          </p>
-        </fieldset>
-      )}
-      {!isFlex && analysis.execution === 'schedule' && type !== 'renewal' && (
-        <fieldset className="plain-fieldset">
-          <legend className="form-field__label">日期與時間</legend>
-          <div className="form-grid">
-            <FormField label="啟用日" required message={show('scheduledAt')} state={st('scheduledAt')} help="排程在這天由系統送 Google，可以到「GWS 排程中心」查看或取消。">
-              {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={date} onChange={(e) => setScheduledAt(e.target.value)} />}
-            </FormField>
-            {analysis.execution === 'schedule' && afternoon && (
-              <FormField
-                label="啟用時間（GMT+8）"
-                required
-                message={show('scheduledTime')}
-                state={st('scheduledTime')}
-                help="新購、加購一律排在下午 4 點（GMT+8）之後。"
-              >
-                {(p) => <input {...p} className="input" type="time" min={AFTERNOON_START} max="23:59" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />}
-              </FormField>
-            )}
-          </div>
+          {isFlex && (
+            <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+              送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
+            </p>
+          )}
         </fieldset>
       )}
 
