@@ -324,7 +324,7 @@ export function PlansPage() {
             <FormField label="版本名稱" required message={show('name')} state={show('name') ? 'error' : undefined} help={form.id && (plans.data?.find((x) => x.id === form.id)?.subscriptionCount ?? 0) > 0 ? '已有訂閱使用這個版本，不能改名。' : undefined}>
               {(p) => <input {...p} className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />}
             </FormField>
-            <FormField label="類別" required message={show('category')} state={show('category') ? 'error' : undefined} addon={<PendingTag id={32} />}>
+            <FormField label="類別" required message={show('category')} state={show('category') ? 'error' : undefined}>
               {(p) => (
                 <select {...p} className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                   <option value="">請選擇</option>

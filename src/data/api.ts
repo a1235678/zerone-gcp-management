@@ -2199,8 +2199,8 @@ export function getPlanList(): Promise<PlanListItem[]> {
   );
 }
 
-/** 版本類別（暫定，等試算表確認後再改，2026/11/26） */
-export const PLAN_CATEGORIES = ['Business', 'Enterprise', 'Frontline', 'Essentials', 'Education'];
+/** 版本類別（依使用者提供的試算表，2026/11/26） */
+export const PLAN_CATEGORIES = ['Google Workspace Starter', 'Google Workspace Business', 'Google Workspace Enterprise', 'Google Workspace Frontline'];
 
 export function savePlan(input: { id?: string; productId: string; name: string; category: string; tier: number }): Promise<Plan> {
   const name = input.name.trim();

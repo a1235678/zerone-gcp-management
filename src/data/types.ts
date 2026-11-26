@@ -724,7 +724,7 @@ export interface Plan {
   id: string;
   productId: string;
   name: string;
-  /** 類別（2026/11/26）：選項暫定，等試算表確認後再改 */
+  /** 類別（2026/11/26）：Google Workspace Starter／Business／Enterprise／Frontline */
   category: string;
   tier: number;
   createdAt: string;

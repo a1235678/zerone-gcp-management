@@ -116,7 +116,7 @@ Nov 5, 2026（最後更新 Nov 11, 2026）
 
 ## Prototype 調整（2026/11/26）
 
-- **版本多一個「類別」**：版本管理多一欄「類別」，新增、編輯都要選。選項先暫定 Business、Enterprise、Frontline、Essentials、Education，正式清單依使用者提供的 Google 試算表確認（待確認 #32；目前 Claude 沒有權限讀那份試算表）。
+- **版本多一個「類別」**：版本管理多一欄「類別」，新增、編輯都要選。類別依使用者提供的試算表（原待確認 #32）：Google Workspace Starter（Business Starter）、Google Workspace Business（Business Standard、Business Plus）、Google Workspace Enterprise（Enterprise Essentials、Enterprise Essentials Plus、Enterprise Starter、Enterprise Standard、Enterprise Plus）、Google Workspace Frontline（Frontline Starter、Frontline Standard、Frontline Plus）。Prototype 目前只有 4 個版本，已對應好類別。
 - **方案價錢標示 US$**：選方案時與訂閱詳情的 Google 方案價錢顯示「US$」，表示美金。
 - **購買的通知信收件人**：新訂、續約、加購／升版下方多一區「通知信要寄給誰」。系統列出建議收件人可以複選（客戶聯絡人、新約／續約業務、經銷商聯絡人、後勤；預設勾選客戶聯絡人、業務、後勤），也可以自由輸入其他 Email（可以多個）。訂單記錄收件人清單。
 - **續約**：
@@ -290,7 +290,6 @@ Terry 的 API 格式還沒拿到。先依下表做假資料，拿到格式後再
 | 28 | 轉入的客戶資料由誰來填寫 | Connie |
 | 29 | 經銷商主檔要有哪些欄位（Prototype 先做一版） | Connie |
 | 30 | 到期前 1 天要不要再寄一次通知 | 待指定 |
-| 32 | GWS 版本的「類別」清單（依試算表確認） | 待確認 |
 | 31 | 登入與註冊流程細節：邀請信註冊、帳號已存在時的驗證信、經銷商替客戶開帳號 | 待討論 |
 
 答案出來後，先更新本文件，再請 Claude Code 修改畫面。
