@@ -759,10 +759,12 @@ export function OperationModal({
         </>
       )}
 
+
+      {/* 日期與時間（2026/11/26：整個搬到通知信上方） */}
       {isFlex && (
         <fieldset className="plain-fieldset flex-period">
           <legend className="form-field__label">
-            彈性方案的起訖日 <span className="form-field__req">必填</span>
+            日期與時間（彈性方案的起訖日） <span className="form-field__req">必填</span>
           </legend>
           <div className="form-grid">
             <FormField
@@ -777,6 +779,17 @@ export function OperationModal({
             <FormField label="訖日" required message={show('flexEndAt')} state={st('flexEndAt')} help="按下方按鈕自動算，也可以手動改。">
               {(p) => <input {...p} className="input" type="date" min={flexStartAt || TODAY} value={flexEndAt} onChange={(e) => setFlexEndAt(e.target.value)} />}
             </FormField>
+            {analysis.execution === 'schedule' && afternoon && (
+              <FormField
+                label="啟用時間（GMT+8）"
+                required
+                message={show('scheduledTime')}
+                state={st('scheduledTime')}
+                help="新購、加購一律排在下午 4 點（GMT+8）之後。"
+              >
+                {(p) => <input {...p} className="input" type="time" min={AFTERNOON_START} max="23:59" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />}
+              </FormField>
+            )}
           </div>
           <div className="inline" style={{ marginTop: 'var(--space-2)' }}>
             {[1, 2, 3].map((n) => (
@@ -788,6 +801,27 @@ export function OperationModal({
           <p className="muted" style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-sm)' }}>
             送出後系統會在訖日 {flexEndAt ? formatDate(flexEndAt) : '—'} 自動排程取消合約，可以在「GWS 排程中心」查看或取消。
           </p>
+        </fieldset>
+      )}
+      {!isFlex && analysis.execution === 'schedule' && type !== 'renewal' && (
+        <fieldset className="plain-fieldset">
+          <legend className="form-field__label">日期與時間</legend>
+          <div className="form-grid">
+            <FormField label="啟用日" required message={show('scheduledAt')} state={st('scheduledAt')} help="排程在這天由系統送 Google，可以到「GWS 排程中心」查看或取消。">
+              {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={date} onChange={(e) => setScheduledAt(e.target.value)} />}
+            </FormField>
+            {analysis.execution === 'schedule' && afternoon && (
+              <FormField
+                label="啟用時間（GMT+8）"
+                required
+                message={show('scheduledTime')}
+                state={st('scheduledTime')}
+                help="新購、加購一律排在下午 4 點（GMT+8）之後。"
+              >
+                {(p) => <input {...p} className="input" type="time" min={AFTERNOON_START} max="23:59" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />}
+              </FormField>
+            )}
+          </div>
         </fieldset>
       )}
 
@@ -819,22 +853,6 @@ export function OperationModal({
             <li key={r}>{r}</li>
           ))}
         </ul>
-        {analysis.execution === 'schedule' && type !== 'renewal' && !isFlex && (
-          <FormField label="啟用日" required message={show('scheduledAt')} state={st('scheduledAt')} help="排程在這天由系統送 Google，可以到「GWS 排程中心」查看或取消。">
-            {(p) => <input {...p} className="input" type="date" min={TODAY} max={maxDate} value={date} onChange={(e) => setScheduledAt(e.target.value)} />}
-          </FormField>
-        )}
-        {analysis.execution === 'schedule' && afternoon && (
-          <FormField
-            label="啟用時間（GMT+8）"
-            required
-            message={show('scheduledTime')}
-            state={st('scheduledTime')}
-            help="新購、加購一律排在下午 4 點（GMT+8）之後。"
-          >
-            {(p) => <input {...p} className="input" type="time" min={AFTERNOON_START} max="23:59" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />}
-          </FormField>
-        )}
         {analysis.execution === 'manual' && (
           <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
             建立後狀態為「待人工執行」。請在 Google 後台完成後，回到這筆操作標記完成並寫下處理內容，下次同步時系統會比對確認。
