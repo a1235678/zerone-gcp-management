@@ -11,6 +11,13 @@ import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
 import { SubscriptionStatusTag, WorkOrderStatusTag } from '../tags';
 
+/**
+ * 首頁先藏起 GCP 與執行單相關的區塊（2026/11/26）：GCP 第一階段不納入、執行單放第二階段。
+ * 要顯示時把這兩個開關改成 true 即可，程式都還在。
+ */
+const SHOW_GCP = false;
+const SHOW_WORK_ORDERS = false;
+
 export function HomePage() {
   const { can } = usePermission();
   const dash = useAsync(getDashboard);
@@ -40,6 +47,7 @@ export function HomePage() {
           tone={d.expiring.length ? 'warning' : undefined}
           sub={<Link to="/products/gws?status=expiring">查看即將到期</Link>}
         />
+        {SHOW_WORK_ORDERS && (
         <Stat
           label="執行單"
           value={toProcess}
@@ -50,6 +58,7 @@ export function HomePage() {
             </Link>
           }
         />
+        )}
         <Stat
           label="Google 處理中"
           value={d.operationIssues.length}
@@ -57,11 +66,11 @@ export function HomePage() {
           tone={gwsFailed ? 'danger' : undefined}
           sub={gwsFailed ? <span className="text-danger">其中失敗 {gwsFailed} 筆，請到 GWS 訂閱或客戶詳情處理</span> : '沒有失敗的操作'}
         />
-        {can('gcpUsage') && <Stat label="GCP 近 30 天費用" value={formatUsd(d.gcp.totalCostCents, 0)} unit="USD" sub={<>較前期 {formatPct(gcpChange)}</>} />}
+        {SHOW_GCP && can('gcpUsage') && <Stat label="GCP 近 30 天費用" value={formatUsd(d.gcp.totalCostCents, 0)} unit="USD" sub={<>較前期 {formatPct(gcpChange)}</>} />}
       </StatGrid>
 
       <div className="stack">
-        <div className="split split--even">
+        <div className={SHOW_WORK_ORDERS ? 'split split--even' : undefined}>
           <Card
             title="到期訂閱"
             bodyless
@@ -98,6 +107,7 @@ export function HomePage() {
             </ul>
           </Card>
 
+          {SHOW_WORK_ORDERS && (
           <Card
             title="近期執行單"
             bodyless
@@ -135,9 +145,10 @@ export function HomePage() {
               ))}
             </ul>
           </Card>
+          )}
         </div>
 
-        {can('gcpUsage') && (
+        {SHOW_GCP && can('gcpUsage') && (
         <Card
           title="GCP 用量摘要"
           actions={
