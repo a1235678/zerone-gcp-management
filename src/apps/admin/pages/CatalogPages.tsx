@@ -207,16 +207,12 @@ export function PlansPage() {
   const plans = useAsync(getPlanList, [version]);
   const products = useAsync(getProducts);
 
-  // 同一個類別只在第一列顯示類別名稱，像試算表合併儲存格那樣
-  const firstOfCategory = new Set(
-    (plans.data ?? []).filter((p, i, all) => i === 0 || all[i - 1].category !== p.category).map((p) => p.id),
-  );
   const columns: Column<PlanListItem>[] = [
     {
       key: 'category',
       header: '類別',
       minWidth: 200,
-      render: (p) => (firstOfCategory.has(p.id) ? <strong>{p.category}</strong> : <span className="visually-hidden">{p.category}</span>),
+      render: (p) => p.category,
     },
     { key: 'name', header: '版本', render: (p) => <span className="table__primary">{p.name}</span> },
     {
