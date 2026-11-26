@@ -2299,22 +2299,46 @@ button.topbar__user:hover {
 }
 
 /* 購買通知信收件人 */
-.notify-recipients__list {
+.notify-recipients__chips {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.notify-recipients__item {
-  display: flex;
-  align-self: flex-start;
-  align-items: flex-start;
-  text-align: left;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  font-size: var(--text-sm);
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
 }
-.notify-recipients__item input {
-  margin-top: 3px;
+.notify-recipients__chip {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle, var(--color-surface));
+  font-size: var(--text-sm);
+  text-align: left;
+}
+.notify-recipients__chip-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.notify-recipients__chip button {
+  display: grid;
   flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.notify-recipients__chip button:hover {
+  background: var(--color-border);
+  color: var(--color-text);
 }
 .notify-recipients__email {
   display: block;

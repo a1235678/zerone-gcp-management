@@ -611,6 +611,21 @@ export function getNotifySuggestions(customerId?: string, dealerId?: string): Pr
   return delay(out);
 }
 
+/**
+ * 通知信收件人的搜尋名單（2026/11/26）：預設建議的人，加上所有啟用中的內部人員與這家經銷商的聯絡人。
+ * 使用者在畫面上搜尋姓名、Email 或身分後加入；名單外的人可以直接輸入 Email。
+ */
+export async function getNotifyDirectory(customerId?: string, dealerId?: string): Promise<NotifySuggestion[]> {
+  const out = [...(await getNotifySuggestions(customerId, dealerId))];
+  const roleName = (id: string) => db.roles.find((r) => r.id === id)?.name ?? '內部人員';
+  for (const u of db.users.filter((x) => x.orgType === 'internal' && x.status === 'active')) out.push({ name: u.name, email: u.email, role: roleName(u.roleId) });
+  const c = customerId ? customerOf(customerId) : undefined;
+  const d = db.dealers.find((x) => x.id === (dealerId ?? c?.dealerId));
+  if (d && !d.isDirect) for (const ct of d.contacts) if (ct.email) out.push({ name: ct.name, email: ct.email, role: `經銷商聯絡人（${d.shortNames[0] ?? d.name}）` });
+  const seen = new Set<string>();
+  return out.filter((x) => (seen.has(x.email) ? false : (seen.add(x.email), true)));
+}
+
 /** 可以指定為負責業務的內部帳號（業務、業務主管） */
 export function getSalesPeople(): Promise<string[]> {
   // 角色勾了「業務性質」的內部帳號（2026/11/26）
