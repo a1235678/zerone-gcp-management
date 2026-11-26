@@ -957,7 +957,8 @@ export const setGoogleDownForPrototype = (down: boolean) => {
 export function fetchOffersFromGoogle(customerId: string | undefined, version: string): Promise<OfferLookup> {
   if (googleDown) return new Promise((_, reject) => setTimeout(() => reject(new Error('Google 沒有回應，請稍後按「重新整理」再試')), 700));
   const sku = gwsSkus.find((k) => k.version === version);
-  if (!sku) return fail('Google 上找不到這個版本的 SKU');
+  // Google 上沒有這個版本的 SKU（或目前沒有可販售的方案）：回傳空清單，畫面顯示「目前沒有可販售的方案」
+  if (!sku) return new Promise((resolve) => setTimeout(() => resolve({ skuId: '—', skuName: version, version, offers: [], fetchedAt: now() }), 700));
   const hasGws = Boolean(customerId && db.subscriptions.some((x) => x.customerId === customerId && x.status !== 'cancelled'));
   const offers = sku.offers.filter((o) => !(o.planType === 'trial' && hasGws));
   return new Promise((resolve) =>
@@ -2195,12 +2196,17 @@ export function getPlanList(): Promise<PlanListItem[]> {
           subscriptionCount: db.subscriptions.filter((s) => s.plan === p.name && s.status !== 'cancelled').length,
         };
       })
-      .sort((a, b) => a.productId.localeCompare(b.productId) || a.tier - b.tier),
+      // 先依類別（試算表的順序），再依等級
+      .sort((a, b) => a.productId.localeCompare(b.productId) || categoryOrder(a.category) - categoryOrder(b.category) || a.tier - b.tier),
   );
 }
 
 /** 版本類別（依使用者提供的試算表，2026/11/26） */
 export const PLAN_CATEGORIES = ['Google Workspace Starter', 'Google Workspace Business', 'Google Workspace Enterprise', 'Google Workspace Frontline'];
+const categoryOrder = (c: string) => {
+  const i = PLAN_CATEGORIES.indexOf(c);
+  return i === -1 ? PLAN_CATEGORIES.length : i;
+};
 
 export function savePlan(input: { id?: string; productId: string; name: string; category: string; tier: number }): Promise<Plan> {
   const name = input.name.trim();

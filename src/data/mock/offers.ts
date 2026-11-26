@@ -55,7 +55,7 @@ export const gwsSkus: GwsSku[] = [
   {
     skuId: 'S6sH51ibL9dQY8',
     name: 'Google Workspace Enterprise Starter',
-    version: null,
+    version: 'Enterprise Starter',
     offers: [
       o('SHIfJfVXmYa5', 'annual', 1, 100000, 'monthly', 1100),
       o('Snw7F5ZZlYGd', 'flexible', 1, 100000, 'monthly', 1320),
@@ -72,6 +72,6 @@ export const gwsSkus: GwsSku[] = [
       o('SesF1exMnth6K', 'flexible', 1, 100000, 'monthly', 2760),
     ],
   },
-  { skuId: 'S8hy74JT1ZkLiq', name: 'Google Workspace Frontline Standard', version: null, offers: [] },
-  { skuId: 'SEStzAYQYpLwSc', name: 'Google Workspace Frontline Plus', version: null, offers: [] },
+  { skuId: 'S8hy74JT1ZkLiq', name: 'Google Workspace Frontline Standard', version: 'Frontline Standard', offers: [] },
+  { skuId: 'SEStzAYQYpLwSc', name: 'Google Workspace Frontline Plus', version: 'Frontline Plus', offers: [] },
 ];

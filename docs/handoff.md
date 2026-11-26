@@ -116,7 +116,7 @@ Nov 5, 2026（最後更新 Nov 11, 2026）
 
 ## Prototype 調整（2026/11/26）
 
-- **版本多一個「類別」**：版本管理多一欄「類別」，新增、編輯都要選。類別依使用者提供的試算表（原待確認 #32）：Google Workspace Starter（Business Starter）、Google Workspace Business（Business Standard、Business Plus）、Google Workspace Enterprise（Enterprise Essentials、Enterprise Essentials Plus、Enterprise Starter、Enterprise Standard、Enterprise Plus）、Google Workspace Frontline（Frontline Starter、Frontline Standard、Frontline Plus）。Prototype 目前只有 4 個版本，已對應好類別。
+- **版本多一個「類別」**：版本管理多一欄「類別」，新增、編輯都要選。類別依使用者提供的試算表（原待確認 #32）：Google Workspace Starter（Business Starter）、Google Workspace Business（Business Standard、Business Plus）、Google Workspace Enterprise（Enterprise Essentials、Enterprise Essentials Plus、Enterprise Starter、Enterprise Standard、Enterprise Plus）、Google Workspace Frontline（Frontline Starter、Frontline Standard、Frontline Plus）。版本清單已照這張表全部建好（Enterprise Plus 也加回來），版本管理依「類別 → 版本」排列，同一個類別只在第一列顯示類別名稱。等級暫依表上的順序 1–11（升降版判斷用，跨類別的高低要再確認）。
 - **方案價錢標示 US$**：選方案時與訂閱詳情的 Google 方案價錢顯示「US$」，表示美金。
 - **購買的通知信收件人**：新訂、續約、加購／升版下方多一區「通知信要寄給誰」。系統列出建議收件人可以複選（客戶聯絡人、新約／續約業務、經銷商聯絡人、後勤；預設勾選客戶聯絡人、業務、後勤），也可以自由輸入其他 Email（可以多個）。訂單記錄收件人清單。
 - **續約**：

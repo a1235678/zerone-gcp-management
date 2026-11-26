@@ -207,7 +207,18 @@ export function PlansPage() {
   const plans = useAsync(getPlanList, [version]);
   const products = useAsync(getProducts);
 
+  // 同一個類別只在第一列顯示類別名稱，像試算表合併儲存格那樣
+  const firstOfCategory = new Set(
+    (plans.data ?? []).filter((p, i, all) => i === 0 || all[i - 1].category !== p.category).map((p) => p.id),
+  );
   const columns: Column<PlanListItem>[] = [
+    {
+      key: 'category',
+      header: '類別',
+      minWidth: 200,
+      render: (p) => (firstOfCategory.has(p.id) ? <strong>{p.category}</strong> : <span className="visually-hidden">{p.category}</span>),
+    },
+    { key: 'name', header: '版本', render: (p) => <span className="table__primary">{p.name}</span> },
     {
       key: 'tier',
       header: '等級',
@@ -218,8 +229,6 @@ export function PlansPage() {
         </span>
       ),
     },
-    { key: 'name', header: '版本名稱', render: (p) => <span className="table__primary">{p.name}</span> },
-    { key: 'category', header: '類別', render: (p) => <StatusTag tone="neutral">{p.category}</StatusTag> },
     { key: 'product', header: '產品', render: (p) => `${p.brandName} › ${p.productName}` },
     { key: 'subs', header: '使用中訂閱', align: 'right', render: (p) => <span className="tnum">{p.subscriptionCount}</span> },
     {
@@ -268,7 +277,7 @@ export function PlansPage() {
     <>
       <PageHeader
         title="GWS 版本"
-        description="版本依等級排序，數字越大版本越高。續約、中途升版時，系統用等級判斷是升版還是降版。"
+        description="依類別、再依版本排列。等級數字越大版本越高，續約、中途升版時系統用等級判斷是升版還是降版。"
         actions={
           can("catalog", "create") ? (
             <button
