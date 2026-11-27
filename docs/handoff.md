@@ -323,6 +323,14 @@ Terry 提供另一個網站的 Swagger 文件（格式會跟這個系統一樣�
   5. 錯誤回應 `error` 的格式（字串或物件），目前兩種都能顯示。
 - **測試站的連線限制**：從雲端環境連 `stageapi.wingwill.com.tw` 在 TLS 握手時就被斷線，可能有 IP 限制；請在公司網路的瀏覽器測試。
 
+## 部署（2026/11/27）
+
+- **GitHub Pages**：假資料展示版，照舊（`.github/workflows/deploy.yml`）。
+- **GCP VM**：串 API 的版本，掛在 `https://devtools.dev.terrylinla.com/admin/`（根目錄是後端的 Dev Tools，不動）。推到 `main` 後 GitHub Actions 建置，用 SSH（rsync）傳到 VM 的 `/var/www/zerone-admin/releases/`，再切換 `current` 連結，保留最近 5 版（`.github/workflows/deploy-vm.yml`）。
+- **VM 一次性設定**：`deploy/vm-setup.sh` 建立部署帳號 `zerone-deploy`、網站目錄、SSH 金鑰，並在 nginx 加 `/admin/` 設定（`deploy/nginx-admin.conf`）。步驟見 `deploy/README.md`。
+- **API 網址**：VM 版本用 GitHub Variables 的 `VM_API_BASE`。前端和 API 如果在同一個網域，就沒有 CORS 問題。
+- **待確認**：GCP 防火牆是否允許 GitHub Actions 連 22 port；`devtools.dev.terrylinla.com` 是否由這台 VM 上的 nginx 提供；VM 版本要接的 API 網址。
+
 ## 給 Claude Code 的第一個任務
 
 請先讀完本文件，再開始。範圍只有管理端，每一步完成後請讓使用者看過再繼續。

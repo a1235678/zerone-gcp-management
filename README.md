@@ -33,6 +33,10 @@ repo 裡已經有 `.github/workflows/deploy.yml`，推到 `main` 就會自動建
 
 網站使用相對路徑與 `#/` 網址，部署在任何子路徑或靜態主機都可以直接開啟各頁。
 
+## 部署到 GCP VM（串 API 用）
+
+推到 `main` 也會自動部署到 https://devtools.dev.terrylinla.com/admin/（`.github/workflows/deploy-vm.yml`）。第一次要先在 VM 上執行設定腳本，並把 4 個 secret 加到 GitHub，步驟見 [deploy/README.md](deploy/README.md)。
+
 ## 資料夾
 
 | 路徑 | 內容 |

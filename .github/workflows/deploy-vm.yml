@@ -1,0 +1,82 @@
+# 推到 main 時自動建置，並部署到 GCP VM：https://devtools.dev.terrylinla.com/admin/
+# 第一次使用前：在 VM 上執行 deploy/vm-setup.sh，再把它印出的 4 個值加到
+# GitHub repo → Settings → Secrets and variables → Actions（VM_HOST、VM_USER、VM_SSH_KEY、VM_KNOWN_HOSTS）。
+# 還沒設定 secret 時，這個 workflow 會略過部署，不會失敗。
+# API 網址：在同一頁的 Variables 新增 VM_API_BASE（沒設就用程式裡的預設值）。
+name: Deploy to VM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vm-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VM_HOST: ${{ secrets.VM_HOST }}
+      VM_USER: ${{ secrets.VM_USER }}
+      WEB_ROOT: /var/www/zerone-admin
+    steps:
+      - name: 檢查是否已設定 VM
+        id: check
+        run: |
+          if [ -z "$VM_HOST" ]; then
+            echo "::notice::還沒設定 VM_HOST 等 secret，略過部署。"
+            echo "ready=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.ready == 'yes'
+        uses: actions/checkout@v4
+
+      - if: steps.check.outputs.ready == 'yes'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: steps.check.outputs.ready == 'yes'
+        run: npm ci
+
+      - name: 建置
+        if: steps.check.outputs.ready == 'yes'
+        env:
+          API_BASE: ${{ vars.VM_API_BASE }}
+        run: |
+          if [ -n "$API_BASE" ]; then export VITE_API_BASE="$API_BASE"; fi
+          npm run build
+
+      - name: 設定 SSH
+        if: steps.check.outputs.ready == 'yes'
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: 上傳並切換到新版本
+        if: steps.check.outputs.ready == 'yes'
+        run: |
+          RELEASE="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+          rsync -az --delete -e "ssh -o StrictHostKeyChecking=yes" dist/ "$VM_USER@$VM_HOST:$WEB_ROOT/releases/$RELEASE/"
+          # 換 current 連結（瞬間切換），只保留最近 5 個版本，方便出事時切回上一版
+          ssh -o StrictHostKeyChecking=yes "$VM_USER@$VM_HOST" bash -s -- "$WEB_ROOT" "$RELEASE" <<'SH'
+          set -euo pipefail
+          cd "$1"
+          ln -sfn "releases/$2" current.tmp
+          mv -Tf current.tmp current
+          ls -1dt releases/*/ | grep -v placeholder | tail -n +6 | xargs -r rm -rf
+          echo "目前版本：$(readlink current)"
+          SH
