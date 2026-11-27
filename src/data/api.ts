@@ -96,9 +96,8 @@ import { apiLogout, type ApiAuth } from './remote/auth';
 /** Prototype 的「今天」，到期判斷、Dashboard 都以這天為準 */
 export const TODAY = '2026-11-05';
 /** 「即將到期」的天數門檻 */
-export const EXPIRING_DAYS = 30;
-/** 首頁的「快到期」看 90 天內（2026/11/27）；訂閱狀態的「即將到期」仍是 30 天 */
-export const HOME_EXPIRING_DAYS = 90;
+/** 「即將到期」：到期日在 90 天內（2026/11/27 由 30 天改為 90 天；首頁與訂閱清單一致） */
+export const EXPIRING_DAYS = 90;
 
 /** 目前登入者。由 login() 設定；頁面請用 getSession() 取得 */
 export const currentUser = { id: '', name: '', role: '', roleId: '', email: '' };
@@ -2312,7 +2311,7 @@ export async function getDashboard() {
     liveSubscriptions: live.length,
     expiring: live.filter((s) => s.status === 'expiring'),
     /** 90 天內到期，依到期日排序（getSubscriptions 已排序） */
-    expiringSoon: live.filter((s) => daysUntil(s.expiresAt) <= HOME_EXPIRING_DAYS),
+    expiringSoon: live.filter((s) => daysUntil(s.expiresAt) <= EXPIRING_DAYS),
     orderCounts: {
       draft: count('draft'),
       salesReview: count('salesReview'),

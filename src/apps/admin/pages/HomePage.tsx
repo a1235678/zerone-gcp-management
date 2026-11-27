@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { HOME_EXPIRING_DAYS, daysUntil, getDashboard } from '@data/api';
+import { EXPIRING_DAYS, daysUntil, getDashboard } from '@data/api';
 import { workOrderTypeLabel } from '@data/labels';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
@@ -47,13 +47,13 @@ export function HomePage() {
         <Stat label="啟用客戶" value={d.activeCustomers} unit="個" sub={<Link to="/customers">共 {d.totalCustomers} 個客戶</Link>} />
         <Stat label="GWS 總席次" value={formatNumber(d.totalSeats)} unit="席" sub={<Link to="/products/gws">{d.liveSubscriptions} 筆有效訂閱</Link>} />
         <Stat
-          label={`${HOME_EXPIRING_DAYS} 天內到期`}
+          label={`${EXPIRING_DAYS} 天內到期`}
           value={soon.length}
           unit="筆"
           tone={soon.length ? 'warning' : undefined}
           sub={soon.length > renewing.length ? `其中 ${soon.length - renewing.length} 筆客戶表示不續約` : '依到期日列在下方'}
         />
-        <Stat label="快到期席次" value={formatNumber(soonSeats)} unit="席" sub={`${HOME_EXPIRING_DAYS} 天內到期的目前席次合計（不含不續約）`} />
+        <Stat label="快到期席次" value={formatNumber(soonSeats)} unit="席" sub={`${EXPIRING_DAYS} 天內到期的目前席次合計（不含不續約）`} />
         <Stat label="快到期金額" value={formatUsdLabel(soonAmount, 0)} sub="上次向原廠下單的金額合計（不含不續約）" />
         {SHOW_WORK_ORDERS && (
         <Stat
@@ -88,7 +88,7 @@ export function HomePage() {
               </Link>
             }
           >
-            <p className="card-note">{HOME_EXPIRING_DAYS} 天內到期，依到期日排序。「上次購買」是上次向原廠（Google）新訂或續約的席次與金額，之後加購的不算。</p>
+            <p className="card-note">{EXPIRING_DAYS} 天內到期，依到期日排序。「上次購買」是上次向原廠（Google）新訂或續約的席次與金額，之後加購的不算。</p>
             <DataTable
               caption="快到期的訂閱"
               rows={soon}
@@ -141,7 +141,7 @@ export function HomePage() {
                   ),
                 },
               ]}
-              empty={<EmptyState title={`${HOME_EXPIRING_DAYS} 天內沒有到期的訂閱`} />}
+              empty={<EmptyState title={`${EXPIRING_DAYS} 天內沒有到期的訂閱`} />}
             />
           </Card>
 

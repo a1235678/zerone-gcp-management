@@ -1,7 +1,7 @@
 import { gwsSkus } from './offers';
 import type { OfferSnapshot, Subscription } from '../types';
 
-// GWS 訂閱。status 只存「已取消」；「使用中／即將到期」由資料層依到期日計算（30 天內為即將到期）。
+// GWS 訂閱。status 只存「已取消」；「使用中／即將到期」由資料層依到期日計算（90 天內為即將到期，2026/11/27）。
 // 席次已反映「已完成」的執行單結果，例如 WO-1104-003 把 S009 調到 75 席。
 type Seed = [id: string, customerId: string, plan: string, seats: number, expiresAt: string, cancelled?: boolean, lastSyncedAt?: string];
 
