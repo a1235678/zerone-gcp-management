@@ -841,7 +841,7 @@ export function OperationModal({
           dealerId={target.dealerId}
           extra={
             newCustomer
-              ? [{ name: newCustomer.contactName, email: newCustomer.contactEmail, role: '客戶聯絡人', defaultOn: true }]
+              ? [{ name: newCustomer.contactName, email: newCustomer.contactEmail, role: '客戶聯絡人' }]
               : []
           }
           value={notifyEmails}

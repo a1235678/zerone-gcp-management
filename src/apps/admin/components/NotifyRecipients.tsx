@@ -7,8 +7,8 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * 購買的通知信要寄給誰（2026/11/26 改成搜尋加人）：
- * - 一開始帶入系統建議的收件人（客戶聯絡人、負責業務、後勤），可以移除。
- * - 輸入姓名、Email 或身分搜尋內部人員與經銷商聯絡人，點選加入。
+ * - 不預設帶入任何人（2026/11/27）。
+ * - 輸入姓名、Email 或身分搜尋，點選加入；跟這筆訂單相關的人（客戶聯絡人、負責業務、後勤）排在最前面。
  * - 名單外的人直接輸入 Email 按 Enter（或逗號）加入，可以一次貼上多個。
  * value 是最後的收件人 Email 清單（不重複）。
  */
@@ -34,15 +34,6 @@ export function NotifyRecipients({
     return [...extra.filter((x) => EMAIL.test(x.email)), ...(dir.data ?? [])].filter((x) => (seen.has(x.email) ? false : (seen.add(x.email), true)));
   }, [dir.data, extra]);
   const byEmail = new Map(people.map((p) => [p.email.toLowerCase(), p]));
-
-  // 第一次載入時，帶入系統建議的收件人
-  const [inited, setInited] = useState(false);
-  useEffect(() => {
-    if (inited || !dir.data) return;
-    setInited(true);
-    if (value.length === 0) onChange(people.filter((o) => o.defaultOn).map((o) => o.email));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dir.data]);
 
   const listId = useId();
   const wrap = useRef<HTMLDivElement>(null);
@@ -92,7 +83,7 @@ export function NotifyRecipients({
     <fieldset className="plain-fieldset notify-recipients">
       <legend className="form-field__label">通知信要寄給誰</legend>
       <p className="muted" style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--text-sm)' }}>
-        建立後與處理完成時寄通知信。已先帶入建議的收件人，可以移除；要加人請搜尋姓名或 Email，名單外的人直接輸入 Email 按 Enter。
+        建立後與處理完成時寄通知信。搜尋姓名或 Email 加人，名單外的人直接輸入 Email 按 Enter。
       </p>
 
       <ul className="notify-recipients__chips" aria-label="收件人">
@@ -116,7 +107,7 @@ export function NotifyRecipients({
             </li>
           );
         })}
-        {value.length === 0 && <li className="muted">{dir.loading ? '載入中…' : '還沒有收件人。'}</li>}
+        {value.length === 0 && <li className="muted">還沒有收件人，不加就不寄。</li>}
       </ul>
 
       <div className="combobox notify-recipients__search" ref={wrap}>

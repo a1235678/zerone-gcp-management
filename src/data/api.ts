@@ -590,24 +590,22 @@ export interface NotifySuggestion {
   email: string;
   /** 例如「客戶聯絡人」「續約業務」「後勤」 */
   role: string;
-  /** 預設勾選 */
-  defaultOn?: boolean;
 }
 
 export function getNotifySuggestions(customerId?: string, dealerId?: string): Promise<NotifySuggestion[]> {
   const out: NotifySuggestion[] = [];
   const c = customerId ? customerOf(customerId) : undefined;
-  if (c?.contactEmail) out.push({ name: c.contactName, email: c.contactEmail, role: '客戶聯絡人', defaultOn: true });
+  if (c?.contactEmail) out.push({ name: c.contactName, email: c.contactEmail, role: '客戶聯絡人' });
   const userByName = (name: string) => db.users.find((u) => u.orgType === 'internal' && u.name === name && u.status === 'active');
   for (const a of c?.salesAssignments ?? []) {
     if (a.product !== 'GWS') continue;
     const u = userByName(a.salesName);
-    if (u) out.push({ name: u.name, email: u.email, role: a.term === 'new' ? '新約業務' : '續約業務', defaultOn: true });
+    if (u) out.push({ name: u.name, email: u.email, role: a.term === 'new' ? '新約業務' : '續約業務' });
   }
   const d = db.dealers.find((x) => x.id === (dealerId ?? c?.dealerId));
   if (d && !d.isDirect && d.contactEmail) out.push({ name: d.contactName, email: d.contactEmail, role: `經銷商（${d.shortNames[0] ?? d.name}）` });
   for (const u of db.users.filter((x) => x.orgType === 'internal' && x.roleId === 'R14' && x.status === 'active'))
-    out.push({ name: u.name, email: u.email, role: '後勤', defaultOn: true });
+    out.push({ name: u.name, email: u.email, role: '後勤' });
   return delay(out);
 }
 

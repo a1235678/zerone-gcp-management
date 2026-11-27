@@ -118,7 +118,7 @@ Nov 5, 2026（最後更新 Nov 11, 2026）
 
 - **版本多一個「類別」**：版本管理多一欄「類別」，新增、編輯都要選。類別依使用者提供的試算表（原待確認 #32）：Google Workspace Starter（Business Starter）、Google Workspace Business（Business Standard、Business Plus）、Google Workspace Enterprise（Enterprise Essentials、Enterprise Essentials Plus、Enterprise Starter、Enterprise Standard、Enterprise Plus）、Google Workspace Frontline（Frontline Starter、Frontline Standard、Frontline Plus）。版本清單已照這張表全部建好（Enterprise Plus 也加回來），版本管理依「類別 → 版本」排列，每一列都顯示類別。等級依表上的順序 1–11：跨類別先比類別的高低（Starter < Business < Enterprise < Frontline），再比版本的高低（2026/11/26 確認）。
 - **方案價錢標示 US$**：選方案時與訂閱詳情的 Google 方案價錢顯示「US$」，表示美金。
-- **購買的通知信收件人**：新訂、續約、加購／升版下方多一區「通知信要寄給誰」。一開始先帶入建議收件人（客戶聯絡人、新約／續約業務、後勤），可以逐一移除；要加人就搜尋姓名、Email 或身分，從內部人員、客戶聯絡人、經銷商聯絡人中點選加入；名單外的人直接輸入 Email 按 Enter（或逗號）加入，也可以一次貼上多個。訂單記錄收件人清單。後端需要提供「收件人搜尋」API（依客戶／經銷商回傳可選的人與預設建議）。
+- **購買的通知信收件人**：新訂、續約、加購／升版下方多一區「通知信要寄給誰」。不預設帶入任何人（2026/11/27），沒加就不寄；要加人就搜尋姓名、Email 或身分（跟這筆訂單相關的客戶聯絡人、新約／續約業務、後勤排在最前面），從內部人員、客戶聯絡人、經銷商聯絡人中點選加入；名單外的人直接輸入 Email 按 Enter（或逗號）加入，也可以一次貼上多個。訂單記錄收件人清單。後端需要提供「收件人搜尋」API（依客戶／經銷商回傳可選的人，相關的人排前面）。
 - **續約**：
   - 新合約期間依舊合約到期日自動帶出；多一個「自行修改起始日」勾選框，勾了可以改新合約起日（不能早於今天）。
   - 續約方式分兩種（後端分成 Google 的續約設定與排程續約）：「Google 續約設定」現在就更新 Google 的續約設定，到期由 Google 自動續約，只有版本不變、人數不減時能用；「排程續約」到新合約起日由系統送出，續約升降版、減人數一定用這種。哪些情況用哪一種再跟 Terry 確認。
