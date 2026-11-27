@@ -35,7 +35,7 @@ repo 裡已經有 `.github/workflows/deploy.yml`，推到 `main` 就會自動建
 
 ## 部署到 GCP VM（串 API 用）
 
-推到 `main` 也會自動部署到 https://devtools.dev.terrylinla.com/admin/（`.github/workflows/deploy-vm.yml`）。第一次要先在 VM 上執行設定腳本，並把 4 個 secret 加到 GitHub，步驟見 [deploy/README.md](deploy/README.md)。
+推到 `main` 也會自動部署到 https://devtools.dev.terrylinla.com/admin/：GitHub Actions 把網站上傳到 Release，VM 每 2 分鐘自己下載新版本（`.github/workflows/deploy-vm.yml`）。第一次要先在 VM 上執行設定腳本，步驟見 [deploy/README.md](deploy/README.md)。
 
 ## 資料夾
 

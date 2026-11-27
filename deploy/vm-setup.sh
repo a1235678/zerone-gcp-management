@@ -1,97 +1,154 @@
 #!/usr/bin/env bash
-# VM 一次性設定：讓 GitHub Actions 可以把管理端部署到這台 VM 的 /admin/。
-# 用法（在 VM 上）：sudo bash vm-setup.sh
-# 可以重複執行：會換一把新的部署金鑰（舊的失效），其他設定不重複加。
+# VM 一次性設定：讓管理端掛在 https://devtools.<BASE_DOMAIN>/admin/，並自動更新。
+#
+# 這台 VM 的網站由 Docker 裡的 edge Caddy 提供（Terry 的 cloud-ops 部署）。這個腳本會：
+#   1. 建立帳號 zerone-deploy（沒有 sudo）與網站目錄 /var/www/zerone-admin
+#   2. 安裝更新程式與 systemd 計時器：每 2 分鐘到 GitHub Release 檢查新版本，有就下載切換
+#   3. 啟動靜態檔容器 zerone-admin，加入 edge 的 Docker 網路
+#   4. 在 edge 的 Caddyfile 加上 /admin/ 的轉發（會先顯示差異、問你同意；先備份、先驗證，失敗自動還原）
+#
+# 用法（在 VM 上）：sudo bash deploy/vm-setup.sh
+# 可以重複執行，已經做過的步驟會略過。
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-devtools.dev.terrylinla.com}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_USER="${DEPLOY_USER:-zerone-deploy}"
 WEB_ROOT="${WEB_ROOT:-/var/www/zerone-admin}"
-SNIPPET=/etc/nginx/snippets/zerone-admin.conf
-BACKUP_DIR="/root/zerone-nginx-backup-$(date +%Y%m%d%H%M%S)"
-HERE="$(cd "$(dirname "$0")" && pwd)"
+OPT=/opt/zerone-admin
+ASSUME_YES="${ASSUME_YES:-no}"
+[ "${1:-}" = "--yes" ] && ASSUME_YES=yes
 
 [ "$(id -u)" -eq 0 ] || { echo "請用 sudo 執行：sudo bash $0"; exit 1; }
+for f in Caddyfile.static compose.yml edge-caddy-snippet.caddy zerone-admin-update.sh; do
+  [ -f "$HERE/$f" ] || { echo "找不到 $HERE/$f，請在 repo 的 deploy 資料夾裡執行"; exit 1; }
+done
+command -v docker >/dev/null || { echo "這台 VM 沒有 Docker"; exit 1; }
 
-echo "== 1. 安裝 rsync =="
-command -v rsync >/dev/null || { apt-get update -qq && apt-get install -y -qq rsync; }
+echo "== 0. 找 edge Caddy =="
+EDGE="${EDGE:-$(docker ps --format '{{.Names}}' | grep -E 'infra-edge' | head -1)}"
+[ -n "$EDGE" ] || { echo "!! 找不到 edge 容器（名稱含 infra-edge）。請把 sudo docker ps 的結果給 Claude 看。"; exit 1; }
+EDGE_NETWORK="${EDGE_NETWORK:-$(docker inspect "$EDGE" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' | grep -E 'edge' | head -1)}"
+[ -n "$EDGE_NETWORK" ] || { echo "!! 找不到 edge 的 Docker 網路"; exit 1; }
+CADDYFILE="$(docker inspect "$EDGE" --format '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}')"
+[ -f "$CADDYFILE" ] || { echo "!! 找不到 edge 的 Caddyfile"; exit 1; }
+BASE_DOMAIN="$(docker exec "$EDGE" printenv BASE_DOMAIN 2>/dev/null || true)"
+echo "edge 容器：$EDGE"
+echo "edge 網路：$EDGE_NETWORK"
+echo "Caddyfile：$CADDYFILE"
+echo "網域：devtools.${BASE_DOMAIN:-（讀不到 BASE_DOMAIN）}"
 
-echo "== 2. 建立部署帳號 $DEPLOY_USER（沒有 sudo 權限）與網站目錄 $WEB_ROOT =="
+echo "== 1. 部署帳號與網站目錄 =="
+command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl; }
 id "$DEPLOY_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$DEPLOY_USER"
+# 舊做法（GitHub Actions 用 SSH 連進來）留下的金鑰不再需要，拿掉
+if [ -f "/home/$DEPLOY_USER/.ssh/authorized_keys" ]; then
+  sed -i '/github-actions-zerone-admin/d' "/home/$DEPLOY_USER/.ssh/authorized_keys"
+fi
 mkdir -p "$WEB_ROOT/releases"
-chown -R "$DEPLOY_USER:$DEPLOY_USER" "$WEB_ROOT"
-chmod 755 "$WEB_ROOT" "$WEB_ROOT/releases"
 if [ ! -e "$WEB_ROOT/current" ]; then
   mkdir -p "$WEB_ROOT/releases/placeholder"
-  echo '<!doctype html><meta charset="utf-8"><title>零壹雲管家</title><p>還沒有部署，請等 GitHub Actions 跑完。</p>' > "$WEB_ROOT/releases/placeholder/index.html"
+  echo '<!doctype html><meta charset="utf-8"><title>零壹雲管家</title><p>還沒有部署，請等幾分鐘。</p>' > "$WEB_ROOT/releases/placeholder/index.html"
   ln -sfn releases/placeholder "$WEB_ROOT/current"
-  chown -R "$DEPLOY_USER:$DEPLOY_USER" "$WEB_ROOT"
 fi
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$WEB_ROOT"
+chmod 755 "$WEB_ROOT" "$WEB_ROOT/releases"
 
-echo "== 3. 產生 GitHub Actions 專用的 SSH 金鑰 =="
-SSH_DIR="/home/$DEPLOY_USER/.ssh"
-mkdir -p "$SSH_DIR"
-TMP="$(mktemp -d)"
-ssh-keygen -q -t ed25519 -N '' -C "github-actions-zerone-admin" -f "$TMP/key"
-touch "$SSH_DIR/authorized_keys"
-grep -v 'github-actions-zerone-admin' "$SSH_DIR/authorized_keys" > "$TMP/ak" || true
-echo "restrict $(cat "$TMP/key.pub")" >> "$TMP/ak"
-cp "$TMP/ak" "$SSH_DIR/authorized_keys"
-chown -R "$DEPLOY_USER:$DEPLOY_USER" "$SSH_DIR"
-chmod 700 "$SSH_DIR"; chmod 600 "$SSH_DIR/authorized_keys"
+echo "== 2. 更新程式與每 2 分鐘的計時器 =="
+mkdir -p "$OPT"
+install -m 755 "$HERE/zerone-admin-update.sh" "$OPT/update.sh"
+install -m 644 "$HERE/Caddyfile.static" "$OPT/Caddyfile"
+install -m 644 "$HERE/compose.yml" "$OPT/compose.yml"
+cat > /etc/systemd/system/zerone-admin-update.service <<UNIT
+[Unit]
+Description=零壹雲管家管理端：檢查並下載新版本
+Wants=network-online.target
+After=network-online.target
 
-echo "== 4. nginx 設定 =="
-NGINX_DONE=no
-if command -v nginx >/dev/null; then
-  mkdir -p "$(dirname "$SNIPPET")"
-  if [ -f "$HERE/nginx-admin.conf" ]; then cp "$HERE/nginx-admin.conf" "$SNIPPET"; else
-    echo "找不到 $HERE/nginx-admin.conf，請把它跟這個腳本放在同一個資料夾"; exit 1; fi
-  mapfile -t CONFS < <(grep -RlE "server_name[^;]*\b${DOMAIN//./\\.}\b" /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | xargs -r -n1 readlink -f | sort -u)
-  if [ "${#CONFS[@]}" -eq 0 ]; then
-    echo "!! 找不到 server_name 是 $DOMAIN 的 nginx 設定，請手動在那個 server 區塊加一行：include snippets/zerone-admin.conf;"
-  else
-    BACKUPS=()
-    for f in "${CONFS[@]}"; do
-      if grep -q 'snippets/zerone-admin.conf' "$f"; then echo "已經設定過：$f"; continue; fi
-      # 備份放在 /root，不能放在 nginx 會載入的資料夾裡
-      mkdir -p "$BACKUP_DIR"; cp "$f" "$BACKUP_DIR/$(echo "$f" | tr / _)"; BACKUPS+=("$f")
-      # 在每個含這個網域的 server_name 下一行加 include
-      sed -i -E "/server_name[^;]*\b${DOMAIN//./\\.}\b[^;]*;/a\\    include snippets/zerone-admin.conf;" "$f"
-      echo "已加入 include：$f（原檔備份在 $BACKUP_DIR）"
-    done
-    if nginx -t; then
-      systemctl reload nginx 2>/dev/null || nginx -s reload
-      NGINX_DONE=yes
-    else
-      echo "!! nginx 設定檢查失敗，已還原。請把上面的錯誤訊息給 Claude 看。"
-      for f in "${BACKUPS[@]}"; do cp "$BACKUP_DIR/$(echo "$f" | tr / _)" "$f"; done
-    fi
-  fi
+[Service]
+Type=oneshot
+User=$DEPLOY_USER
+Environment=ROOT=$WEB_ROOT
+ExecStart=$OPT/update.sh
+UNIT
+cat > /etc/systemd/system/zerone-admin-update.timer <<'UNIT'
+[Unit]
+Description=零壹雲管家管理端：每 2 分鐘檢查新版本
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now zerone-admin-update.timer >/dev/null
+runuser -u "$DEPLOY_USER" -- env ROOT="$WEB_ROOT" "$OPT/update.sh" || echo "（第一次下載沒成功，計時器之後會再試）"
+echo "目前版本：$(readlink "$WEB_ROOT/current")"
+
+echo "== 3. 啟動靜態檔容器 zerone-admin =="
+EDGE_NETWORK="$EDGE_NETWORK" docker compose -f "$OPT/compose.yml" up -d
+sleep 2
+docker exec "$EDGE" wget -q -O /dev/null http://zerone-admin:80/ 2>/dev/null \
+  && echo "edge 連得到 zerone-admin" \
+  || echo "!! edge 還連不到 zerone-admin，請把 sudo docker logs zerone-admin-zerone-admin-1 給 Claude 看"
+
+echo "== 4. edge Caddyfile 加上 /admin/ =="
+if grep -q 'zerone-admin:80' "$CADDYFILE"; then
+  echo "已經設定過，略過。"
 else
-  echo "!! 這台 VM 沒有 nginx。$DOMAIN 可能是用別的伺服器（例如 Docker、Caddy）提供，請把狀況告訴 Claude。"
+  if ! grep -qE '^[[:space:]]*@devtools[[:space:]]+host' "$CADDYFILE"; then
+    echo "!! Caddyfile 裡找不到 @devtools，沒有修改。請把 Caddyfile 給 Claude 看。"
+    exit 1
+  fi
+  NEW="$(mktemp)"
+  awk -v snip="$HERE/edge-caddy-snippet.caddy" '
+    /^[[:space:]]*@devtools[[:space:]]+host/ && !done { while ((getline l < snip) > 0) print l; done = 1 }
+    { print }
+  ' "$CADDYFILE" > "$NEW"
+  echo "要做的修改（- 原本、+ 新增）："
+  diff -u "$CADDYFILE" "$NEW" || true
+  if [ "$ASSUME_YES" != yes ]; then
+    read -r -p "這是 Terry 的 edge 設定，確定要修改嗎？（輸入 y 同意）" ans < /dev/tty
+    [ "$ans" = y ] || { echo "沒有修改 Caddyfile。其他步驟已完成。"; rm -f "$NEW"; exit 0; }
+  fi
+  BACKUP="/root/zerone-caddy-backup-$(date +%Y%m%d%H%M%S)"
+  mkdir -p "$BACKUP"
+  cp -p "$CADDYFILE" "$BACKUP/Caddyfile"
+  echo "原檔備份在 $BACKUP/Caddyfile"
+  docker cp "$NEW" "$EDGE:/tmp/Caddyfile.zerone" >/dev/null
+  if ! docker exec "$EDGE" caddy validate --config /tmp/Caddyfile.zerone --adapter caddyfile; then
+    echo "!! 新設定驗證失敗，沒有修改。請把上面的錯誤訊息給 Claude 看。"
+    rm -f "$NEW"; exit 1
+  fi
+  # 用 cat 寫回同一個檔案：Caddyfile 是單一檔案掛載，換掉檔案（例如 sed -i）容器會看不到新內容
+  cat "$NEW" > "$CADDYFILE"
+  rm -f "$NEW"
+  if docker exec "$EDGE" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile; then
+    echo "edge 已重新載入（不會斷線）。"
+  else
+    echo "!! 重新載入失敗，還原原本的 Caddyfile。"
+    cat "$BACKUP/Caddyfile" > "$CADDYFILE"
+    docker exec "$EDGE" caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || true
+    exit 1
+  fi
 fi
 
-IP="$(curl -sf -m 3 --noproxy '*' -H 'Metadata-Flavor: Google' http://169.254.169.254/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip || true)"
-[[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || IP="(請填 VM 的外部 IP：GCP 主控台 → VM 執行個體 → 外部 IP)"
-HOSTKEYS="$(for k in /etc/ssh/ssh_host_*_key.pub; do echo "$IP $(cut -d' ' -f1,2 "$k")"; done)"
-
+echo "== 5. 檢查 =="
+if [ -n "$BASE_DOMAIN" ]; then
+  H="devtools.$BASE_DOMAIN"
+  for p in /admin/ /; do
+    code="$(curl -sk -o /dev/null -w '%{http_code}' --resolve "$H:443:127.0.0.1" "https://$H$p" || true)"
+    echo "https://$H$p → $code"
+  done
+fi
 cat <<MSG
 
 ================ 完成 ================
-nginx 設定：$NGINX_DONE
-請到 GitHub repo → Settings → Secrets and variables → Actions → New repository secret，新增 4 個 secret：
-
-VM_HOST
-$IP
-
-VM_USER
-$DEPLOY_USER
-
-VM_KNOWN_HOSTS（整段複製）
-$HOSTKEYS
-
-VM_SSH_KEY（整段複製，包含 BEGIN 與 END 兩行；只會顯示這一次）
-$(cat "$TMP/key")
+- 網址：https://devtools.${BASE_DOMAIN:-<BASE_DOMAIN>}/admin/
+- 之後推到 main，GitHub Actions 會發布新版本，這台 VM 2 分鐘內自動更新。
+- 看更新紀錄：sudo journalctl -u zerone-admin-update --since today
+- 重要：Caddyfile 是 Terry 的設定。請請他把 deploy/edge-caddy-snippet.caddy 這段
+  加進他自己的設定來源，不然他下次部署時可能會被蓋掉。
 ======================================
 MSG
-rm -rf "$TMP"

@@ -1,0 +1,18 @@
+# 零壹雲管家管理端：靜態檔容器。vm-setup.sh 會放到 /opt/zerone-admin/compose.yml 並啟動。
+# 加入 edge Caddy 所在的網路（預設 cloud-ops-edge），edge 用 zerone-admin:80 找到它。
+name: zerone-admin
+
+services:
+  zerone-admin:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    volumes:
+      - /var/www/zerone-admin:/srv:ro
+      - /opt/zerone-admin/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - edge
+
+networks:
+  edge:
+    external: true
+    name: ${EDGE_NETWORK:-cloud-ops-edge}

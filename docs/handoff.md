@@ -340,10 +340,11 @@ Terry 提供另一個網站的 Swagger 文件（格式會跟這個系統一樣�
 ## 部署（2026/11/27）
 
 - **GitHub Pages**：假資料展示版，照舊（`.github/workflows/deploy.yml`）。
-- **GCP VM**：串 API 的版本，掛在 `https://devtools.dev.terrylinla.com/admin/`（根目錄是後端的 Dev Tools，不動）。推到 `main` 後 GitHub Actions 建置，用 SSH（rsync）傳到 VM 的 `/var/www/zerone-admin/releases/`，再切換 `current` 連結，保留最近 5 版（`.github/workflows/deploy-vm.yml`）。
-- **VM 一次性設定**：`deploy/vm-setup.sh` 建立部署帳號 `zerone-deploy`、網站目錄、SSH 金鑰，並在 nginx 加 `/admin/` 設定（`deploy/nginx-admin.conf`）。步驟見 `deploy/README.md`。
-- **API 網址**：VM 版本用 GitHub Variables 的 `VM_API_BASE`。前端和 API 如果在同一個網域，就沒有 CORS 問題。
-- **待確認**：GCP 防火牆是否允許 GitHub Actions 連 22 port；`devtools.dev.terrylinla.com` 是否由這台 VM 上的 nginx 提供；VM 版本要接的 API 網址。
+- **GCP VM**：串 API 的版本，掛在 `https://devtools.dev.terrylinla.com/admin/`（根目錄是後端的 Dev Tools，不動）。VM 是 `admin-portal-stage-backend`（專案 `zerone-bu6-admin-portal-stage`，asia-east1-b），網站由 Terry 的 cloud-ops 部署提供：Docker 裡的 edge Caddy 處理 80／443，依網址轉給加入 `cloud-ops-edge` 網路的容器。
+- **自動部署（2026/11/27 改成 VM 自己拉）**：VM 不對外開放 SSH（只能走 IAP），所以不用 GitHub Actions 連進去。推到 `main` 後 GitHub Actions 建置並上傳到 Release `admin-latest`（`.github/workflows/deploy-vm.yml`）；VM 每 2 分鐘檢查一次，有新版本就下載、驗證 sha256、切換 `current`，保留最近 5 版（`deploy/zerone-admin-update.sh`，systemd 計時器）。靜態檔由 `zerone-admin` 容器（Caddy）提供；edge Caddyfile 在 `@devtools` 前加一段 `/admin/` 轉發（`deploy/edge-caddy-snippet.caddy`）。一次性設定：`deploy/vm-setup.sh`，步驟見 `deploy/README.md`。
+- **API 網址**：VM 版本用 GitHub Variables 的 `VM_API_BASE`。前端和 API 都在 `devtools.dev.terrylinla.com` 底下時就沒有 CORS 問題。
+- **連進 VM**：用 Cloud Shell 執行 `gcloud compute ssh admin-portal-stage-backend --zone=asia-east1-b --tunnel-through-iap`。瀏覽器版 SSH 的臨時金鑰幾分鐘就過期，過期時 Google 的代理程式會把帳號移出 sudo 群組並斷線。
+- **待確認**：請 Terry 把 `/admin/` 那段收進他的 Caddyfile 來源，否則他重新部署時可能被蓋掉；VM 版本要接的 API 網址。
 
 ## 給 Claude Code 的第一個任務
 

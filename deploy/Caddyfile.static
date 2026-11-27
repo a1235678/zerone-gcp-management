@@ -1,0 +1,22 @@
+# 零壹雲管家管理端：靜態檔容器（zerone-admin）的 Caddy 設定。
+# 前面的 edge Caddy 會把 https://devtools.<BASE_DOMAIN>/admin/* 去掉 /admin 再轉進來，
+# 所以這裡看到的路徑是 /、/assets/...。
+# /srv 是 VM 上的 /var/www/zerone-admin（唯讀掛載）；current 指向目前版本。
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	root * /srv/current
+
+	# 打包後的 JS／CSS 檔名含雜湊，可以長期快取
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# index.html 每次都重新檢查，部署新版後重新整理就會拿到
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+
+	file_server
+}

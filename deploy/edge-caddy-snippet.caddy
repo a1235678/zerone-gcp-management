@@ -1,0 +1,12 @@
+	# 零壹雲管家管理端（前端靜態檔，zerone-admin 容器）：https://devtools.{$BASE_DOMAIN}/admin/
+	# 要放在 @devtools 前面：handle 依寫的順序比對，先比到的先處理。
+	@zeroneAdmin {
+		host devtools.{$BASE_DOMAIN}
+		path /admin /admin/*
+	}
+	handle @zeroneAdmin {
+		redir /admin /admin/
+		uri strip_prefix /admin
+		reverse_proxy zerone-admin:80
+	}
+
