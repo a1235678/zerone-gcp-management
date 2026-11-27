@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { createBrand, createProduct, getBrands, getPlanList, getProducts, savePlan } from '@data/api';
+import { createBrand, createProduct, getBrands, getPlanList, getProducts, savePlan, PLAN_CATEGORIES } from '@data/api';
 import type { BrandListItem, PlanListItem, ProductListItem } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DataTable, type Column } from '@shared/components/DataTable';
@@ -193,8 +193,8 @@ export function ProductsPage() {
   );
 }
 
-type PlanForm = { id?: string; productId: string; name: string; tier: string };
-const emptyPlan: PlanForm = { productId: 'P01', name: '', tier: '' };
+type PlanForm = { id?: string; productId: string; name: string; category: string; tier: string };
+const emptyPlan: PlanForm = { productId: 'P01', name: '', category: '', tier: '' };
 
 export function PlansPage() {
   const { can } = usePermission();
@@ -209,6 +209,13 @@ export function PlansPage() {
 
   const columns: Column<PlanListItem>[] = [
     {
+      key: 'category',
+      header: '類別',
+      minWidth: 200,
+      render: (p) => p.category,
+    },
+    { key: 'name', header: '版本', render: (p) => <span className="table__primary">{p.name}</span> },
+    {
       key: 'tier',
       header: '等級',
       align: 'right',
@@ -218,7 +225,6 @@ export function PlansPage() {
         </span>
       ),
     },
-    { key: 'name', header: '版本名稱', render: (p) => <span className="table__primary">{p.name}</span> },
     { key: 'product', header: '產品', render: (p) => `${p.brandName} › ${p.productName}` },
     { key: 'subs', header: '使用中訂閱', align: 'right', render: (p) => <span className="tnum">{p.subscriptionCount}</span> },
     {
@@ -230,7 +236,7 @@ export function PlansPage() {
             className="btn btn--sm"
             onClick={() => {
               setTried(false);
-              setForm({ id: p.id, productId: p.productId, name: p.name, tier: String(p.tier) });
+              setForm({ id: p.id, productId: p.productId, name: p.name, category: p.category, tier: String(p.tier) });
             }}
           >
             編輯
@@ -243,6 +249,7 @@ export function PlansPage() {
   if (form) {
     if (!form.name.trim()) errors.name = '請輸入版本名稱';
     if (!/^[1-9]\d*$/.test(form.tier)) errors.tier = '等級請填 1 以上的整數';
+    if (!form.category) errors.category = '請選擇類別';
   }
   const show = (k: string) => (tried ? errors[k] : undefined);
 
@@ -266,7 +273,7 @@ export function PlansPage() {
     <>
       <PageHeader
         title="GWS 版本"
-        description="版本依等級排序，數字越大版本越高。續約、中途升版時，系統用等級判斷是升版還是降版。"
+        description="依類別、再依版本排列。等級數字越大版本越高，續約、中途升版時系統用等級判斷是升版還是降版。"
         actions={
           can("catalog", "create") ? (
             <button
@@ -321,6 +328,16 @@ export function PlansPage() {
             </FormField>
             <FormField label="版本名稱" required message={show('name')} state={show('name') ? 'error' : undefined} help={form.id && (plans.data?.find((x) => x.id === form.id)?.subscriptionCount ?? 0) > 0 ? '已有訂閱使用這個版本，不能改名。' : undefined}>
               {(p) => <input {...p} className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />}
+            </FormField>
+            <FormField label="類別" required message={show('category')} state={show('category') ? 'error' : undefined}>
+              {(p) => (
+                <select {...p} className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  <option value="">請選擇</option>
+                  {PLAN_CATEGORIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              )}
             </FormField>
             <FormField label="等級" required message={show('tier')} state={show('tier') ? 'error' : undefined} help="數字越大版本越高；同一個產品的等級不能重複。">
               {(p) => <input {...p} className="input tnum" type="number" min={1} value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} />}

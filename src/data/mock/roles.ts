@@ -29,7 +29,12 @@ const extra: Record<string, Extra> = {
 /** 看得到價格的角色：後台管理員、業務主管、後勤、經銷商組織管理員與帳務專員 */
 const PRICE_ROLES = ['R01', 'R12', 'R14', 'R08', 'R10'];
 
-const base: (Omit<Role, 'permissions' | 'canSeePrice'> & { permissions: ReturnType<typeof P> })[] = [
+/** 特殊功能：系統管理員、業務性質、PM 性質（2026/11/24、11/26） */
+const ADMIN_ROLES = ['R01'];
+const SALES_ROLES = ['R03', 'R12'];
+const PM_ROLES = ['R04'];
+
+const base: (Omit<Role, 'permissions' | 'canSeePrice' | 'isSystemAdmin' | 'isSales' | 'isPm'> & { permissions: ReturnType<typeof P> })[] = [
   { id: 'R01', name: '後台管理員', orgType: 'internal', orgId: null, isPreset: true, description: '零壹內部最高權限，可管理所有資料與帳號', permissions: P('create', 'create', 'create', 'create', 'create', 'create', 'create', 'create') },
   { id: 'R03', name: '業務', orgType: 'internal', orgId: null, isPreset: true, description: '接客戶需求，維護客戶資料、開立執行單', permissions: P('create', 'read', 'create', 'read', 'none', 'none', 'none', 'read') },
   { id: 'R04', name: 'PM', orgType: 'internal', orgId: null, isPreset: true, description: '產品管理：維護品牌、產品與排程', permissions: P('read', 'create', 'create', 'read', 'none', 'none', 'read', 'none') },
@@ -46,5 +51,9 @@ const base: (Omit<Role, 'permissions' | 'canSeePrice'> & { permissions: ReturnTy
 // 經銷商與客戶的角色：這三個資源只存在管理端，一律禁止
 export const roles: Role[] = base.map((r) => {
   const [dealers, catalog, schedules] = extra[r.id] ?? ['none', 'none', 'none'];
-  return { ...r, permissions: { ...r.permissions, dealers, catalog, schedules }, canSeePrice: PRICE_ROLES.includes(r.id) };
+  return { ...r, permissions: { ...r.permissions, dealers, catalog, schedules }, canSeePrice: PRICE_ROLES.includes(r.id),
+    isSystemAdmin: ADMIN_ROLES.includes(r.id),
+    isSales: SALES_ROLES.includes(r.id),
+    isPm: PM_ROLES.includes(r.id),
+  };
 });

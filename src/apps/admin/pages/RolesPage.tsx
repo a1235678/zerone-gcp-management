@@ -22,6 +22,14 @@ const LevelTag = ({ level }: { level: PermissionLevel }) =>
   level === 'none' ? <span className="muted">{permissionLabel[level]}</span> : <StatusTag tone={level === 'create' ? 'success' : level === 'write' ? 'info' : 'neutral'}>{permissionLabel[level]}</StatusTag>;
 
 /** 資源欄位標題 */
+/** 特殊功能（2026/11/26）：四個勾選框 */
+const SPECIAL: { key: 'isSystemAdmin' | 'isSales' | 'isPm' | 'canSeePrice'; label: string; short: string; help: string; sessionKey?: 'isSystemAdmin' | 'canSeePrice' }[] = [
+  { key: 'isSystemAdmin', label: '系統管理員', short: '系統管理員', help: '看得到「使用者」「角色管理」，可以管理帳號與角色。', sessionKey: 'isSystemAdmin' },
+  { key: 'isSales', label: '業務性質', short: '業務', help: '可以被指定為客戶的負責業務（新約／續約）。' },
+  { key: 'isPm', label: 'PM 性質', short: 'PM', help: '標示為 PM；之後用來決定 PM 相關的通知與畫面。' },
+  { key: 'canSeePrice', label: '能否看到價格', short: '看得到價格', help: '不勾選時，畫面上的金額會以「••••」顯示。', sessionKey: 'canSeePrice' },
+];
+
 const ResourceHeader = ({ r }: { r: ResourceKey }) => <>{resourceLabel[r]}</>;
 
 type Draft = Omit<Role, 'id'> & { id?: string };
@@ -54,9 +62,22 @@ export function RolesPage() {
       render: (r: RoleListItem) => <LevelTag level={r.permissions[res]} />,
     })),
     {
-      key: 'price',
-      header: '看得到價格',
-      render: (r) => (r.canSeePrice ? <StatusTag tone="success">可以</StatusTag> : <StatusTag tone="neutral">不行</StatusTag>),
+      key: 'special',
+      header: '特殊功能',
+      render: (r) => {
+        const on = SPECIAL.filter((x) => r[x.key]);
+        return on.length ? (
+          <span className="op-chips">
+            {on.map((x) => (
+              <StatusTag key={x.key} tone="info">
+                {x.short}
+              </StatusTag>
+            ))}
+          </span>
+        ) : (
+          <span className="muted">—</span>
+        );
+      },
     },
   ];
 
@@ -69,6 +90,9 @@ export function RolesPage() {
       isPreset: false,
       permissions: Object.fromEntries(resourceOrder.map((r) => [r, 'none'])) as Role['permissions'],
       canSeePrice: false,
+      isSystemAdmin: false,
+      isSales: false,
+      isPm: false,
     });
 
   return (
@@ -248,20 +272,24 @@ function RoleEditor({ draft, onClose, onSaved }: { draft: Draft; onClose: () => 
       </div>
       <div>
         <div className="form-field__label" style={{ marginBottom: 'var(--space-2)' }}>
-          價格
+          特殊功能
         </div>
-        <label className="inline checkbox-row">
-          <input
-            type="checkbox"
-            checked={role.canSeePrice}
-            disabled={!session?.canSeePrice && !role.canSeePrice}
-            onChange={(e) => setRole({ ...role, canSeePrice: e.target.checked })}
-          />
-          可以看到價格
-        </label>
-        <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 'var(--space-1) 0 0' }}>
-          不勾選時，這個角色在畫面上看不到任何金額（例如 GCP 費用、帳單），會以「••••」顯示。{!session?.canSeePrice && '你自己看不到價格，所以不能授予。'}
-        </p>
+        <div className="special-grid">
+          {SPECIAL.map((x) => {
+            const mineHas = Boolean(session?.[x.sessionKey ?? 'isSystemAdmin'] ?? true);
+            // 價格、系統管理員：自己沒有就不能授予（業務性質、PM 性質是角色屬性，沒有這個限制）
+            const locked = x.sessionKey ? !mineHas && !role[x.key] : false;
+            return (
+              <label key={x.key} className="special-item">
+                <input type="checkbox" checked={role[x.key]} disabled={locked} onChange={(e) => setRole({ ...role, [x.key]: e.target.checked })} />
+                <span>
+                  <strong>{x.label}</strong>
+                  <span className="muted">{x.help}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
       </div>
       </fieldset>
     </Modal>

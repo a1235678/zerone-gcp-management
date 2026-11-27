@@ -4,7 +4,7 @@ import { billingCycleLabel, offerPlanTypeLabel } from '@data/labels';
 import type { GwsOffer, OfferSnapshot, OperationType } from '@data/types';
 import { Icon } from '@shared/components/Icon';
 import { StatusTag } from '@shared/components/StatusTag';
-import { formatDate, formatDateTime, formatUsd } from '@shared/format';
+import { formatDate, formatDateTime, formatUsdLabel } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 
 const planTone = { annual: 'success', flexible: 'warning', trial: 'neutral' } as const;
@@ -104,7 +104,7 @@ export function OfferPicker({
                 </span>
                 <span className="offer-option__billing">{o.billing ? billingCycleLabel[o.billing] : '—'}</span>
                 <span className="offer-option__price tnum">
-                  <strong>{formatUsd(o.priceCents)}</strong>
+                  <strong>{formatUsdLabel(o.priceCents)}</strong>
                   <span className="muted"> / 授權</span>
                 </span>
                 <span className="offer-option__id mono muted">{o.offerId}</span>
