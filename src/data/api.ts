@@ -856,6 +856,16 @@ function subscriptionListItem(s: Subscription): SubscriptionListItem {
   };
 }
 
+/**
+ * 預估續約金額（美分，2026/11/27）：目前席次 × 目前方案單價。
+ * 年約算一年（每月計費 × 12、每年計費 × 1），彈性方案算一個月。沒有方案資料時回傳 undefined。
+ */
+export function estimatedRenewalCents(s: Subscription): number | undefined {
+  if (!s.offer || s.seats == null) return undefined;
+  const periods = s.offer.billing === 'monthly' && s.term !== 'flexible' ? 12 : 1;
+  return s.seats * s.offer.priceCents * periods;
+}
+
 export function getSubscriptions(query: SubscriptionQuery = {}): Promise<SubscriptionListItem[]> {
   const kw = normKw(query.keyword);
   const rows = db.subscriptions

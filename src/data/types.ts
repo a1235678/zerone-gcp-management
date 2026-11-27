@@ -216,8 +216,6 @@ export interface Subscription {
   googleRenewal?: { plan: string; seats: number; offer?: OfferSnapshot; setAt: string; opId: string };
   /** 不續約：客戶合約到期後不再續約（不寄到期通知） */
   renewalCancelled?: { at: string; by: string; note: string };
-  /** 上次向原廠（Google）下單（新訂或續約）：席次與金額（美分）。之後加購的席次不算在內（2026/11/27 首頁要看） */
-  lastOrder?: { type: 'new' | 'renewal'; orderedAt: string; seats: number; amountCents: number };
   lastSyncedAt: string;
 }
 export interface SubscriptionListItem extends Subscription {

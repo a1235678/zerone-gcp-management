@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { EXPIRING_DAYS, daysUntil, getDashboard } from '@data/api';
+import { EXPIRING_DAYS, daysUntil, estimatedRenewalCents, getDashboard } from '@data/api';
 import { workOrderTypeLabel } from '@data/labels';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
@@ -32,7 +32,7 @@ export function HomePage() {
   const soon = d.expiringSoon;
   const renewing = soon.filter((s) => !s.renewalCancelled);
   const soonSeats = renewing.reduce((sum, s) => sum + (s.seats ?? 0), 0);
-  const soonAmount = renewing.reduce((sum, s) => sum + (s.lastOrder?.amountCents ?? 0), 0);
+  const soonAmount = renewing.reduce((sum, s) => sum + (estimatedRenewalCents(s) ?? 0), 0);
   const gcpChange = Math.round(((d.gcp.totalCostCents - d.gcp.prevTotalCostCents) / d.gcp.prevTotalCostCents) * 1000) / 10;
 
   return (
@@ -54,7 +54,7 @@ export function HomePage() {
           sub={soon.length > renewing.length ? `其中 ${soon.length - renewing.length} 筆客戶表示不續約` : '依到期日列在下方'}
         />
         <Stat label="快到期席次" value={formatNumber(soonSeats)} unit="席" sub={`${EXPIRING_DAYS} 天內到期的目前席次合計（不含不續約）`} />
-        <Stat label="快到期金額" value={formatUsdLabel(soonAmount, 0)} sub="上次向原廠下單的金額合計（不含不續約）" />
+        <Stat label="快到期金額" value={formatUsdLabel(soonAmount, 0)} sub="預估續約金額合計（不含不續約）" />
         {SHOW_WORK_ORDERS && (
         <Stat
           label="執行單"
@@ -88,7 +88,7 @@ export function HomePage() {
               </Link>
             }
           >
-            <p className="card-note">{EXPIRING_DAYS} 天內到期，依到期日排序。「上次購買」是上次向原廠（Google）新訂或續約的席次與金額，之後加購的不算。</p>
+            <p className="card-note">{EXPIRING_DAYS} 天內到期，依到期日排序。預估續約金額 = 目前席次 × 目前方案單價，年約算一年、彈性方案算一個月。</p>
             <DataTable
               caption="快到期的訂閱"
               rows={soon}
@@ -118,17 +118,21 @@ export function HomePage() {
                   ),
                 },
                 { key: 'seats', header: '目前席次', align: 'right', render: (s) => <span className="mono">{formatNumber(s.seats ?? 0)}</span> },
-                { key: 'lastSeats', header: '上次購買席次', align: 'right', render: (s) => <span className="mono">{s.lastOrder ? formatNumber(s.lastOrder.seats) : '—'}</span> },
                 {
-                  key: 'lastAmount',
-                  header: '上次原廠下單金額',
+                  key: 'estimate',
+                  header: '預估續約金額',
                   align: 'right',
-                  render: (s) => (
-                    <span className="mono">
-                      {s.lastOrder ? formatUsdLabel(s.lastOrder.amountCents, 0) : '—'}
-                      {s.lastOrder && <div className="table__secondary">{s.term === 'flexible' ? '彈性・一個月' : '年約・一年'}</div>}
-                    </span>
-                  ),
+                  render: (s) => {
+                    const cents = estimatedRenewalCents(s);
+                    return cents === undefined ? (
+                      <span className="muted">—</span>
+                    ) : (
+                      <span className="mono">
+                        {formatUsdLabel(cents, 0)}
+                        <div className="table__secondary">{s.term === 'flexible' ? '彈性・一個月' : '年約・一年'}</div>
+                      </span>
+                    );
+                  },
                 },
                 {
                   key: 'status',
