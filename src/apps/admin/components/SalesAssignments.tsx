@@ -35,7 +35,7 @@ export function SalesAssignmentTable({ rows, empty = '尚未指定負責業務' 
   );
 }
 
-/** 負責業務編輯：一列一位業務，可以新增、移除，一個客戶可以有多位業務 */
+/** 負責業務編輯：一列一位業務，可以新增、移除，一家經銷商可以有多位業務（2026/11/27 業務綁在經銷商） */
 export function SalesAssignmentEditor({ value, onChange }: { value: SalesAssignment[]; onChange: (v: SalesAssignment[]) => void }) {
   const options = useAsync(getBrandProducts);
   const people = useAsync(getSalesPeople);
@@ -87,7 +87,7 @@ export function SalesAssignmentEditor({ value, onChange }: { value: SalesAssignm
         新增一位業務
       </button>
       <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-        沒有選業務的列不會儲存。GWS 到期通知會寄給所有「GWS 續約」的業務和後勤。
+        沒有選業務的列不會儲存。這家經銷商名下的合約都由這些業務負責；GWS 到期通知會寄給「GWS 續約」的業務和後勤。
       </p>
     </div>
   );

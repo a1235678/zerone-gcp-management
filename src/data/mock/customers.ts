@@ -1,4 +1,4 @@
-import type { Address, Customer } from '../types';
+import type { Address, Customer, DealerAssignment } from '../types';
 import { TW_DISTRICTS } from './twAddress';
 import { subscriptions } from './subscriptions';
 
@@ -55,7 +55,7 @@ function c(
     name,
     taxId,
     primaryDomain,
-    dealerId,
+    dealerAssignments: [{ brand: 'Google', product: 'GWS', contract: primaryDomain, dealerId }],
     contactName,
     contactEmail: `admin@${primaryDomain}`,
     contactPhone,
@@ -70,7 +70,6 @@ function c(
     contactSameAsRegistered: true,
     otherDomains: [],
     gwsDomains: [],
-    salesAssignments: [],
   };
 }
 
@@ -93,20 +92,25 @@ const otherDomains: Record<string, string[]> = {
 };
 // 有 GCP 的客戶
 const gcpCustomers = new Set(['C0003', 'C0006', 'C0007', 'C0008', 'C0011', 'C0016', 'C0020', 'C0022', 'C0024']);
-const SALES = ['黃柏翰', '李冠霖'];
+/** 假的 GCP Billing Account ID（格式同 Google：XXXXXX-XXXXXX-XXXXXX） */
+export const billingAccountOf = (customerId: string) => {
+  const n = Number(customerId.slice(1));
+  const h = (k: number) => ((n * 7919 + k * 104729) % 0xffffff).toString(16).toUpperCase().padStart(6, '0');
+  return `${h(1)}-${h(2)}-${h(3)}`;
+};
 
-/** 負責業務：新約沿用開發的業務；續約輪流分給兩位業務，示意同一客戶可以新約、續約不同人 */
-export const customers: Customer[] = base.map((c, i) => {
-  const newSales = SALES.includes(c.createdBy) ? c.createdBy : '李冠霖';
-  const renewalSales = SALES[i % 2];
-  const assignments: Customer['salesAssignments'] = [
-    { brand: 'Google', product: 'GWS', term: 'new', salesName: newSales },
-    { brand: 'Google', product: 'GWS', term: 'renewal', salesName: renewalSales },
-  ];
-  if (gcpCustomers.has(c.id)) assignments.push({ brand: 'Google', product: 'GCP', term: 'new', salesName: '黃柏翰' });
-  // 示意一個客戶對多位業務：和光醫療器材的 GWS 續約由兩位業務一起負責
-  if (c.id === 'C0011') assignments.push({ brand: 'Google', product: 'GWS', term: 'renewal', salesName: '蔡明峰' });
+// 示意同一客戶向不同經銷商買不同合約（2026/11/27）
+const extraDealers: Record<string, DealerAssignment[]> = {
+  C0002: [{ brand: 'Google', product: 'GWS', contract: 'hefeng-bakery.example', dealerId: 'D003' }],
+  C0011: [{ brand: 'Google', product: 'GWS', contract: 'heguang-lab.example', dealerId: 'D001' }],
+};
+
+export const customers: Customer[] = base.map((c) => {
+  const dealerId = c.dealerAssignments[0].dealerId;
+  const assignments: DealerAssignment[] = [...c.dealerAssignments, ...(extraDealers[c.id] ?? [])];
+  // 有 GCP 的客戶：Billing Account 跟主網域同一家經銷商（星河遊戲示意 GCP 跟另一家買）
+  if (gcpCustomers.has(c.id)) assignments.push({ brand: 'Google', product: 'GCP', contract: billingAccountOf(c.id), dealerId: c.id === 'C0008' ? 'D000' : dealerId });
   // 有 GWS 訂閱的客戶，主網域就是已開通 GWS 的網域；其他網域先當作尚未開通
   const hasGws = subscriptions.some((s) => s.customerId === c.id && s.product === 'GWS');
-  return { ...c, otherDomains: otherDomains[c.id] ?? [], gwsDomains: hasGws ? [c.primaryDomain] : [], salesAssignments: assignments };
+  return { ...c, otherDomains: otherDomains[c.id] ?? [], gwsDomains: hasGws ? [c.primaryDomain] : [], dealerAssignments: assignments };
 });

@@ -11,10 +11,11 @@ import {
   getDealer,
   getUsers,
   lookupTaxId,
+  saveDealerSales,
   updateDealer,
   type DealerInput,
 } from '@data/api';
-import type { CustomerContact } from '@data/types';
+import type { CustomerContact, SalesAssignment } from '@data/types';
 import { Card } from '@shared/components/Card';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { DescriptionList } from '@shared/components/DescriptionList';
@@ -28,6 +29,8 @@ import { useToast } from '@shared/components/Toast';
 import { formatDate, formatDateTime } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { AuditLogTable } from '../components/AuditLogTable';
+import { contractLabel } from '../components/DealerAssignments';
+import { SalesAssignmentEditor, SalesAssignmentTable } from '../components/SalesAssignments';
 import { AddressFields, TagInput } from '../components/CustomerFields';
 import { CustomerStatusTag, DealerStatusTag, UserStatusTag } from '../tags';
 import { usePermission } from '../auth';
@@ -242,7 +245,7 @@ export function NewDealerPage() {
   );
 }
 
-type DealerTab = 'info' | 'customers' | 'users' | 'contacts' | 'logs';
+type DealerTab = 'info' | 'sales' | 'customers' | 'users' | 'contacts' | 'logs';
 
 export function DealerDetailPage() {
   const { id = '' } = useParams();
@@ -270,6 +273,18 @@ export function DealerDetailPage() {
     }
   };
   const [tried, setTried] = useState(false);
+  const [salesForm, setSalesForm] = useState<SalesAssignment[] | null>(null);
+  const saveSales = async () => {
+    if (!salesForm) return;
+    try {
+      await saveDealerSales(id, salesForm);
+      toast('已更新負責業務');
+      setSalesForm(null);
+      setVersion((v) => v + 1);
+    } catch (e) {
+      toast((e as Error).message, 'danger');
+    }
+  };
 
   const d = dealer.data;
   if (dealer.loading && !d) return <p className="muted">載入中…</p>;
@@ -340,6 +355,7 @@ export function DealerDetailPage() {
           onChange={(v) => setParams(v === 'info' ? {} : { tab: v }, { replace: true })}
           tabs={[
             { value: 'info', label: '經銷商資訊' },
+            { value: 'sales', label: '負責業務', count: d.salesAssignments.length },
             { value: 'customers', label: '名下客戶', count: customers.data?.length },
             { value: 'users', label: '使用者帳號', count: users.data?.length },
             { value: 'contacts', label: '一般聯絡人', count: d.contacts.length },
@@ -373,6 +389,25 @@ export function DealerDetailPage() {
         </Card>
       )}
 
+      {tab === 'sales' && (
+        <Card
+          bodyless
+          title="負責業務"
+          actions={
+            can('dealers', 'write') ? (
+              <button className="btn btn--sm" onClick={() => setSalesForm(d.salesAssignments.map((x) => ({ ...x })))}>
+                編輯
+              </button>
+            ) : undefined
+          }
+        >
+          <SalesAssignmentTable rows={d.salesAssignments} />
+          <p className="muted card__body" style={{ fontSize: 'var(--text-sm)', margin: 0, paddingTop: 'var(--space-3)' }}>
+            業務綁在經銷商（不是客戶）：這家經銷商名下的合約都由這些業務負責。GWS 到期通知會寄給「GWS 續約」的業務和後勤。
+          </p>
+        </Card>
+      )}
+
       {tab === 'customers' && (
         <Card bodyless title="名下客戶">
           <DataTable
@@ -383,7 +418,24 @@ export function DealerDetailPage() {
             columns={[
               { key: 'name', header: '客戶', render: (c) => <span className="table__primary">{c.name}</span> },
               { key: 'taxId', header: '統一編號', render: (c) => <span className="mono">{c.taxId}</span> },
-              { key: 'domain', header: '主網域', render: (c) => <span className="mono">{c.primaryDomain || '—'}</span> },
+              {
+                key: 'contracts',
+                header: '向這家買的合約',
+                render: (c) => (
+                  <div>
+                    {c.dealerAssignments
+                      .filter((a) => a.dealerId === d.id)
+                      .map((a) => (
+                        <div key={`${a.product}-${a.contract}`}>
+                          <span className="table__secondary">
+                            {a.product} {contractLabel(a.product)}
+                          </span>{' '}
+                          <span className="mono">{a.contract || '尚未填'}</span>
+                        </div>
+                      ))}
+                  </div>
+                ),
+              },
               { key: 'status', header: '狀態', render: (c) => <CustomerStatusTag value={c.status} /> },
             ]}
             empty={<EmptyState title="還沒有客戶" />}
@@ -489,6 +541,24 @@ export function DealerDetailPage() {
         }
       >
         {edit && <DealerFields value={edit} onChange={setEdit} taxIdLocked showErrors={tried} />}
+      </Modal>
+      <Modal
+        open={salesForm !== null}
+        onClose={() => setSalesForm(null)}
+        title="編輯負責業務"
+        width={720}
+        footer={
+          <>
+            <button className="btn" onClick={() => setSalesForm(null)}>
+              取消
+            </button>
+            <button className="btn btn--primary" onClick={saveSales}>
+              儲存
+            </button>
+          </>
+        }
+      >
+        {salesForm && <SalesAssignmentEditor value={salesForm} onChange={setSalesForm} />}
       </Modal>
     </>
   );

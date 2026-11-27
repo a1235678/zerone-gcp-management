@@ -39,10 +39,21 @@ function d(
     contactPhone,
     contactEmail,
     contacts: isDirect ? [] : [{ name: contactName, title: '主要聯絡人', email: contactEmail, phone: contactPhone }],
+    salesAssignments: SALES[id] ?? [],
     note: '',
     createdAt,
   };
 }
+
+/** 負責業務綁在經銷商（2026/11/27）：示意新約、續約可以不同人，一家經銷商也可以有多位業務 */
+const g = (term: 'new' | 'renewal', salesName: string, product: 'GWS' | 'GCP' = 'GWS') => ({ brand: 'Google', product, term, salesName });
+const SALES: Record<string, Dealer['salesAssignments']> = {
+  D000: [g('new', '黃柏翰'), g('renewal', '李冠霖'), g('new', '黃柏翰', 'GCP')],
+  D001: [g('new', '李冠霖'), g('renewal', '李冠霖'), g('renewal', '蔡明峰'), g('new', '黃柏翰', 'GCP')],
+  D002: [g('new', '黃柏翰'), g('renewal', '黃柏翰'), g('new', '黃柏翰', 'GCP')],
+  D003: [g('new', '黃柏翰'), g('renewal', '李冠霖')],
+  D004: [g('new', '李冠霖'), g('renewal', '李冠霖')],
+};
 
 export const dealers: Dealer[] = [
   d('D000', '直銷（零壹）', '', '', 'active', '2024-01-02', addr('台北市', '信義區', '110', '松仁路 100 號 20 樓'), '林怡君', '02-2720-0000', 'yijun.lin@zerone.example', true),

@@ -265,15 +265,19 @@ export function SubscriptionDetailPage() {
           </Card>
 
           <div className="stack">
-            <Card title="負責業務">
+            <Card title="經銷商與負責業務">
               <DescriptionList
                 columns={1}
                 items={[
+                  { label: '經銷商', value: <Link to={`/dealers/${s.dealerId}`}>{s.dealerName}</Link> },
                   { label: '新約', value: s.sales.filter((a) => a.term === 'new').map((a) => a.salesName).join('、') || <span className="muted">未指定</span> },
                   { label: '續約', value: s.sales.filter((a) => a.term === 'renewal').map((a) => a.salesName).join('、') || <span className="muted">未指定</span> },
                 ]}
               />
               {!s.sales.some((a) => a.term === 'renewal') && <p className="text-warning" style={{ fontSize: 'var(--text-sm)' }}>沒有續約業務，到期通知只會寄給後勤。</p>}
+              <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 'var(--space-2) 0 0' }}>
+                經銷商依這個網域在客戶主檔指定；業務在經銷商主檔設定。
+              </p>
             </Card>
             <Card title={"到期通知"}>
               {notice.data && live ? (

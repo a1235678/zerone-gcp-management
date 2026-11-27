@@ -29,6 +29,7 @@ import type {
   OfferLookup,
   OfferSnapshot,
   SalesAssignment,
+  DealerAssignment,
   ProductCode,
   Address,
   CustomerContact,
@@ -96,6 +97,8 @@ import { apiLogout, type ApiAuth } from './remote/auth';
 export const TODAY = '2026-11-05';
 /** 「即將到期」的天數門檻 */
 export const EXPIRING_DAYS = 30;
+/** 首頁的「快到期」看 90 天內（2026/11/27）；訂閱狀態的「即將到期」仍是 30 天 */
+export const HOME_EXPIRING_DAYS = 90;
 
 /** 目前登入者。由 login() 設定；頁面請用 getSession() 取得 */
 export const currentUser = { id: '', name: '', role: '', roleId: '', email: '' };
@@ -148,6 +151,28 @@ const dealerName = (id: string) => {
   return d ? d.shortNames[0] ?? d.name : '（未知經銷商）';
 };
 const customerOf = (id: string) => db.customers.find((c) => c.id === id);
+
+/**
+ * 某個合約的經銷商（2026/11/27 客戶可以對應多個經銷商）：
+ * 先找同產品、同合約（GWS 網域／GCP Billing Account）；沒有就用同產品還沒填合約的；再沒有就用這個客戶的第一家。
+ */
+export function dealerIdFor(c: Customer, product: ProductCode, contract?: string): string {
+  const list = c.dealerAssignments;
+  return (
+    list.find((a) => a.product === product && contract && a.contract === contract)?.dealerId ??
+    list.find((a) => a.product === product && !a.contract)?.dealerId ??
+    list.find((a) => a.product === product)?.dealerId ??
+    list[0]?.dealerId ??
+    'D000'
+  );
+}
+/** 客戶 GWS 訂閱的經銷商（訂閱用主網域） */
+const gwsDealerOf = (c: Customer) => dealerIdFor(c, 'GWS', c.primaryDomain);
+/** 客戶的所有經銷商（不重複） */
+const dealerIdsOf = (c: Customer) => [...new Set(c.dealerAssignments.map((a) => a.dealerId))];
+/** 經銷商的負責業務 */
+const dealerSales = (dealerId: string, product: ProductCode, term?: 'new' | 'renewal') =>
+  (db.dealers.find((d) => d.id === dealerId)?.salesAssignments ?? []).filter((a) => a.product === product && (!term || a.term === term));
 const includesKw = (kw: string, ...fields: (string | undefined)[]) =>
   !kw || fields.some((f) => f?.toLowerCase().includes(kw));
 const normKw = (kw?: string) => kw?.trim().toLowerCase() ?? '';
@@ -297,9 +322,9 @@ export function getDealers(): Promise<Dealer[]> {
 }
 
 function dealerListItem(d: Dealer): DealerListItem {
-  const customerIds = new Set(db.customers.filter((c) => c.dealerId === d.id).map((c) => c.id));
+  const customerIds = new Set(db.customers.filter((c) => dealerIdsOf(c).includes(d.id)).map((c) => c.id));
   const totalSeats = db.subscriptions
-    .filter((s) => customerIds.has(s.customerId) && s.product === 'GWS' && s.status !== 'cancelled')
+    .filter((s) => s.product === 'GWS' && s.status !== 'cancelled' && gwsDealerOf(customerOf(s.customerId)!) === d.id)
     .reduce((sum, s) => sum + (s.seats ?? 0), 0);
   return {
     ...d,
@@ -375,6 +400,7 @@ export function createDealer(input: DealerInput & { adminName: string; adminEmai
     id,
     ...cleanDealer(input),
     contacts: [{ name: input.contactName.trim(), title: '主要聯絡人', email: input.contactEmail.trim(), phone: input.contactPhone.trim() }],
+    salesAssignments: [],
     isDirect: false,
     status: 'active',
     createdAt: TODAY,
@@ -418,18 +444,17 @@ export function updateDealer(id: string, input: DealerInput): Promise<DealerList
 
 // ═════════ 客戶 ═════════
 
-const withDealer = (c: Customer): CustomerListItem => ({
-  ...c,
-  dealerName: dealerName(c.dealerId),
-  dealerPartnerId: db.dealers.find((d) => d.id === c.dealerId)?.partnerId ?? '',
-});
+const withDealer = (c: Customer): CustomerListItem => {
+  const dealerIds = dealerIdsOf(c);
+  return { ...c, dealerIds, dealerName: dealerIds.map(dealerName).join('、') };
+};
 
 export function getCustomers(query: CustomerQuery = {}): Promise<CustomerListItem[]> {
   const kw = normKw(query.keyword);
   const rows = db.customers
-    .filter((c) => !query.dealerId || c.dealerId === query.dealerId)
+    .filter((c) => !query.dealerId || dealerIdsOf(c).includes(query.dealerId))
     .filter((c) => !query.status || c.status === query.status)
-    .filter((c) => includesKw(kw, c.name, ...c.shortNames, c.primaryDomain, c.taxId, c.contactName, ...c.otherDomains, ...c.salesAssignments.map((a) => a.salesName)))
+    .filter((c) => includesKw(kw, c.name, ...c.shortNames, c.primaryDomain, c.taxId, c.contactName, ...c.otherDomains, ...dealerIdsOf(c).map(dealerName), ...c.dealerAssignments.map((a) => a.contract)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .map(withDealer);
   return delay(rows);
@@ -518,6 +543,9 @@ function attachDomain(c: Customer, domain: string, hasGws = false) {
   if (c.primaryDomain === domain || c.otherDomains.includes(domain)) return;
   if (!c.primaryDomain) {
     c.primaryDomain = domain;
+    // 建立客戶時還沒填合約的 GWS 經銷商，補上這個網域
+    const blank = c.dealerAssignments.find((a) => a.product === 'GWS' && !a.contract);
+    if (blank) blank.contract = domain;
     c.domainVerification = hasGws ? 'verified' : 'pending';
   } else c.otherDomains.push(domain);
 }
@@ -536,7 +564,7 @@ export type CustomerEdit = Pick<
   'name' | 'shortNames' | 'contactPhone' | 'contactEmail' | 'contactName' | 'registeredAddress' | 'contactAddress' | 'contactSameAsRegistered' | 'note'
 >;
 
-/** 修改客戶基本資訊（統一編號、主網域、所屬經銷商不在這裡改） */
+/** 修改客戶基本資訊（統一編號、主網域、經銷商不在這裡改） */
 export function updateCustomer(customerId: string, input: CustomerEdit): Promise<CustomerListItem> {
   const c = customerOf(customerId);
   if (!c) return fail('找不到客戶');
@@ -597,12 +625,12 @@ export function getNotifySuggestions(customerId?: string, dealerId?: string): Pr
   const c = customerId ? customerOf(customerId) : undefined;
   if (c?.contactEmail) out.push({ name: c.contactName, email: c.contactEmail, role: '客戶聯絡人' });
   const userByName = (name: string) => db.users.find((u) => u.orgType === 'internal' && u.name === name && u.status === 'active');
-  for (const a of c?.salesAssignments ?? []) {
-    if (a.product !== 'GWS') continue;
+  const d = db.dealers.find((x) => x.id === (dealerId ?? (c ? gwsDealerOf(c) : undefined)));
+  // 業務綁在經銷商（2026/11/27）
+  for (const a of d ? dealerSales(d.id, 'GWS') : []) {
     const u = userByName(a.salesName);
     if (u) out.push({ name: u.name, email: u.email, role: a.term === 'new' ? '新約業務' : '續約業務' });
   }
-  const d = db.dealers.find((x) => x.id === (dealerId ?? c?.dealerId));
   if (d && !d.isDirect && d.contactEmail) out.push({ name: d.contactName, email: d.contactEmail, role: `經銷商（${d.shortNames[0] ?? d.name}）` });
   for (const u of db.users.filter((x) => x.orgType === 'internal' && x.roleId === 'R14' && x.status === 'active'))
     out.push({ name: u.name, email: u.email, role: '後勤' });
@@ -618,7 +646,7 @@ export async function getNotifyDirectory(customerId?: string, dealerId?: string)
   const roleName = (id: string) => db.roles.find((r) => r.id === id)?.name ?? '內部人員';
   for (const u of db.users.filter((x) => x.orgType === 'internal' && x.status === 'active')) out.push({ name: u.name, email: u.email, role: roleName(u.roleId) });
   const c = customerId ? customerOf(customerId) : undefined;
-  const d = db.dealers.find((x) => x.id === (dealerId ?? c?.dealerId));
+  const d = db.dealers.find((x) => x.id === (dealerId ?? (c ? gwsDealerOf(c) : undefined)));
   if (d && !d.isDirect) for (const ct of d.contacts) if (ct.email) out.push({ name: ct.name, email: ct.email, role: `經銷商聯絡人（${d.shortNames[0] ?? d.name}）` });
   const seen = new Set<string>();
   return out.filter((x) => (seen.has(x.email) ? false : (seen.add(x.email), true)));
@@ -645,13 +673,42 @@ export function cleanSalesAssignments(list: SalesAssignment[]): SalesAssignment[
 }
 export const salesAssignmentText = (a: SalesAssignment) => `${a.brand} ${a.product} ${a.term === 'new' ? '新約' : '續約'} ${a.salesName}`;
 
-/** 更新負責業務（條列；一個客戶可以有多位業務） */
-export function saveSalesAssignments(customerId: string, assignments: SalesAssignment[]): Promise<CustomerListItem> {
+/** 更新經銷商的負責業務（條列；一家經銷商可以有多位業務；2026/11/27 從客戶搬到經銷商） */
+export function saveDealerSales(dealerId: string, assignments: SalesAssignment[]): Promise<DealerListItem> {
+  const d = db.dealers.find((x) => x.id === dealerId);
+  if (!d) return fail('找不到經銷商');
+  const clean = cleanSalesAssignments(assignments);
+  d.salesAssignments = clean;
+  log('customer', d.shortNames[0] ?? d.name, `更新經銷商負責業務：${clean.map(salesAssignmentText).join('、') || '無'}`);
+  return delay(dealerListItem(d));
+}
+
+export const dealerAssignmentText = (a: DealerAssignment) => `${a.brand} ${a.product} ${a.contract || '（未填合約）'} → ${dealerName(a.dealerId)}`;
+
+/** 檢查客戶的經銷商清單：合約必填（GWS 網域、GCP Billing Account），同一個品牌／產品／合約只能有一家經銷商 */
+export function validateDealerAssignments(list: DealerAssignment[]): string | undefined {
+  const seen = new Set<string>();
+  for (const [i, a] of list.entries()) {
+    const n = `第 ${i + 1} 列`;
+    if (!a.dealerId) return `${n}：請選擇經銷商`;
+    if (!a.contract.trim()) return `${n}：請填寫${a.product === 'GCP' ? ' Billing Account' : '網域'}`;
+    if (a.product === 'GCP' && !/^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$/i.test(a.contract.trim())) return `${n}：Billing Account 格式是 XXXXXX-XXXXXX-XXXXXX`;
+    const k = `${a.brand}-${a.product}-${a.contract.trim().toLowerCase()}`;
+    if (seen.has(k)) return `${n}：${a.product} ${a.contract} 重複了，同一個合約只能有一家經銷商`;
+    seen.add(k);
+  }
+  return undefined;
+}
+
+/** 更新客戶各合約的經銷商（2026/11/27：一個客戶可以對應多個經銷商） */
+export function saveDealerAssignments(customerId: string, assignments: DealerAssignment[]): Promise<CustomerListItem> {
   const c = customerOf(customerId);
   if (!c) return fail('找不到客戶');
-  const clean = cleanSalesAssignments(assignments);
-  c.salesAssignments = clean;
-  log('customer', c.name, `更新負責業務：${clean.map(salesAssignmentText).join('、') || '無'}`, 'success', c.id);
+  const clean = assignments.map((a) => ({ ...a, contract: a.product === 'GCP' ? a.contract.trim().toUpperCase() : a.contract.trim().toLowerCase() }));
+  const error = validateDealerAssignments(clean);
+  if (error) return fail(error);
+  c.dealerAssignments = clean;
+  log('customer', c.name, `更新經銷商：${clean.map(dealerAssignmentText).join('、') || '無'}`, 'success', c.id);
   return delay(withDealer(c));
 }
 
@@ -680,7 +737,8 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
     name: input.name.trim(),
     taxId: individual ? '' : input.taxId.trim(),
     primaryDomain: input.primaryDomain?.trim() ?? '',
-    dealerId: input.dealerId,
+    // 第一個合約的經銷商；還沒有網域時合約先空著，GWS 新訂完成後補上
+    dealerAssignments: [{ brand: 'Google', product: 'GWS', contract: input.primaryDomain?.trim().toLowerCase() ?? '', dealerId: input.dealerId }],
     contactName: input.contactName.trim(),
     contactEmail: input.contactEmail.trim(),
     contactPhone: input.contactPhone.trim(),
@@ -697,7 +755,6 @@ export function createCustomer(input: NewCustomerInput): Promise<CustomerListIte
     contactSameAsRegistered: individual || input.contactSameAsRegistered !== false,
     otherDomains: [],
     gwsDomains: [],
-    salesAssignments: cleanSalesAssignments(input.salesAssignments ?? []),
   };
   // 建立客戶主檔時不建立帳號；帳號由客戶詳情「使用者帳號」的「邀請」建立（2026/11/24）
   db.customers.push(customer);
@@ -794,8 +851,8 @@ function subscriptionListItem(s: Subscription): SubscriptionListItem {
     status: effectiveStatus(s),
     customerName: c.name,
     primaryDomain: c.primaryDomain,
-    dealerId: c.dealerId,
-    dealerName: dealerName(c.dealerId),
+    dealerId: dealerIdFor(c, s.product, s.product === 'GWS' ? c.primaryDomain : undefined),
+    dealerName: dealerName(dealerIdFor(c, s.product, s.product === 'GWS' ? c.primaryDomain : undefined)),
     openOperations: open.map((o) => ({ id: o.id, type: o.type, status: o.status })),
   };
 }
@@ -818,8 +875,8 @@ export function getSubscriptions(query: SubscriptionQuery = {}): Promise<Subscri
 export function getSubscription(id: string): Promise<(SubscriptionListItem & { planTier: number; sales: SalesAssignment[] }) | undefined> {
   const s = db.subscriptions.find((x) => x.id === id);
   if (!s) return delay(undefined);
-  const c = customerOf(s.customerId)!;
-  return delay({ ...subscriptionListItem(s), planTier: planTier(s.plan), sales: c.salesAssignments.filter((a) => a.product === s.product) });
+  const item = subscriptionListItem(s);
+  return delay({ ...item, planTier: planTier(s.plan), sales: dealerSales(item.dealerId, s.product) });
 }
 
 export function getPlans(): Promise<string[]> {
@@ -918,7 +975,7 @@ function describeOperation(op: { type: OperationType; subscriptionId?: string; p
 
 function operationListItem(op: GwsOperation): OperationListItem {
   const c = customerOf(op.customerId)!;
-  return { ...op, customerName: c.name, primaryDomain: c.primaryDomain, dealerName: dealerName(c.dealerId), summary: describeOperation(op) };
+  return { ...op, customerName: c.name, primaryDomain: c.primaryDomain, dealerName: dealerName(gwsDealerOf(c)), summary: describeOperation(op) };
 }
 
 export function getOperation(id: string): Promise<OperationListItem | undefined> {
@@ -1473,7 +1530,7 @@ function applyInput(wo: WorkOrder, input: WorkOrderInput) {
   wo.customerMode = input.customerMode;
   wo.customerId = input.customerMode === 'existing' ? input.customerId : undefined;
   wo.newCustomer = input.customerMode === 'new' ? input.newCustomer : undefined;
-  wo.dealerId = c?.dealerId ?? input.dealerId ?? 'D000';
+  wo.dealerId = c ? gwsDealerOf(c) : input.dealerId ?? 'D000';
   wo.subscriptionId = input.subscriptionId;
   const p = input.payload;
   const memo = p.memo?.trim() || undefined;
@@ -1597,7 +1654,7 @@ export function getGcpUsage(): Promise<GcpUsage> {
       return {
         customerId: c.id,
         customerName: c.name,
-        dealerName: dealerName(c.dealerId),
+        dealerName: dealerName(dealerIdFor(c, 'GCP')),
         projects: a.projects,
         costCents,
         egressGb: a.egressGb,
@@ -1684,7 +1741,7 @@ function toBillItem(b: GcpBill): GcpBillListItem {
   return {
     ...b,
     customerName: c.name,
-    dealerName: dealerName(c.dealerId),
+    dealerName: dealerName(dealerIdFor(c, 'GCP')),
     costCents,
     amountTwd: billAmountTwd(costCents, b.markupPct, b.rate),
     displayStatus: displayStatus(b),
@@ -1697,7 +1754,7 @@ export function getGcpBills(query: BillQuery): Promise<GcpBillListItem[]> {
   const rows = db.bills
     .filter((b) => b.month === query.month)
     .map(toBillItem)
-    .filter((b) => !query.dealerId || customerOf(b.customerId)?.dealerId === query.dealerId)
+    .filter((b) => !query.dealerId || dealerIdFor(customerOf(b.customerId)!, 'GCP') === query.dealerId)
     .filter((b) => !query.status || b.displayStatus === query.status)
     .filter((b) => includesKw(kw, b.customerName, b.id))
     .sort((a, b) => b.costCents - a.costCents);
@@ -1867,7 +1924,7 @@ export function getSchedules(query: ScheduleQuery = {}): Promise<ScheduleListIte
     .filter((s) => !query.to || s.enabledAt.slice(0, 10) <= query.to)
     .map((s) => {
       const c = customerOf(s.customerId)!;
-      return { ...s, customerName: c.name, primaryDomain: c.primaryDomain, dealerName: dealerName(c.dealerId) };
+      return { ...s, customerName: c.name, primaryDomain: c.primaryDomain, dealerName: dealerName(gwsDealerOf(c)) };
     })
     // 等待執行的排前面、由早到晚（最快要執行的在最上面）；其他狀態排後面、由晚到早（2026/11/18）
     .sort((a, b) => {
@@ -1923,7 +1980,7 @@ function noticeRows(): ExpiryNoticeRow[] {
     .filter((s) => s.product === 'GWS' && s.status !== 'cancelled')
     .map((s) => {
       const c = customerOf(s.customerId)!;
-      const salesNames = c.salesAssignments.filter((a) => a.product === 'GWS' && a.term === 'renewal').map((a) => a.salesName);
+      const salesNames = dealerSales(gwsDealerOf(c), 'GWS', 'renewal').map((a) => a.salesName);
       const sales = db.users.filter((u) => salesNames.includes(u.name));
       const cancelled = Boolean(s.renewalCancelled);
       const stages = NOTICE_DAYS.map((d) => {
@@ -2254,7 +2311,8 @@ export async function getDashboard() {
     totalSeats: live.reduce((sum, s) => sum + (s.seats ?? 0), 0),
     liveSubscriptions: live.length,
     expiring: live.filter((s) => s.status === 'expiring'),
-    expiringWithin60: live.filter((s) => daysUntil(s.expiresAt) <= 60),
+    /** 90 天內到期，依到期日排序（getSubscriptions 已排序） */
+    expiringSoon: live.filter((s) => daysUntil(s.expiresAt) <= HOME_EXPIRING_DAYS),
     orderCounts: {
       draft: count('draft'),
       salesReview: count('salesReview'),

@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { addressComplete, emptyAddress, getDealers, lookupTaxId } from '@data/api';
-import type { Address, CustomerKind, NewCustomerInput, SalesAssignment } from '@data/types';
+import type { Address, CustomerKind, NewCustomerInput } from '@data/types';
 import { FormField, FormSection } from '@shared/components/Form';
 import { Icon } from '@shared/components/Icon';
 import { PendingTag } from '@shared/components/PendingTag';
 import { useAsync } from '@shared/hooks/useAsync';
 import { AddressFields, TagInput } from './CustomerFields';
-import { SalesAssignmentEditor } from './SalesAssignments';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,7 +27,6 @@ export interface CustomerFormValue {
   contactPhone: string;
   contactEmail: string;
   note: string;
-  sales: SalesAssignment[];
 }
 /** 舊名稱，GWS 新訂頁沿用 */
 export type QuickCustomer = CustomerFormValue;
@@ -46,7 +44,6 @@ export const emptyQuickCustomer = (): CustomerFormValue => ({
   contactPhone: '',
   contactEmail: '',
   note: '',
-  sales: [],
 });
 
 const isIndividual = (v: CustomerFormValue) => v.kind === 'individual';
@@ -80,7 +77,6 @@ export function toNewCustomerInput(v: CustomerFormValue): NewCustomerInput {
     registeredAddress: individual ? contactAddressOf(v) : v.registeredAddress,
     contactAddress: contactAddressOf(v),
     contactSameAsRegistered: individual || v.contactSameAsRegistered,
-    salesAssignments: v.sales,
   };
 }
 
@@ -89,7 +85,7 @@ export function QuickCustomerForm({
   value,
   onChange,
   showErrors,
-  dealerLabel = '所屬經銷商',
+  dealerLabel = '經銷商',
   domainNote = '網域在下一步「訂閱內容」填寫，訂閱成功後會自動寫回客戶主檔。',
   children,
 }: {
@@ -181,7 +177,13 @@ export function QuickCustomerForm({
             <div />
           </>
         )}
-        <FormField label={dealerLabel} required message={err('dealerId')} state={state('dealerId')}>
+        <FormField
+          label={dealerLabel}
+          required
+          message={err('dealerId')}
+          state={state('dealerId')}
+          help="這個網域（第一個合約）的經銷商。同一個客戶其他網域或 GCP 向別家買，建立後在客戶詳情另外指定。"
+        >
           {(p) => (
             <select {...p} className="select" value={value.dealerId} onChange={(e) => set('dealerId', e.target.value)}>
               <option value="">請選擇</option>
@@ -266,11 +268,6 @@ export function QuickCustomerForm({
         </FormField>
       </FormSection>
 
-      <FormSection title="負責業務" description="一列一位業務，只列有設定的；一個客戶可以有多位業務。建立後也可以在客戶詳情修改。">
-        <div className="is-full">
-          <SalesAssignmentEditor value={value.sales} onChange={(v) => set('sales', v)} />
-        </div>
-      </FormSection>
 
     </div>
   );

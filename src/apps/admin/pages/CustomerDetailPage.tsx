@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { checkNewDomain, addressComplete, getCustomerInvites, inviteCustomerUser, simulateInviteVerified, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, getAuditLogs, getCustomer, getOperations, recheckDomainVerification, removeCustomerDomain, saveSalesAssignments, setCustomerStatus } from '@data/api';
+import { checkNewDomain, addressComplete, getCustomerInvites, inviteCustomerUser, simulateInviteVerified, formatAddress, updateCustomer, type CustomerEdit, getUsers, getWorkOrders, addCustomerDomain, getAuditLogs, getCustomer, getOperations, recheckDomainVerification, removeCustomerDomain, saveDealerAssignments, setCustomerStatus } from '@data/api';
 import { Card } from '@shared/components/Card';
 import { DescriptionList } from '@shared/components/DescriptionList';
 import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { Tabs } from '@shared/components/Tabs';
 import { inviteStatusLabel, workOrderTypeLabel } from '@data/labels';
-import type { CustomerListItem, ProductCode, SalesAssignment } from '@data/types';
-import { SalesAssignmentEditor, SalesAssignmentTable } from '../components/SalesAssignments';
+import type { DealerAssignment, ProductCode } from '@data/types';
+import { DealerAssignmentEditor, DealerAssignmentTable } from '../components/DealerAssignments';
 import { Callout, FormField } from '@shared/components/Form';
 import { StatusTag } from '@shared/components/StatusTag';
 import { Icon } from '@shared/components/Icon';
@@ -57,8 +57,8 @@ export function CustomerDetailPage() {
   const [domainOpen, setDomainOpen] = useState(false);
   const [domainInput, setDomainInput] = useState('');
   const [domainHasGws, setDomainHasGws] = useState(true);
-  const [salesOpen, setSalesOpen] = useState(false);
-  const [salesForm, setSalesForm] = useState<SalesAssignment[]>([]);
+  const [dealerOpen, setDealerOpen] = useState(false);
+  const [dealerForm, setDealerForm] = useState<DealerAssignment[]>([]);
   const [statusOpen, setStatusOpen] = useState(false);
   const [checking, setChecking] = useState(false);
 
@@ -77,15 +77,15 @@ export function CustomerDetailPage() {
   const canEdit = can('customers', 'write');
   // 零壹（代理商）和經銷商都可以邀請客戶的使用者
   const canInvite = can('accounts', 'create');
-  const openSales = () => {
-    setSalesForm(c.salesAssignments.map((x) => ({ ...x })));
-    setSalesOpen(true);
+  const openDealers = () => {
+    setDealerForm(c.dealerAssignments.map((x) => ({ ...x })));
+    setDealerOpen(true);
   };
-  const saveSales = async () => {
+  const saveDealers = async () => {
     try {
-      await saveSalesAssignments(c.id, salesForm);
-      toast('已更新負責業務');
-      setSalesOpen(false);
+      await saveDealerAssignments(c.id, dealerForm);
+      toast('已更新經銷商');
+      setDealerOpen(false);
       reload();
     } catch (e) {
       toast((e as Error).message, 'danger');
@@ -236,8 +236,6 @@ export function CustomerDetailPage() {
                       { label: '統一編號', value: <span className="mono">{c.taxId}</span> },
                       { label: '登記地址', value: formatAddress(c.registeredAddress), full: true },
                     ]),
-                { label: '所屬經銷商', value: c.dealerName },
-                { label: '經銷商 ID', value: c.dealerPartnerId ? <span className="mono">{c.dealerPartnerId}</span> : <span className="muted">—（直銷）</span> },
                 { label: '主網域', value: c.primaryDomain ? <span className="mono">{c.primaryDomain}</span> : <span className="muted">尚未有網域（GWS 新訂時填寫）</span> },
                 { label: '其他網域', value: c.otherDomains.length ? <span className="mono">{c.otherDomains.join('、')}</span> : '' },
                 ...(c.kind === 'individual'
@@ -261,10 +259,10 @@ export function CustomerDetailPage() {
           </Card>
 
           <div className="stack">
-            <Card title="負責業務" actions={canEdit ? <button className="btn btn--sm" onClick={openSales}>編輯</button> : undefined} bodyless>
-              <SalesAssignmentTable rows={c.salesAssignments} />
+            <Card title="經銷商" actions={canEdit ? <button className="btn btn--sm" onClick={openDealers}>編輯</button> : undefined} bodyless>
+              <DealerAssignmentTable rows={c.dealerAssignments} />
               <p className="muted card__body" style={{ fontSize: 'var(--text-sm)', margin: 0, paddingTop: 'var(--space-3)' }}>
-                GWS 到期通知會寄給所有「GWS 續約」的業務和後勤。
+                同一個客戶可以向不同經銷商買不同合約（GWS 依網域、GCP 依 Billing Account）。負責業務綁在經銷商，GWS 到期通知會寄給該經銷商的「GWS 續約」業務和後勤。
               </p>
             </Card>
 
@@ -497,7 +495,7 @@ export function CustomerDetailPage() {
         {editForm && (
           <div className="stack">
             {c.kind === 'individual' ? (
-              <IndividualEditFields c={c} editForm={editForm} ef={ef} />
+              <IndividualEditFields editForm={editForm} ef={ef} />
             ) : (
             <>
             <div className="form-grid">
@@ -509,9 +507,6 @@ export function CustomerDetailPage() {
               </FormField>
               <FormField label="公司簡稱" help="可輸入多個別名，按 Enter 確認。">
                 {(p) => <TagInput id={p.id} values={editForm.shortNames} onChange={(v) => ef('shortNames', v)} />}
-              </FormField>
-              <FormField label="所屬經銷商" help="所屬經銷商不在這裡修改。">
-                {(p) => <input {...p} className="input" value={c.dealerPartnerId ? `${c.dealerName}（${c.dealerPartnerId}）` : c.dealerName} readOnly disabled />}
               </FormField>
             </div>
             <div>
@@ -552,7 +547,7 @@ export function CustomerDetailPage() {
               {(p) => <textarea {...p} className="textarea" maxLength={2000} value={editForm.note} onChange={(e) => ef('note', e.target.value)} />}
             </FormField>
             <p className="muted" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-              主網域、其他網域請在「網域」卡片管理；所屬經銷商不在這裡修改。
+              主網域、其他網域請在「網域」卡片管理；經銷商請在「經銷商」卡片管理。
             </p>
           </div>
         )}
@@ -647,22 +642,22 @@ export function CustomerDetailPage() {
         </FormField>
       </Modal>
       <Modal
-        open={salesOpen}
-        onClose={() => setSalesOpen(false)}
-        title="編輯負責業務"
-        width={720}
+        open={dealerOpen}
+        onClose={() => setDealerOpen(false)}
+        title="編輯經銷商"
+        width={820}
         footer={
           <>
-            <button className="btn" onClick={() => setSalesOpen(false)}>
+            <button className="btn" onClick={() => setDealerOpen(false)}>
               取消
             </button>
-            <button className="btn btn--primary" onClick={saveSales}>
+            <button className="btn btn--primary" onClick={saveDealers}>
               儲存
             </button>
           </>
         }
       >
-        <SalesAssignmentEditor value={salesForm} onChange={setSalesForm} />
+        <DealerAssignmentEditor value={dealerForm} onChange={setDealerForm} domains={[c.primaryDomain, ...c.otherDomains].filter(Boolean)} />
       </Modal>
 
       <Modal
@@ -694,11 +689,9 @@ export function CustomerDetailPage() {
 
 /** 個人客戶的編輯欄位：姓名、地址、電話、Email（沒有統編、簡稱、登記地址） */
 function IndividualEditFields({
-  c,
   editForm,
   ef,
 }: {
-  c: CustomerListItem;
   editForm: CustomerEdit;
   ef: <K extends keyof CustomerEdit>(k: K, v: CustomerEdit[K]) => void;
 }) {
@@ -708,9 +701,6 @@ function IndividualEditFields({
         <FormField label="客戶類型">{(p) => <input {...p} className="input" value="個人" readOnly disabled />}</FormField>
         <FormField label="姓名" required message={!editForm.name.trim() ? '請輸入姓名' : undefined} state={!editForm.name.trim() ? 'error' : undefined}>
           {(p) => <input {...p} className="input" value={editForm.name} onChange={(e) => ef('name', e.target.value)} />}
-        </FormField>
-        <FormField label="所屬經銷商" help="所屬經銷商不在這裡修改。">
-          {(p) => <input {...p} className="input" value={c.dealerPartnerId ? `${c.dealerName}（${c.dealerPartnerId}）` : c.dealerName} readOnly disabled />}
         </FormField>
       </div>
       <div>

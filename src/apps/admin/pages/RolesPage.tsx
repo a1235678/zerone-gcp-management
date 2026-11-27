@@ -25,7 +25,7 @@ const LevelTag = ({ level }: { level: PermissionLevel }) =>
 /** 特殊功能（2026/11/26）：四個勾選框 */
 const SPECIAL: { key: 'isSystemAdmin' | 'isSales' | 'isPm' | 'canSeePrice'; label: string; short: string; help: string; sessionKey?: 'isSystemAdmin' | 'canSeePrice' }[] = [
   { key: 'isSystemAdmin', label: '系統管理員', short: '系統管理員', help: '看得到「使用者」「角色管理」，可以管理帳號與角色。', sessionKey: 'isSystemAdmin' },
-  { key: 'isSales', label: '業務性質', short: '業務', help: '可以被指定為客戶的負責業務（新約／續約）。' },
+  { key: 'isSales', label: '業務性質', short: '業務', help: '可以被指定為經銷商的負責業務（新約／續約）。' },
   { key: 'isPm', label: 'PM 性質', short: 'PM', help: '標示為 PM；之後用來決定 PM 相關的通知與畫面。' },
   { key: 'canSeePrice', label: '能否看到價格', short: '看得到價格', help: '不勾選時，畫面上的金額會以「••••」顯示。', sessionKey: 'canSeePrice' },
 ];

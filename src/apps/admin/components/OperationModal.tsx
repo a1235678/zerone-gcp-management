@@ -33,7 +33,7 @@ export interface OperationTarget {
   customerName: string;
   primaryDomain: string;
   subscriptionId?: string;
-  /** 客戶所屬經銷商，移轉時用來帶出經銷商代碼 */
+  /** 這個合約（網域）的經銷商，移轉時用來帶出經銷商代碼 */
   dealerId?: string;
   plan?: string;
   seats?: number | null;
@@ -610,10 +610,10 @@ export function OperationModal({
                 </span>
               }
             >
-              減人數要由客戶自己到 Google 降人數。系統會在排程日與前 3 天檢查客戶實際人數有沒有降到 {seats} 席以下：
+              減人數要由客戶自己到 Google 降人數。系統會在續約前 7 天與前 3 天，檢查客戶實際人數有沒有降到 {seats} 席以下：
               <ul className="exec-box__reasons" style={{ margin: 'var(--space-1) 0 0' }}>
-                <li>還沒降到：寄通知給客戶聯絡人、續約業務與後勤。</li>
-                <li>排程日人數還是不對：不執行續約，排程標示失敗並通知。</li>
+                <li>人數不符合：寄信通知客戶聯絡人、經銷商的續約業務與後勤，請客戶到 Google 降人數。</li>
+                <li>人數已經符合：不寄信，到續約日照常續約。</li>
               </ul>
               目前先做畫面，第二階段才實作檢查。
             </Callout>

@@ -2024,6 +2024,22 @@ button.topbar__user:hover {
     border-bottom: 1px solid var(--color-border);
   }
 }
+/* 客戶的經銷商（品牌／產品／合約／經銷商，2026/11/27） */
+.dealer-assign__head,
+.dealer-assign__row {
+  grid-template-columns: 0.9fr 0.8fr 1.8fr 1.5fr 38px;
+}
+@media (max-width: 640px) {
+  .dealer-assign__row {
+    grid-template-columns: 1fr 1fr 38px;
+  }
+  .dealer-assign__row > input {
+    grid-column: 1 / -1;
+  }
+  .dealer-assign__row > select:nth-of-type(3) {
+    grid-column: 1 / 3;
+  }
+}
 .domain-list > li {
   flex-wrap: wrap;
   row-gap: var(--space-1);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { checkDomain, getCustomers } from '@data/api';
+import { checkDomain, dealerIdFor, getCustomers } from '@data/api';
 import type { NewCustomerInput } from '@data/types';
 import { Combobox } from '@shared/components/Combobox';
 import { Callout, FormField, FormSection } from '@shared/components/Form';
@@ -42,7 +42,7 @@ export function GwsNewOrderPage() {
       const c = customers.data?.find((x) => x.id === pickId);
       if (!c) return;
       setNewCustomerInput(undefined);
-      setTarget({ customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: c.dealerId });
+      setTarget({ customerId: c.id, customerName: c.name, primaryDomain: c.primaryDomain, dealerId: dealerIdFor(c, 'GWS', c.primaryDomain) });
     } else {
       setNewCustTried(true);
       if (errorCount) {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { actOnWorkOrder, analyzeOrder, getCustomer, getSubscriptions, getWorkOrder } from '@data/api';
+import { actOnWorkOrder, analyzeOrder, dealerIdFor, getCustomer, getSubscriptions, getWorkOrder } from '@data/api';
 import { executionModeLabel, transferSourceLabel, workOrderFlow, workOrderStatusLabel, workOrderTypeLabel } from '@data/labels';
 import type { WorkOrderAction, WorkOrderStep } from '@data/types';
 import { Card } from '@shared/components/Card';
@@ -90,7 +90,7 @@ export function WorkOrderDetailPage() {
         customerId: customer.data.id,
         customerName: customer.data.name,
         primaryDomain: customer.data.primaryDomain,
-        dealerId: customer.data.dealerId,
+        dealerId: dealerIdFor(customer.data, 'GWS', customer.data.primaryDomain),
         subscriptionId: sub?.id,
         plan: sub?.plan,
         seats: sub?.seats,

@@ -217,7 +217,7 @@ export function NewCustomerPage({ mode = 'new' }: { mode?: 'new' | 'transfer' })
                 value={form}
                 onChange={setForm}
                 showErrors={tried}
-                dealerLabel={isTransfer ? '轉入後的經銷商' : '所屬經銷商'}
+                dealerLabel={isTransfer ? '轉入後的經銷商' : '經銷商'}
                 domainNote={
                   isTransfer ? '' : '建立客戶時不用填網域。有 GWS 產品時，在新訂時填寫網域，訂閱成功後會自動寫回客戶主檔；之後也可以在客戶詳情新增網域。'
                 }

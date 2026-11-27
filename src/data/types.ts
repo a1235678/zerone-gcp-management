@@ -29,6 +29,8 @@ export interface Dealer {
   contactEmail: string;
   /** 一般聯絡人（不一定有系統帳號；2026/11/24 客戶主檔不需要、經銷商要有） */
   contacts: CustomerContact[];
+  /** 負責業務：綁在經銷商（2026/11/27 從客戶搬過來），依品牌／產品／新約或續約指定 */
+  salesAssignments: SalesAssignment[];
   note: string;
   createdAt: string;
 }
@@ -60,13 +62,23 @@ export interface CustomerContact {
   email: string;
   phone: string;
 }
-/** 負責業務：依「產品／新約或續約」指定，同一客戶可以不同（2026/11/10 會議） */
-/** 一筆負責業務：一個客戶可以有多筆（多位業務），只列有設定的 */
+/** 一筆負責業務：綁在經銷商（2026/11/27），一家經銷商可以有多筆（多位業務），只列有設定的 */
 export interface SalesAssignment {
   brand: string;
   product: ProductCode;
   term: 'new' | 'renewal';
   salesName: string;
+}
+/**
+ * 客戶的經銷商（2026/11/27）：同一客戶可以向不同經銷商買不同合約，所以依「品牌／產品／合約」指定經銷商。
+ * 合約：GWS 是網域，GCP 是 Billing Account（帳單帳戶 ID）。
+ */
+export interface DealerAssignment {
+  brand: string;
+  product: ProductCode;
+  /** GWS：網域；GCP：Billing Account ID。新客戶還沒有網域時是空字串，GWS 新訂完成後補上 */
+  contract: string;
+  dealerId: string;
 }
 /** 客戶類型：公司或個人（個人不用統編，2026/11/24） */
 export type CustomerKind = 'company' | 'individual';
@@ -89,8 +101,8 @@ export interface Customer {
   otherDomains: string[];
   /** 已開通 GWS 的網域（其餘是客戶有、但還沒開通 GWS 的網域） */
   gwsDomains: string[];
-  salesAssignments: SalesAssignment[];
-  dealerId: string;
+  /** 各合約的經銷商（一個客戶可以對應多個經銷商） */
+  dealerAssignments: DealerAssignment[];
   contactName: string;
   contactEmail: string;
   contactPhone: string;
@@ -101,9 +113,10 @@ export interface Customer {
   domainVerification: DomainVerification;
 }
 export interface CustomerListItem extends Customer {
+  /** 這個客戶各合約的經銷商（不重複） */
+  dealerIds: string[];
+  /** 經銷商簡稱，多家用頓號隔開 */
   dealerName: string;
-  /** 所屬經銷商的經銷商 ID（Channel Partner ID） */
-  dealerPartnerId: string;
 }
 export interface CustomerQuery {
   keyword?: string;
@@ -116,6 +129,7 @@ export interface NewCustomerInput {
   taxId: string;
   /** 只有客戶轉入要填（既有的 GWS 客戶） */
   primaryDomain?: string;
+  /** 這個客戶第一個合約（網域）的經銷商；之後其他合約的經銷商在客戶主檔另外指定 */
   dealerId: string;
   contactName: string;
   contactEmail: string;
@@ -125,8 +139,6 @@ export interface NewCustomerInput {
   registeredAddress?: Address;
   contactAddress?: Address;
   contactSameAsRegistered?: boolean;
-  /** 負責業務（條列：品牌、產品、新約／續約、業務） */
-  salesAssignments?: SalesAssignment[];
 }
 export type DomainCheck =
   | { ok: true }
@@ -204,6 +216,8 @@ export interface Subscription {
   googleRenewal?: { plan: string; seats: number; offer?: OfferSnapshot; setAt: string; opId: string };
   /** 不續約：客戶合約到期後不再續約（不寄到期通知） */
   renewalCancelled?: { at: string; by: string; note: string };
+  /** 上次向原廠（Google）下單（新訂或續約）：席次與金額（美分）。之後加購的席次不算在內（2026/11/27 首頁要看） */
+  lastOrder?: { type: 'new' | 'renewal'; orderedAt: string; seats: number; amountCents: number };
   lastSyncedAt: string;
 }
 export interface SubscriptionListItem extends Subscription {
@@ -669,7 +683,7 @@ export interface Role {
   canSeePrice: boolean;
   /** 特殊功能（2026/11/26）：系統管理員才看得到「使用者」「角色管理」 */
   isSystemAdmin: boolean;
-  /** 業務性質：可以被指定為客戶的負責業務 */
+  /** 業務性質：可以被指定為經銷商的負責業務 */
   isSales: boolean;
   /** PM 性質 */
   isPm: boolean;

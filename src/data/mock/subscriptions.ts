@@ -57,8 +57,21 @@ export const subscriptions: Subscription[] = seeds.map(([id, customerId, plan, s
   term: ['S012', 'S020'].includes(id) ? 'flexible' : 'annual',
   // 目前使用的 Google 方案：彈性合約用彈性方案，其他用年約（每月計費）
   offer: offerFor(plan, ['S012', 'S020'].includes(id) ? 'flexible' : 'annual', contractStart(expiresAt)),
+  lastOrder: lastOrderFor(id, plan, seats, contractStart(expiresAt), ['S012', 'S020'].includes(id)),
   lastSyncedAt: lastSyncedAt ?? '2026-11-05 06:00',
 }));
+
+/**
+ * 示意資料：上次向原廠（Google）下單（新訂或續約）的席次與金額。
+ * 年約算一年（月費 × 12），彈性方案算一個月。幾筆示意「之後又加購」，所以上次購買的席次比目前少。
+ */
+function lastOrderFor(id: string, plan: string, seats: number, startsAt: string, flexible: boolean): Subscription['lastOrder'] {
+  const added: Record<string, number> = { S002: 5, S006: 10, S011: 3, S025: 20 };
+  const lastSeats = seats - (added[id] ?? 0);
+  const monthly = offerFor(plan, flexible ? 'flexible' : 'annual', startsAt)?.priceCents ?? 0;
+  const firstYear = ['S024', 'S027'].includes(id);
+  return { type: firstYear ? 'new' : 'renewal', orderedAt: startsAt, seats: lastSeats, amountCents: lastSeats * monthly * (flexible ? 1 : 12) };
+}
 
 /**
  * GWS 訂閱主檔裡、還沒掛到任何客戶的網域（從 Google 同步回來，例如客戶先前自己向 Google 購買）。

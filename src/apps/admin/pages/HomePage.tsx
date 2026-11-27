@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
-import { EXPIRING_DAYS, daysUntil, getDashboard } from '@data/api';
+import { HOME_EXPIRING_DAYS, daysUntil, getDashboard } from '@data/api';
 import { workOrderTypeLabel } from '@data/labels';
 import { Card } from '@shared/components/Card';
+import { DataTable, EmptyState } from '@shared/components/DataTable';
 import { LineChart } from '@shared/components/LineChart';
 import { PageHeader } from '@shared/components/PageHeader';
 import { PendingTag } from '@shared/components/PendingTag';
 import { Stat, StatGrid } from '@shared/components/Stat';
-import { formatDate, formatDateTime, formatNumber, formatPct, formatUsd, HIDDEN_PRICE, isPriceVisible } from '@shared/format';
+import { formatDate, formatDateTime, formatNumber, formatPct, formatUsd, formatUsdLabel, HIDDEN_PRICE, isPriceVisible } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
 import { SubscriptionStatusTag, WorkOrderStatusTag } from '../tags';
@@ -27,6 +28,11 @@ export function HomePage() {
   const reviewing = d.orderCounts.salesReview + d.orderCounts.techReview;
   const toProcess = d.orderCounts.approved + d.orderCounts.processing;
   const gwsFailed = d.operationIssues.filter((o) => o.status === 'failed').length;
+  // 快到期（90 天內）的合計；客戶已表示不續約的不算（2026/11/27）
+  const soon = d.expiringSoon;
+  const renewing = soon.filter((s) => !s.renewalCancelled);
+  const soonSeats = renewing.reduce((sum, s) => sum + (s.seats ?? 0), 0);
+  const soonAmount = renewing.reduce((sum, s) => sum + (s.lastOrder?.amountCents ?? 0), 0);
   const gcpChange = Math.round(((d.gcp.totalCostCents - d.gcp.prevTotalCostCents) / d.gcp.prevTotalCostCents) * 1000) / 10;
 
   return (
@@ -41,12 +47,14 @@ export function HomePage() {
         <Stat label="啟用客戶" value={d.activeCustomers} unit="個" sub={<Link to="/customers">共 {d.totalCustomers} 個客戶</Link>} />
         <Stat label="GWS 總席次" value={formatNumber(d.totalSeats)} unit="席" sub={<Link to="/products/gws">{d.liveSubscriptions} 筆有效訂閱</Link>} />
         <Stat
-          label={`${EXPIRING_DAYS} 天內到期`}
-          value={d.expiring.length}
+          label={`${HOME_EXPIRING_DAYS} 天內到期`}
+          value={soon.length}
           unit="筆"
-          tone={d.expiring.length ? 'warning' : undefined}
-          sub={<Link to="/products/gws?status=expiring">查看即將到期</Link>}
+          tone={soon.length ? 'warning' : undefined}
+          sub={soon.length > renewing.length ? `其中 ${soon.length - renewing.length} 筆客戶表示不續約` : '依到期日列在下方'}
         />
+        <Stat label="快到期席次" value={formatNumber(soonSeats)} unit="席" sub={`${HOME_EXPIRING_DAYS} 天內到期的目前席次合計（不含不續約）`} />
+        <Stat label="快到期金額" value={formatUsdLabel(soonAmount, 0)} sub="上次向原廠下單的金額合計（不含不續約）" />
         {SHOW_WORK_ORDERS && (
         <Stat
           label="執行單"
@@ -80,31 +88,61 @@ export function HomePage() {
               </Link>
             }
           >
-            <p className="card-note">60 天內到期，依到期日排序</p>
-            <ul className="list-plain">
-              {d.expiringWithin60.map((s) => {
-                const left = daysUntil(s.expiresAt);
-                return (
-                  <li key={s.id}>
-                    <div style={{ minWidth: 0 }}>
-                      <Link to={`/customers/${s.customerId}`} className="table__primary">
+            <p className="card-note">{HOME_EXPIRING_DAYS} 天內到期，依到期日排序。「上次購買」是上次向原廠（Google）新訂或續約的席次與金額，之後加購的不算。</p>
+            <DataTable
+              caption="快到期的訂閱"
+              rows={soon}
+              rowKey={(s) => s.id}
+              columns={[
+                {
+                  key: 'customer',
+                  header: '客戶',
+                  render: (s) => (
+                    <div>
+                      <Link to={`/products/gws/${s.id}`} className="table__primary">
                         {s.customerName}
                       </Link>
-                      <div className="table__secondary">
-                        {s.plan} · {s.seats} 席 · {s.dealerName}
-                      </div>
+                      <div className="table__secondary mono">{s.primaryDomain}</div>
                     </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  ),
+                },
+                { key: 'plan', header: '版本', render: (s) => <span>{s.plan}<div className="table__secondary">{s.dealerName}</div></span> },
+                {
+                  key: 'expires',
+                  header: '到期日',
+                  render: (s) => (
+                    <span className="mono">
+                      {formatDate(s.expiresAt)}
+                      <div className="table__secondary">剩 {daysUntil(s.expiresAt)} 天</div>
+                    </span>
+                  ),
+                },
+                { key: 'seats', header: '目前席次', align: 'right', render: (s) => <span className="mono">{formatNumber(s.seats ?? 0)}</span> },
+                { key: 'lastSeats', header: '上次購買席次', align: 'right', render: (s) => <span className="mono">{s.lastOrder ? formatNumber(s.lastOrder.seats) : '—'}</span> },
+                {
+                  key: 'lastAmount',
+                  header: '上次原廠下單金額',
+                  align: 'right',
+                  render: (s) => (
+                    <span className="mono">
+                      {s.lastOrder ? formatUsdLabel(s.lastOrder.amountCents, 0) : '—'}
+                      {s.lastOrder && <div className="table__secondary">{s.term === 'flexible' ? '彈性・一個月' : '年約・一年'}</div>}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'status',
+                  header: '狀態',
+                  render: (s) => (
+                    <span>
                       <SubscriptionStatusTag value={s.status} />
-                      <div className="table__secondary mono">
-                        {formatDate(s.expiresAt)} · 剩 {left} 天
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-              {d.expiringWithin60.length === 0 && <li className="muted">60 天內沒有到期的訂閱</li>}
-            </ul>
+                      {s.renewalCancelled && <div className="table__secondary">不續約</div>}
+                    </span>
+                  ),
+                },
+              ]}
+              empty={<EmptyState title={`${HOME_EXPIRING_DAYS} 天內沒有到期的訂閱`} />}
+            />
           </Card>
 
           {SHOW_WORK_ORDERS && (

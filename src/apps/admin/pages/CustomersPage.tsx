@@ -13,7 +13,6 @@ import { CustomerStatusTag } from "../tags";
 import { formatDate } from '@shared/format';
 import { useAsync } from '@shared/hooks/useAsync';
 import { usePermission } from '../auth';
-import { groupSalesAssignments } from '../components/SalesAssignments';
 
 const PAGE_SIZE = 12;
 
@@ -41,7 +40,7 @@ const columns: Column<CustomerListItem>[] = [
       </div>
     ),
   },
-  { key: 'dealer', header: '經銷商', render: (c) => c.dealerName },
+  { key: 'dealer', header: '經銷商', render: (c) => (c.dealerIds.length > 1 ? <span title="不同合約向不同經銷商購買">{c.dealerName}</span> : c.dealerName) },
   {
     key: 'contact',
     header: '聯絡人',
@@ -51,24 +50,6 @@ const columns: Column<CustomerListItem>[] = [
         <div className="table__secondary mono">{c.contactEmail}</div>
       </div>
     ),
-  },
-  {
-    key: 'sales',
-    header: '負責業務',
-    render: (c) => {
-      const groups = groupSalesAssignments(c.salesAssignments);
-      return groups.length ? (
-        <div>
-          {groups.map((g) => (
-            <div key={`${g.brand}-${g.product}`}>
-              <span className="table__secondary">{g.product}</span> 新約 {g.newSales.join('、') || '—'}・續約 {g.renewalSales.join('、') || '—'}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <span className="muted">—</span>
-      );
-    },
   },
   { key: 'createdAt', header: '建立日期', render: (c) => <span className="mono">{formatDate(c.createdAt)}</span> },
   {
